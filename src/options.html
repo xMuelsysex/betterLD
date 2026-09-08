@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>betterLD 设置</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="settings-shell">
+      <header class="settings-header">
+        <p class="eyebrow">betterLD</p>
+        <h1>首页视觉设置</h1>
+        <p>调整 LinuxDo 首页卡片的背景与层次效果。</p>
+      </header>
+
+      <form id="settings-form" class="settings-card">
+        <label class="field field-url">
+          <span>背景图片 URL</span>
+          <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off">
+          <small>只接受 HTTPS 图片地址；留空使用内置渐变背景。</small>
+        </label>
+
+        <label class="field">
+          <span class="range-label"><span>页面遮罩</span><output id="mask-opacity-value"></output></span>
+          <input id="mask-opacity" name="maskOpacity" type="range">
+        </label>
+
+        <label class="field">
+          <span class="range-label"><span>背景模糊</span><output id="blur-value"></output></span>
+          <input id="blur" name="blurPx" type="range">
+        </label>
+
+        <label class="field">
+          <span class="range-label"><span>卡片透明度</span><output id="card-opacity-value"></output></span>
+          <input id="card-opacity" name="cardOpacity" type="range">
+        </label>
+
+        <div class="actions">
+          <button id="reset" class="button button-tonal" type="button">恢复默认</button>
+          <button class="button button-filled" type="submit">保存设置</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+    <script src="../betterld.config.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
