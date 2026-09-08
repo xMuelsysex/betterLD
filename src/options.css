@@ -1,0 +1,148 @@
+:root {
+  color-scheme: dark;
+  --settings-background: #11121b;
+  --settings-surface: #1c1d2a;
+  --settings-surface-variant: #292a3a;
+  --settings-on-surface: #e8e0ea;
+  --settings-on-surface-variant: #cac4d0;
+  --settings-primary: #d0bcff;
+  --settings-on-primary: #381e72;
+  --settings-outline: #938f99;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  background: var(--settings-background);
+  color: var(--settings-on-surface);
+  font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.settings-shell {
+  width: min(100%, 520px);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.settings-header {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--settings-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.settings-header p:last-child {
+  margin: 8px 0 0;
+  color: var(--settings-on-surface-variant);
+}
+
+.settings-card {
+  display: grid;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid rgb(147 143 153 / 0.28);
+  border-radius: 24px;
+  background: var(--settings-surface);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.24);
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: var(--settings-on-surface);
+  font-weight: 650;
+}
+
+.field small {
+  color: var(--settings-on-surface-variant);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+input[type="url"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--settings-outline);
+  border-radius: 12px;
+  outline: none;
+  background: var(--settings-surface-variant);
+  color: var(--settings-on-surface);
+  font: inherit;
+}
+
+input[type="url"]:focus-visible {
+  border-color: var(--settings-primary);
+  box-shadow: 0 0 0 3px rgb(208 188 255 / 0.24);
+}
+
+.range-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+output {
+  color: var(--settings-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--settings-primary);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.button {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--settings-primary);
+  outline-offset: 2px;
+}
+
+.button-tonal {
+  background: var(--settings-surface-variant);
+  color: var(--settings-on-surface);
+}
+
+.button-filled {
+  background: var(--settings-primary);
+  color: var(--settings-on-primary);
+}
+
+.status {
+  min-height: 21px;
+  margin: -4px 0 0;
+  color: var(--settings-primary);
+  font-size: 12px;
+}
