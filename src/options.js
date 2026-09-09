@@ -21,6 +21,7 @@
   const wallpaperUrlPanel = document.querySelector("#wallpaper-url-panel");
   const wallpaperLocalPanel = document.querySelector("#wallpaper-local-panel");
   const wallpaperFile = document.querySelector("#wallpaper-file");
+  const chooseWallpaperFile = document.querySelector("#choose-wallpaper-file");
   const wallpaperLocalPreview = document.querySelector("#wallpaper-local-preview");
   const wallpaperLocalImage = document.querySelector("#wallpaper-local-image");
   const wallpaperLocalName = document.querySelector("#wallpaper-local-name");
@@ -47,8 +48,19 @@
     settings: normalizeSettings(config.settingsDefaults),
     selectedWallpaperId: "",
     localWallpaper: null,
-    removeLocalWallpaper: false
+    removeLocalWallpaper: false,
+    wallpaperProbeTimer: 0,
+    wallpaperProbeId: 0
   };
+
+  function setStatusMessage(element, message, statusType = "") {
+    element.textContent = message;
+    if (statusType) {
+      element.dataset.status = statusType;
+    } else {
+      delete element.dataset.status;
+    }
+  }
 
   function storageGet(keys) {
     if (firefoxApi) {
@@ -225,7 +237,10 @@
       const input = label.querySelector("input");
       const selected = input?.value === mode;
       label.classList.toggle("is-selected", selected);
-      input?.toggleAttribute("checked", selected);
+      if (input) {
+        input.checked = selected;
+        input.setAttribute("aria-checked", String(selected));
+      }
     });
   }
 
@@ -245,10 +260,12 @@
     if (!hasImage) {
       wallpaperLocalImage.removeAttribute("src");
       wallpaperLocalName.textContent = "";
+      wallpaperLocalName.removeAttribute("title");
       return;
     }
     wallpaperLocalImage.src = localWallpaper.dataUrl;
     wallpaperLocalName.textContent = localWallpaper.name || "本地图片";
+    wallpaperLocalName.title = localWallpaper.name || "本地图片";
   }
 
   function updatePanels() {
@@ -275,6 +292,15 @@
       state.selectedWallpaperId = firstBuiltInWallpaper()?.id || "";
     }
     updatePanels();
+    if (mode === modes.url) {
+      scheduleRemoteProbe();
+    } else {
+      state.wallpaperProbeId += 1;
+      if (state.wallpaperProbeTimer) {
+        clearTimeout(state.wallpaperProbeTimer);
+        state.wallpaperProbeTimer = 0;
+      }
+    }
   }
 
   function createSourceOption(option) {
@@ -284,7 +310,14 @@
     input.type = "radio";
     input.name = "wallpaperMode";
     input.value = option.mode;
+    input.setAttribute("aria-label", option.label);
     input.addEventListener("change", () => setWallpaperMode(option.mode));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        setWallpaperMode(option.mode);
+      }
+    });
 
     const content = document.createElement("span");
     content.className = "wallpaper-source__content";
@@ -397,6 +430,55 @@
     });
   }
 
+  function probeRemoteWallpaper() {
+    const probeId = ++state.wallpaperProbeId;
+    if (selectedMode() !== modes.url) {
+      return;
+    }
+
+    const input = wallpaper.value.trim();
+    if (!input) {
+      setStatusMessage(wallpaperStatus, "");
+      return;
+    }
+
+    let url;
+    try {
+      url = normalizeWallpaper(input);
+    } catch (error) {
+      setStatusMessage(wallpaperStatus, error instanceof Error ? error.message : "请输入有效的图片 URL", "error");
+      return;
+    }
+
+    setStatusMessage(wallpaperStatus, "正在检查图片…");
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (probeId !== state.wallpaperProbeId) {
+        return;
+      }
+      setStatusMessage(wallpaperStatus, "图片已准备，保存设置后生效", "success");
+    };
+    image.onerror = () => {
+      if (probeId !== state.wallpaperProbeId) {
+        return;
+      }
+      setStatusMessage(wallpaperStatus, "图片加载失败，将使用安全渐变回退。", "error");
+    };
+    image.src = url;
+  }
+
+  function scheduleRemoteProbe() {
+    state.wallpaperProbeId += 1;
+    if (state.wallpaperProbeTimer) {
+      clearTimeout(state.wallpaperProbeTimer);
+    }
+    state.wallpaperProbeTimer = window.setTimeout(() => {
+      state.wallpaperProbeTimer = 0;
+      probeRemoteWallpaper();
+    }, 240);
+  }
+
   async function prepareLocalWallpaper(file) {
     if (!file.type.startsWith("image/")) {
       throw new Error("请选择图片文件");
@@ -452,7 +534,10 @@
       state.removeLocalWallpaper = false;
     }
     state.settings = value;
-    status.textContent = "设置已保存";
+    setStatusMessage(status, "✓ 设置已保存。", "success");
+    if (wallpaperStatus.dataset.status !== "error") {
+      setStatusMessage(wallpaperStatus, value.wallpaperMode === modes.none ? "✓ 已应用安全渐变。" : "✓ 已应用。", "success");
+    }
   }
 
   wallpaperSources.replaceChildren(...sourceOptions.map(createSourceOption));
@@ -463,19 +548,22 @@
   maskOpacity.addEventListener("input", updateOutputs);
   blur.addEventListener("input", updateOutputs);
   cardOpacity.addEventListener("input", updateOutputs);
+  wallpaper.addEventListener("input", scheduleRemoteProbe);
+  wallpaper.addEventListener("change", scheduleRemoteProbe);
+  chooseWallpaperFile.addEventListener("click", () => wallpaperFile.click());
   wallpaperFile.addEventListener("change", async () => {
     const file = wallpaperFile.files?.[0];
     if (!file) {
       return;
     }
-    wallpaperStatus.textContent = "正在处理图片…";
+    setStatusMessage(wallpaperStatus, "正在处理图片…");
     try {
       state.localWallpaper = await prepareLocalWallpaper(file);
       state.removeLocalWallpaper = false;
       setWallpaperMode(modes.local);
-      wallpaperStatus.textContent = "图片已准备，保存设置后生效";
+      setStatusMessage(wallpaperStatus, "图片已准备，保存设置后生效", "success");
     } catch (error) {
-      wallpaperStatus.textContent = error instanceof Error ? error.message : "本地图片处理失败";
+      setStatusMessage(wallpaperStatus, error instanceof Error ? error.message : "本地图片处理失败", "error");
       console.error("[betterLD] local wallpaper failed", error);
     } finally {
       wallpaperFile.value = "";
@@ -490,29 +578,35 @@
     } else {
       updateLocalPreview();
     }
-    wallpaperStatus.textContent = "本地图片将在保存后移除";
+    setStatusMessage(wallpaperStatus, "本地图片将在保存后移除");
   });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    status.textContent = "";
-    wallpaperStatus.textContent = "";
+    setStatusMessage(status, "");
+    if (selectedMode() !== modes.url) {
+      setStatusMessage(wallpaperStatus, "");
+    }
     try {
       await save(readForm());
     } catch (error) {
-      status.textContent = error instanceof Error ? error.message : "设置保存失败";
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setStatusMessage(status, `设置保存失败，已保留当前输入。${detail}`, "error");
       console.error("[betterLD] settings save failed", error);
     }
   });
 
   reset.addEventListener("click", async () => {
+    state.localWallpaper = null;
+    state.removeLocalWallpaper = true;
     populate(config.settingsDefaults);
-    status.textContent = "";
-    wallpaperStatus.textContent = "";
+    setStatusMessage(status, "");
+    setStatusMessage(wallpaperStatus, "");
     try {
       await save(normalizeSettings(config.settingsDefaults));
     } catch (error) {
-      status.textContent = error instanceof Error ? error.message : "默认设置保存失败";
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setStatusMessage(status, `默认设置保存失败，已保留当前输入。${detail}`, "error");
       console.error("[betterLD] default settings save failed", error);
     }
   });
@@ -527,7 +621,7 @@
     .catch((error) => {
       state.localWallpaper = null;
       populate(config.settingsDefaults);
-      status.textContent = "读取设置失败，当前显示默认值";
+      setStatusMessage(status, "设置读取失败，已使用安全默认值。", "error");
       console.error("[betterLD] settings load failed", error);
     });
 })();

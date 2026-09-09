@@ -17,8 +17,8 @@
       <form id="settings-form" class="settings-card">
         <fieldset class="wallpaper-fieldset">
           <legend>背景图片</legend>
-          <p class="section-description">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
-          <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源"></div>
+          <p id="wallpaper-description" class="section-description">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
+          <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源" aria-describedby="wallpaper-description"></div>
 
           <section id="wallpaper-random-panel" class="wallpaper-panel" hidden>
             <h2>网站随机图片</h2>
@@ -34,8 +34,8 @@
           <section id="wallpaper-url-panel" class="wallpaper-panel" hidden>
             <label class="field field-url">
               <span>图片 URL</span>
-              <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off">
-              <small>只接受 HTTPS 图片地址。</small>
+              <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off" aria-describedby="wallpaper-url-help">
+              <small id="wallpaper-url-help">只接受 HTTPS 图片地址。</small>
             </label>
           </section>
 
@@ -43,13 +43,13 @@
             <h2>本地图片</h2>
             <p>图片会压缩后保存在扩展本地，不会上传到 LinuxDo。</p>
             <div class="local-wallpaper-actions">
-              <label class="button button-tonal file-button" for="wallpaper-file">选择图片</label>
-              <input id="wallpaper-file" type="file" accept="image/*" hidden>
+              <button id="choose-wallpaper-file" class="button button-tonal file-button" type="button">选择图片</button>
+              <input id="wallpaper-file" type="file" accept="image/*" aria-label="选择本地背景图片" hidden>
               <button id="remove-local-wallpaper" class="button button-tonal" type="button" hidden>移除本地图片</button>
             </div>
             <div id="wallpaper-local-preview" class="local-wallpaper-preview" hidden>
               <img id="wallpaper-local-image" alt="">
-              <span id="wallpaper-local-name"></span>
+              <span id="wallpaper-local-name" title=""></span>
             </div>
           </section>
           <p id="wallpaper-status" class="inline-status" role="status" aria-live="polite"></p>
@@ -59,17 +59,20 @@
           <legend>层次效果</legend>
           <label class="field">
             <span class="range-label"><span>页面遮罩</span><output id="mask-opacity-value"></output></span>
-            <input id="mask-opacity" name="maskOpacity" type="range">
+            <input id="mask-opacity" name="maskOpacity" type="range" aria-describedby="mask-opacity-help">
+            <small id="mask-opacity-help">范围 0–80%。</small>
           </label>
 
           <label class="field">
             <span class="range-label"><span>背景模糊</span><output id="blur-value"></output></span>
-            <input id="blur" name="blurPx" type="range">
+            <input id="blur" name="blurPx" type="range" aria-describedby="blur-help">
+            <small id="blur-help">范围 0–32px。</small>
           </label>
 
           <label class="field">
             <span class="range-label"><span>卡片透明度</span><output id="card-opacity-value"></output></span>
-            <input id="card-opacity" name="cardOpacity" type="range">
+            <input id="card-opacity" name="cardOpacity" type="range" aria-describedby="card-opacity-help">
+            <small id="card-opacity-help">范围 55%–95%。</small>
           </label>
         </fieldset>
 
