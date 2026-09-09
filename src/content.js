@@ -264,10 +264,10 @@
     if (!normalized) {
       return "";
     }
-    if (/(?:^|[-_\\s])dark(?:$|[-_\\s])/.test(normalized) || /(?:^|[-_\\s])dark-mode(?:$|[-_\\s])/.test(normalized)) {
+    if (/(?:^|[-_\s])dark(?:$|[-_\s])/.test(normalized) || /(?:^|[-_\s])dark-mode(?:$|[-_\s])/.test(normalized)) {
       return "dark";
     }
-    if (/(?:^|[-_\\s])light(?:$|[-_\\s])/.test(normalized) || /(?:^|[-_\\s])light-mode(?:$|[-_\\s])/.test(normalized)) {
+    if (/(?:^|[-_\s])light(?:$|[-_\s])/.test(normalized) || /(?:^|[-_\s])light-mode(?:$|[-_\s])/.test(normalized)) {
       return "light";
     }
     return "";
