@@ -15,26 +15,63 @@
       </header>
 
       <form id="settings-form" class="settings-card">
-        <label class="field field-url">
-          <span>背景图片 URL</span>
-          <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off">
-          <small>只接受 HTTPS 图片地址；留空使用内置渐变背景。</small>
-        </label>
+        <fieldset class="wallpaper-fieldset">
+          <legend>背景图片</legend>
+          <p class="section-description">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
+          <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源"></div>
 
-        <label class="field">
-          <span class="range-label"><span>页面遮罩</span><output id="mask-opacity-value"></output></span>
-          <input id="mask-opacity" name="maskOpacity" type="range">
-        </label>
+          <section id="wallpaper-random-panel" class="wallpaper-panel" hidden>
+            <h2>网站随机图片</h2>
+            <p>每天固定一张，进入下一天后自动更新。</p>
+            <div id="wallpaper-random-preview" class="wallpaper-random-preview"></div>
+          </section>
 
-        <label class="field">
-          <span class="range-label"><span>背景模糊</span><output id="blur-value"></output></span>
-          <input id="blur" name="blurPx" type="range">
-        </label>
+          <section id="wallpaper-built-in-panel" class="wallpaper-panel" hidden>
+            <h2>内置图片</h2>
+            <div id="wallpaper-catalog" class="wallpaper-catalog"></div>
+          </section>
 
-        <label class="field">
-          <span class="range-label"><span>卡片透明度</span><output id="card-opacity-value"></output></span>
-          <input id="card-opacity" name="cardOpacity" type="range">
-        </label>
+          <section id="wallpaper-url-panel" class="wallpaper-panel" hidden>
+            <label class="field field-url">
+              <span>图片 URL</span>
+              <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off">
+              <small>只接受 HTTPS 图片地址。</small>
+            </label>
+          </section>
+
+          <section id="wallpaper-local-panel" class="wallpaper-panel" hidden>
+            <h2>本地图片</h2>
+            <p>图片会压缩后保存在扩展本地，不会上传到 LinuxDo。</p>
+            <div class="local-wallpaper-actions">
+              <label class="button button-tonal file-button" for="wallpaper-file">选择图片</label>
+              <input id="wallpaper-file" type="file" accept="image/*" hidden>
+              <button id="remove-local-wallpaper" class="button button-tonal" type="button" hidden>移除本地图片</button>
+            </div>
+            <div id="wallpaper-local-preview" class="local-wallpaper-preview" hidden>
+              <img id="wallpaper-local-image" alt="">
+              <span id="wallpaper-local-name"></span>
+            </div>
+          </section>
+          <p id="wallpaper-status" class="inline-status" role="status" aria-live="polite"></p>
+        </fieldset>
+
+        <fieldset class="visual-fieldset">
+          <legend>层次效果</legend>
+          <label class="field">
+            <span class="range-label"><span>页面遮罩</span><output id="mask-opacity-value"></output></span>
+            <input id="mask-opacity" name="maskOpacity" type="range">
+          </label>
+
+          <label class="field">
+            <span class="range-label"><span>背景模糊</span><output id="blur-value"></output></span>
+            <input id="blur" name="blurPx" type="range">
+          </label>
+
+          <label class="field">
+            <span class="range-label"><span>卡片透明度</span><output id="card-opacity-value"></output></span>
+            <input id="card-opacity" name="cardOpacity" type="range">
+          </label>
+        </fieldset>
 
         <div class="actions">
           <button id="reset" class="button button-tonal" type="button">恢复默认</button>

@@ -16,24 +16,43 @@
     syncTimer: 0,
     mutating: false,
     wallpaperRequest: 0,
+    localWallpaper: null,
     excerptCache: new Map(),
     excerptObserver: null,
     managedSources: new Map()
   };
 
-  function storageGet() {
+  function storageGet(keys) {
+    const storageKeys = keys || [config.storageKey, config.wallpaperLocalStorageKey];
     if (firefoxApi) {
-      return api.storage.local.get(config.storageKey);
+      return api.storage.local.get(storageKeys);
     }
 
     return new Promise((resolve, reject) => {
-      api.storage.local.get(config.storageKey, (value) => {
+      api.storage.local.get(storageKeys, (value) => {
         const error = api.runtime.lastError;
         if (error) {
           reject(new Error(error.message));
           return;
         }
         resolve(value);
+      });
+    });
+  }
+
+  function storageSet(value) {
+    if (firefoxApi) {
+      return api.storage.local.set(value);
+    }
+
+    return new Promise((resolve, reject) => {
+      api.storage.local.set(value, () => {
+        const error = api.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve();
       });
     });
   }
@@ -46,28 +65,132 @@
     return Math.min(limits.max, Math.max(limits.min, number));
   }
 
-  function normalizeSettings(value) {
-    const source = value && typeof value === "object" ? value : {};
-    return {
-      wallpaper: String(source.wallpaper || "").trim(),
-      maskOpacity: clamp(source.maskOpacity ?? config.settingsDefaults.maskOpacity, config.settingsLimits.maskOpacity),
-      blurPx: clamp(source.blurPx ?? config.settingsDefaults.blurPx, config.settingsLimits.blurPx),
-      cardOpacity: clamp(source.cardOpacity ?? config.settingsDefaults.cardOpacity, config.settingsLimits.cardOpacity)
-    };
+  function validMode(value) {
+    return Object.values(config.wallpaperModes).includes(value) ? value : null;
   }
 
-  function safeWallpaperUrl(value) {
+  function catalogItem(id, mode) {
+    return config.wallpaperCatalog.find((item) => item.id === id && (!mode || item.mode === mode)) || null;
+  }
+
+  function randomWallpaper() {
+    return config.wallpaperCatalog.find((item) => item.mode === config.wallpaperModes.random) || null;
+  }
+
+  function storedWallpaperUrl(value) {
     const input = String(value || "").trim();
     if (!input) {
       return "";
     }
 
     try {
-      const url = new URL(input, location.href);
+      const url = new URL(input);
       return url.protocol === "https:" ? url.href : "";
     } catch {
       return "";
     }
+  }
+
+  function normalizeSettings(value) {
+    const source = value && typeof value === "object" ? value : {};
+    const legacyWallpaper = String(source.wallpaper || "").trim();
+    const configuredMode = validMode(source.wallpaperMode);
+    let wallpaperMode = configuredMode || (legacyWallpaper ? config.wallpaperModes.url : config.settingsDefaults.wallpaperMode);
+    let wallpaperId = String(source.wallpaperId || "").trim();
+
+    if (wallpaperMode === config.wallpaperModes.random) {
+      wallpaperId = randomWallpaper()?.id || "";
+    } else if (wallpaperMode === config.wallpaperModes.builtin && !catalogItem(wallpaperId, config.wallpaperModes.builtin)) {
+      wallpaperMode = config.wallpaperModes.none;
+      wallpaperId = "";
+    } else if (wallpaperMode !== config.wallpaperModes.builtin) {
+      wallpaperId = "";
+    }
+
+    return {
+      wallpaper: legacyWallpaper,
+      wallpaperMode,
+      wallpaperId,
+      wallpaperUrl: storedWallpaperUrl(source.wallpaperUrl || (wallpaperMode === config.wallpaperModes.url ? legacyWallpaper : "")),
+      wallpaperLocalId: String(source.wallpaperLocalId || "").trim(),
+      wallpaperRandomDate: String(source.wallpaperRandomDate || "").trim(),
+      wallpaperRandomUrl: storedWallpaperUrl(source.wallpaperRandomUrl),
+      maskOpacity: clamp(source.maskOpacity ?? config.settingsDefaults.maskOpacity, config.settingsLimits.maskOpacity),
+      blurPx: clamp(source.blurPx ?? config.settingsDefaults.blurPx, config.settingsLimits.blurPx),
+      cardOpacity: clamp(source.cardOpacity ?? config.settingsDefaults.cardOpacity, config.settingsLimits.cardOpacity)
+    };
+  }
+
+  function safeWallpaperUrl(value, allowData = false) {
+    const input = String(value || "").trim();
+    if (!input) {
+      return "";
+    }
+    if (allowData && /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(input)) {
+      return input;
+    }
+
+    try {
+      const url = new URL(input);
+      return url.protocol === "https:" ? url.href : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function localDateKey() {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${now.getFullYear()}-${month}-${day}`;
+  }
+
+  function dailyRandomUrl(date) {
+    const random = randomWallpaper();
+    const pattern = String(config.wallpaperRandomSeedPattern || "").replace("{date}", encodeURIComponent(date));
+    return safeWallpaperUrl(pattern || random?.url);
+  }
+
+  function isStoredLocalWallpaper(value) {
+    return Boolean(value && typeof value === "object" && typeof value.dataUrl === "string" && /^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(value.dataUrl));
+  }
+
+  function resolveWallpaper(settings) {
+    const modes = config.wallpaperModes;
+    if (settings.wallpaperMode === modes.random) {
+      const date = localDateKey();
+      const cached = safeWallpaperUrl(settings.wallpaperRandomUrl);
+      if (settings.wallpaperRandomDate === date && cached) {
+        return cached;
+      }
+
+      const url = dailyRandomUrl(date);
+      if (url && (settings.wallpaperRandomDate !== date || settings.wallpaperRandomUrl !== url)) {
+        const updated = { ...settings, wallpaperRandomDate: date, wallpaperRandomUrl: url };
+        state.currentSettings = updated;
+        storageSet({ [config.storageKey]: updated }).catch((error) => {
+          console.error("[betterLD] daily wallpaper state save failed", error);
+        });
+      }
+      return url;
+    }
+    if (settings.wallpaperMode === modes.builtin) {
+      return safeWallpaperUrl(catalogItem(settings.wallpaperId, modes.builtin)?.url);
+    }
+    if (settings.wallpaperMode === modes.url) {
+      return safeWallpaperUrl(settings.wallpaperUrl || settings.wallpaper);
+    }
+    if (settings.wallpaperMode === modes.local) {
+      const localWallpaper = state.localWallpaper;
+      if (!isStoredLocalWallpaper(localWallpaper)) {
+        return "";
+      }
+      if (settings.wallpaperLocalId && settings.wallpaperLocalId !== localWallpaper.id) {
+        return "";
+      }
+      return safeWallpaperUrl(localWallpaper.dataUrl, true);
+    }
+    return "";
   }
 
   function applyVisualSettings(value) {
@@ -84,7 +207,7 @@
     root.style.setProperty("--betterld-grid-gap", `${config.gridGap}px`);
     root.style.removeProperty("--betterld-wallpaper-image");
 
-    const wallpaperUrl = safeWallpaperUrl(settings.wallpaper);
+    const wallpaperUrl = resolveWallpaper(settings);
     if (!wallpaperUrl) {
       return;
     }
@@ -105,18 +228,54 @@
     image.src = wallpaperUrl;
   }
 
+  function themeToken(value, token) {
+    return new RegExp(`(?:^|[-_\\s])${token}(?:$|[-_\\s])`, "i").test(String(value || ""));
+  }
+
+  function computedThemeValue(element) {
+    const scheme = element ? getComputedStyle(element).colorScheme.trim().toLowerCase() : "";
+    return scheme === "dark" || scheme === "light" ? scheme : "";
+  }
+
   function applyColorMode() {
     const root = document.documentElement;
     const body = document.body;
-    const darkClass = root.classList.contains("dark") || root.classList.contains("dark-mode") || body?.classList.contains("dark") || body?.classList.contains("dark-mode");
-    const darkData = root.dataset.colorScheme === "dark" || body?.dataset.colorScheme === "dark";
+    const values = [
+      root.dataset.colorScheme,
+      body?.dataset.colorScheme,
+      root.dataset.theme,
+      body?.dataset.theme,
+      root.dataset.themeName,
+      body?.dataset.themeName,
+      computedThemeValue(root),
+      computedThemeValue(body),
+      root.className,
+      body?.className
+    ];
+    const dark = values.some((value) => themeToken(value, "dark") || themeToken(value, "dark-mode"));
+    const light = values.some((value) => themeToken(value, "light") || themeToken(value, "light-mode"));
     const prefersDark = globalThis.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-    root.dataset.betterldMode = darkClass || darkData || prefersDark ? "dark" : "light";
+    root.dataset.betterldMode = dark ? "dark" : light ? "light" : prefersDark ? "dark" : "light";
+  }
+
+  function currentPath() {
+    return location.pathname.replace(/\/+$/, "") || "/";
   }
 
   function isHomepage() {
-    const path = location.pathname.replace(/\/+$/, "") || "/";
-    return path === config.homepagePath;
+    return currentPath() === config.homepagePath;
+  }
+
+  function isTopicListPage() {
+    const path = currentPath();
+    return isHomepage()
+      || /^\/(?:latest|new|unread|unseen|hot|top|read|posted|bookmarks)(?:\/|$)/.test(path)
+      || /^\/my\/(?:activity|bookmarks)(?:\/|$)/.test(path)
+      || /^\/c\/(?:[^/]+\/)+\d+(?:\/l\/(?:latest|new|unread|unseen|hot|top|read))?$/.test(path);
+  }
+
+  function isCategoriesPage() {
+    return currentPath() === "/categories";
   }
 
   function mainRoot() {
@@ -172,7 +331,14 @@
 
   function authorName(item) {
     const link = item.querySelector('a[data-user-card], a[href^="/u/"], a[href*="/u/"]');
-    let name = cleanText(link?.textContent);
+    const activityName = cleanText(item.querySelector(".topic-activity__username")?.textContent);
+    let name = cleanText(link?.getAttribute("data-user-card"));
+    if (!name && link) {
+      name = cleanText(link?.getAttribute("aria-label")?.replace(/的个人资料\s*$/, ""));
+    }
+    if (!name) {
+      name = cleanText(link?.textContent);
+    }
 
     if (!name && link) {
       try {
@@ -184,7 +350,7 @@
       }
     }
 
-    return name || cleanText(item.querySelector(".topic-poster, .poster, .creator")?.textContent) || "LinuxDo 用户";
+    return name || activityName || cleanText(item.querySelector(".topic-poster, .poster, .creator")?.textContent) || "LinuxDo 用户";
   }
 
   function avatarElement(item, author) {
@@ -454,6 +620,12 @@
 
   function restoreContainer(container) {
     removeGrid(container);
+    const sourceBody = container.querySelector('[data-betterld-source-body="true"]');
+    if (sourceBody) {
+      sourceBody.hidden = sourceBody.dataset.betterldWasHidden === "true";
+      delete sourceBody.dataset.betterldSourceBody;
+      delete sourceBody.dataset.betterldWasHidden;
+    }
     const originallyHidden = container.dataset.betterldWasHidden === "true";
     container.hidden = originallyHidden;
     delete container.dataset.betterldSource;
@@ -474,9 +646,15 @@
       return;
     }
 
+    const sourceBody = !isHomepage() ? container.querySelector(".topic-list-body") : null;
     const originallyHidden = container.dataset.betterldSource === "true"
       ? container.dataset.betterldWasHidden === "true"
       : container.hidden;
+    const sourceBodyWasHidden = sourceBody
+      ? sourceBody.dataset.betterldSourceBody === "true"
+        ? sourceBody.dataset.betterldWasHidden === "true"
+        : sourceBody.hidden
+      : false;
     restoreContainer(container);
 
     const grid = createElement("div", "betterld-topic-grid");
@@ -499,13 +677,18 @@
     container.dataset.betterldSource = "true";
     container.dataset.betterldWasHidden = String(originallyHidden);
     container.dataset.betterldSignature = currentSignature;
-    container.hidden = true;
+    container.hidden = sourceBody ? originallyHidden : true;
+    if (sourceBody) {
+      sourceBody.dataset.betterldSourceBody = "true";
+      sourceBody.dataset.betterldWasHidden = String(sourceBodyWasHidden);
+      sourceBody.hidden = true;
+    }
     container.after(grid);
     state.managedSources.set(container, grid);
   }
 
   function syncHomepage() {
-    if (!isHomepage()) {
+    if (!isTopicListPage()) {
       restoreAll();
       return;
     }
@@ -552,17 +735,33 @@
 
   function updateRouteState() {
     const home = isHomepage();
+    const topicListPage = isTopicListPage();
+    const categoriesPage = isCategoriesPage();
     document.documentElement.classList.toggle("betterld-home", home);
     document.body?.classList.toggle("betterld-home", home);
+    document.documentElement.classList.toggle("betterld-topic-page", topicListPage && !home);
+    document.body?.classList.toggle("betterld-topic-page", topicListPage && !home);
+    document.documentElement.classList.toggle("betterld-categories-page", categoriesPage);
+    document.body?.classList.toggle("betterld-categories-page", categoriesPage);
     applyColorMode();
-    if (home) {
+    if (topicListPage) {
       scheduleSync();
     } else {
       restoreAll();
     }
   }
 
+  function checkDailyWallpaper() {
+    if (state.currentSettings.wallpaperMode !== config.wallpaperModes.random) {
+      return;
+    }
+    if (state.currentSettings.wallpaperRandomDate !== localDateKey()) {
+      applyVisualSettings(state.currentSettings);
+    }
+  }
+
   function checkRoute() {
+    checkDailyWallpaper();
     if (location.href === state.currentHref) {
       return;
     }
@@ -583,14 +782,31 @@
 
   applyVisualSettings(config.settingsDefaults);
   storageGet()
-    .then((stored) => applyVisualSettings(stored[config.storageKey]))
+    .then((stored) => {
+      state.localWallpaper = isStoredLocalWallpaper(stored[config.wallpaperLocalStorageKey])
+        ? stored[config.wallpaperLocalStorageKey]
+        : null;
+      applyVisualSettings(stored[config.storageKey]);
+    })
     .catch((error) => {
+      state.localWallpaper = null;
       console.error("[betterLD] settings load failed; using defaults", error);
       applyVisualSettings(config.settingsDefaults);
     });
 
   api.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "local" && changes[config.storageKey]) {
+    if (areaName !== "local") {
+      return;
+    }
+    if (changes[config.wallpaperLocalStorageKey]) {
+      state.localWallpaper = isStoredLocalWallpaper(changes[config.wallpaperLocalStorageKey].newValue)
+        ? changes[config.wallpaperLocalStorageKey].newValue
+        : null;
+      if (state.currentSettings.wallpaperMode === config.wallpaperModes.local) {
+        applyVisualSettings(state.currentSettings);
+      }
+    }
+    if (changes[config.storageKey]) {
       applyVisualSettings(changes[config.storageKey].newValue);
     }
   });
@@ -609,10 +825,12 @@
   });
 
   const modeObserver = new MutationObserver(applyColorMode);
-  modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme"] });
+  modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme", "data-theme-name"] });
   if (document.body) {
-    modeObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme"] });
+    modeObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme", "data-theme-name"] });
   }
+  const colorSchemeMedia = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
+  colorSchemeMedia?.addEventListener?.("change", applyColorMode);
 
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
