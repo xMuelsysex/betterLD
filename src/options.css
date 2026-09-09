@@ -23,7 +23,7 @@ body {
 }
 
 .settings-shell {
-  width: min(100%, 520px);
+  width: min(100%, 760px);
   margin: 0 auto;
   padding: 24px;
 }
@@ -47,9 +47,15 @@ h1 {
   line-height: 1.2;
 }
 
+.settings-header p:last-child,
+.section-description,
+.wallpaper-panel > p,
+.wallpaper-panel h2 {
+  color: var(--settings-on-surface-variant);
+}
+
 .settings-header p:last-child {
   margin: 8px 0 0;
-  color: var(--settings-on-surface-variant);
 }
 
 .settings-card {
@@ -60,6 +66,202 @@ h1 {
   border-radius: 24px;
   background: var(--settings-surface);
   box-shadow: 0 12px 28px rgb(0 0 0 / 0.24);
+}
+
+.wallpaper-fieldset,
+.visual-fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.visual-fieldset {
+  padding-top: 20px;
+  border-top: 1px solid rgb(147 143 153 / 0.24);
+}
+
+legend {
+  margin-bottom: 2px;
+  padding: 0;
+  color: var(--settings-on-surface);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.section-description {
+  margin: -4px 0 0;
+  font-size: 12px;
+}
+
+.wallpaper-sources {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wallpaper-source {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 10px;
+  border: 1px solid rgb(147 143 153 / 0.32);
+  border-radius: 14px;
+  background: var(--settings-surface-variant);
+  cursor: pointer;
+}
+
+.wallpaper-source.is-selected {
+  border-color: var(--settings-primary);
+  box-shadow: 0 0 0 2px rgb(208 188 255 / 0.16);
+}
+
+.wallpaper-source input {
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+  accent-color: var(--settings-primary);
+}
+
+.wallpaper-source__content {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.wallpaper-source strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallpaper-source small {
+  color: var(--settings-on-surface-variant);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.wallpaper-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(147 143 153 / 0.18);
+}
+
+.wallpaper-panel[hidden] {
+  display: none;
+}
+
+.wallpaper-panel h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.wallpaper-panel > p {
+  margin: -6px 0 0;
+  font-size: 12px;
+}
+
+.wallpaper-catalog {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wallpaper-option {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 5px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--settings-surface-variant);
+  color: var(--settings-on-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.wallpaper-option:hover {
+  border-color: rgb(208 188 255 / 0.65);
+}
+
+.wallpaper-option.is-selected {
+  border-color: var(--settings-primary);
+}
+
+.wallpaper-option img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  border-radius: 9px;
+  background: var(--settings-background);
+  object-fit: cover;
+}
+
+.wallpaper-option span {
+  min-height: 30px;
+  overflow: hidden;
+  padding: 0 4px 2px;
+  color: var(--settings-on-surface-variant);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.wallpaper-random-preview {
+  width: min(100%, 300px);
+}
+
+.wallpaper-random-preview .wallpaper-option {
+  width: 100%;
+}
+
+.local-wallpaper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.local-wallpaper-preview {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid rgb(147 143 153 / 0.28);
+  border-radius: 14px;
+  background: var(--settings-surface-variant);
+}
+
+.local-wallpaper-preview img {
+  width: 140px;
+  height: 78px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.local-wallpaper-preview span {
+  overflow: hidden;
+  color: var(--settings-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-status {
+  min-height: 18px;
+  margin: -4px 0 0;
+  color: var(--settings-primary);
+  font-size: 12px;
 }
 
 .field {
@@ -145,4 +347,18 @@ input[type="range"] {
   margin: -4px 0 0;
   color: var(--settings-primary);
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .settings-shell {
+    padding: 16px;
+  }
+
+  .wallpaper-sources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wallpaper-catalog {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

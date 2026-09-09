@@ -47,5 +47,17 @@
 - **Rules/Invariants**：首版将参考图中原有的辅助标签位置改为展示一级分区名称；不把用户 Trust Level 当作分区信息。
 
 ### Visual Enhancement
-- **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次与氛围的效果集合。
-- **Rules/Invariants**：首版默认启用可调整的背景图片、页面遮罩和模糊效果；背景图片的加载与呈现方式参考 BewlyCat；没有背景图片时仍保持可用的纯色视觉。
+- **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次和氛围的效果集合。
+- **Rules/Invariants**：首版默认启用可调整的背景图片、页面遮罩和模糊效果；背景图片的加载和呈现方式参考 BewlyCat；没有可用背景图片时仍保持可用的明暗对应渐变视觉。
+
+### BewlyCat Wallpaper Selection
+- **Definition**：首页背景图片的来源选择模型，包含网站随机图片、内置图片和用户自定义图片 3 类来源。
+- **Rules/Invariants**：用户可以从 3 类来源中选择首页背景；网站随机图片每天固定一张；自定义图片同时支持远程图片和本地图片；来源失效时回退到明暗对应的内置渐变；背景来源属于视觉设置，不改变帖子内容、链接和身份信息。
+
+### Automatic Color Mode
+- **Definition**：根据 LinuxDo 当前主题和设备系统偏好确定 betterLD 首页的浅色或深色视觉模式。
+- **Rules/Invariants**：优先跟随 LinuxDo 当前主题，无法识别时跟随设备系统偏好；主题变化时背景、遮罩、卡片和文字的对比度随之切换。
+
+### Real LinuxDo Homepage
+- **Definition**：用户访问 `https://linux.do/` 时的真实首页信息流，而不是仅用于开发验证的静态页面。
+- **Rules/Invariants**：本轮首版改造只在真实首页启用；离开首页后恢复 LinuxDo 原页面结构。
