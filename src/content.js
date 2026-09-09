@@ -16,6 +16,7 @@
     syncTimer: 0,
     mutating: false,
     wallpaperRequest: 0,
+    wallpaperState: "default",
     localWallpaper: null,
     excerptCache: new Map(),
     excerptObserver: null,
@@ -138,6 +139,11 @@
     }
   }
 
+  function setWallpaperState(root, stateName) {
+    state.wallpaperState = stateName;
+    root.setAttribute("data-betterld-wallpaper-state", stateName);
+  }
+
   function localDateKey() {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -193,12 +199,17 @@
     return "";
   }
 
-  function applyVisualSettings(value) {
+  function applyVisualSettings(value, options = {}) {
     const settings = normalizeSettings(value);
     const root = document.documentElement;
     const wallpaperRequest = ++state.wallpaperRequest;
 
     state.currentSettings = settings;
+    const materialSupported = Boolean(
+      globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
+      || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
+    );
+    root.dataset.betterldMaterial = materialSupported ? "ready" : "fallback";
     root.style.setProperty("--betterld-mask-opacity", String(settings.maskOpacity));
     root.style.setProperty("--betterld-background-blur", `${settings.blurPx}px`);
     root.style.setProperty("--betterld-card-opacity", String(settings.cardOpacity));
@@ -209,27 +220,57 @@
 
     const wallpaperUrl = resolveWallpaper(settings);
     if (!wallpaperUrl) {
+      const hasWallpaperCandidate = settings.wallpaperMode !== config.wallpaperModes.none;
+      setWallpaperState(root, options.forceFallback || hasWallpaperCandidate ? "fallback" : "default");
       return;
     }
 
+    setWallpaperState(root, "loading");
+
     const image = new Image();
     image.decoding = "async";
-    image.onload = () => {
+    const fallback = () => {
+      if (wallpaperRequest !== state.wallpaperRequest) {
+        return;
+      }
+      root.style.removeProperty("--betterld-wallpaper-image");
+      setWallpaperState(root, "fallback");
+      console.warn("[betterLD] wallpaper could not be decoded; using the safe gradient", wallpaperUrl);
+    };
+    const ready = () => {
       if (wallpaperRequest !== state.wallpaperRequest) {
         return;
       }
       root.style.setProperty("--betterld-wallpaper-image", `url(${JSON.stringify(wallpaperUrl)})`);
+      setWallpaperState(root, "ready");
     };
-    image.onerror = () => {
-      if (wallpaperRequest === state.wallpaperRequest) {
-        console.warn("[betterLD] wallpaper could not be loaded", wallpaperUrl);
+    image.onload = () => {
+      if (typeof image.decode !== "function") {
+        ready();
+        return;
+      }
+      try {
+        Promise.resolve(image.decode()).then(ready).catch(fallback);
+      } catch {
+        fallback();
       }
     };
+    image.onerror = fallback;
     image.src = wallpaperUrl;
   }
 
-  function themeToken(value, token) {
-    return new RegExp(`(?:^|[-_\\s])${token}(?:$|[-_\\s])`, "i").test(String(value || ""));
+  function themeFromValue(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) {
+      return "";
+    }
+    if (/(?:^|[-_\\s])dark(?:$|[-_\\s])/.test(normalized) || /(?:^|[-_\\s])dark-mode(?:$|[-_\\s])/.test(normalized)) {
+      return "dark";
+    }
+    if (/(?:^|[-_\\s])light(?:$|[-_\\s])/.test(normalized) || /(?:^|[-_\\s])light-mode(?:$|[-_\\s])/.test(normalized)) {
+      return "light";
+    }
+    return "";
   }
 
   function computedThemeValue(element) {
@@ -240,22 +281,22 @@
   function applyColorMode() {
     const root = document.documentElement;
     const body = document.body;
-    const values = [
+    const explicitValues = [
       root.dataset.colorScheme,
       body?.dataset.colorScheme,
       root.dataset.theme,
       body?.dataset.theme,
       root.dataset.themeName,
       body?.dataset.themeName,
-      computedThemeValue(root),
-      computedThemeValue(body),
       root.className,
       body?.className
     ];
-    const dark = values.some((value) => themeToken(value, "dark") || themeToken(value, "dark-mode"));
-    const light = values.some((value) => themeToken(value, "light") || themeToken(value, "light-mode"));
+    const explicitMode = explicitValues.map(themeFromValue).find(Boolean) || "";
+    const computedMode = [computedThemeValue(root), computedThemeValue(body)]
+      .map(themeFromValue)
+      .find(Boolean) || "";
     const prefersDark = globalThis.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-    root.dataset.betterldMode = dark ? "dark" : light ? "light" : prefersDark ? "dark" : "light";
+    root.dataset.betterldMode = explicitMode || computedMode || (prefersDark ? "dark" : "light");
   }
 
   function currentPath() {
@@ -270,7 +311,8 @@
     const path = currentPath();
     return isHomepage()
       || /^\/(?:latest|new|unread|unseen|hot|top|read|posted|bookmarks)(?:\/|$)/.test(path)
-      || /^\/my\/(?:activity|bookmarks)(?:\/|$)/.test(path)
+      || /^\/my\/[^/]+(?:\/|$)/.test(path)
+      || /^\/l\/(?:latest|new|unread|unseen|hot|top|read)(?:\/|$)/.test(path)
       || /^\/c\/(?:[^/]+\/)+\d+(?:\/l\/(?:latest|new|unread|unseen|hot|top|read))?$/.test(path);
   }
 
@@ -430,7 +472,9 @@
     card.setAttribute("aria-label", topic.title);
     card.dataset.topicId = topic.id;
     card.dataset.excerptState = topic.id ? "loading" : "failed";
+    card.setAttribute("aria-busy", String(Boolean(topic.id)));
     excerpt.dataset.state = topic.id ? "loading" : "failed";
+    chip.title = category.name;
 
     if (item.classList.contains("unread")) {
       card.classList.add("is-unread");
@@ -513,6 +557,7 @@
     excerpt.textContent = text;
     excerpt.dataset.state = stateName;
     card.dataset.excerptState = stateName;
+    card.setAttribute("aria-busy", String(stateName === "loading"));
   }
 
   function loadExcerpt(card) {
@@ -639,6 +684,30 @@
     document.querySelectorAll('[data-betterld-grid="true"]').forEach((grid) => removeGridElement(grid));
   }
 
+  function syncNavigationState() {
+    const navigation = document.querySelector("#navigation-bar.nav.nav-pills");
+    if (!navigation) {
+      return;
+    }
+    const path = currentPath();
+    navigation.querySelectorAll("a[href]").forEach((link) => {
+      let linkPath = "";
+      try {
+        linkPath = new URL(link.href, location.href).pathname.replace(/\/+$/, "") || "/";
+      } catch {
+        return;
+      }
+      const active = linkPath === path;
+      if (active) {
+        link.setAttribute("aria-current", "page");
+        link.dataset.betterldAriaCurrent = "true";
+      } else if (link.dataset.betterldAriaCurrent === "true") {
+        link.removeAttribute("aria-current");
+        delete link.dataset.betterldAriaCurrent;
+      }
+    });
+  }
+
   function rebuildContainer(container, items) {
     const currentSignature = signature(items);
     const currentGrid = managedGrid(container);
@@ -694,6 +763,7 @@
     }
 
     applyColorMode();
+    syncNavigationState();
     const groups = topicContainers();
     const activeContainers = new Set(groups.map(([container]) => container));
     [...state.managedSources.keys()].forEach((container) => {
@@ -744,6 +814,7 @@
     document.documentElement.classList.toggle("betterld-categories-page", categoriesPage);
     document.body?.classList.toggle("betterld-categories-page", categoriesPage);
     applyColorMode();
+    syncNavigationState();
     if (topicListPage) {
       scheduleSync();
     } else {
@@ -791,7 +862,7 @@
     .catch((error) => {
       state.localWallpaper = null;
       console.error("[betterLD] settings load failed; using defaults", error);
-      applyVisualSettings(config.settingsDefaults);
+      applyVisualSettings(config.settingsDefaults, { forceFallback: true });
     });
 
   api.storage.onChanged.addListener((changes, areaName) => {
@@ -825,9 +896,9 @@
   });
 
   const modeObserver = new MutationObserver(applyColorMode);
-  modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme", "data-theme-name"] });
+  modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-color-scheme", "data-theme", "data-theme-name"] });
   if (document.body) {
-    modeObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "data-color-scheme", "data-theme", "data-theme-name"] });
+    modeObserver.observe(document.body, { attributes: true, attributeFilter: ["class", "style", "data-color-scheme", "data-theme", "data-theme-name"] });
   }
   const colorSchemeMedia = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
   colorSchemeMedia?.addEventListener?.("change", applyColorMode);
