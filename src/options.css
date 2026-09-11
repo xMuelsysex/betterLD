@@ -471,6 +471,118 @@ input[type="range"]:focus-visible {
   }
 }
 
+@keyframes betterld-settings-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes betterld-settings-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes betterld-settings-option-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-header {
+  animation: betterld-settings-enter 420ms ease-out backwards;
+}
+
+h1 {
+  animation: betterld-settings-enter 480ms ease-out 60ms backwards;
+}
+
+.wallpaper-source {
+  animation: betterld-settings-option-enter 320ms ease-out backwards;
+  transition: background var(--settings-motion-standard), border-color var(--settings-motion-standard), box-shadow var(--settings-motion-standard), transform var(--settings-motion-standard);
+}
+
+.wallpaper-source:hover {
+  background: color-mix(in srgb, var(--settings-primary) 8%, var(--settings-surface-variant));
+  transform: translateY(-1px) !important;
+}
+
+.wallpaper-panel:not([hidden]) {
+  animation: betterld-settings-panel-enter 280ms ease-out backwards;
+}
+
+.wallpaper-option {
+  overflow: hidden;
+  animation: betterld-settings-option-enter 320ms ease-out backwards;
+  transition: background var(--settings-motion-standard), border-color var(--settings-motion-standard), box-shadow var(--settings-motion-standard), transform var(--settings-motion-standard);
+}
+
+.wallpaper-option:hover {
+  background: color-mix(in srgb, var(--settings-primary) 8%, var(--settings-surface-variant));
+  transform: translateY(-2px) !important;
+}
+
+.wallpaper-option img {
+  transition: transform 220ms ease, filter 220ms ease;
+}
+
+.wallpaper-option:hover img {
+  filter: saturate(1.08);
+  transform: scale(1.03);
+}
+
+.local-wallpaper-preview:not([hidden]) {
+  animation: betterld-settings-panel-enter 280ms ease-out backwards;
+}
+
+input[type="url"] {
+  transition: background var(--settings-motion-standard), border-color var(--settings-motion-standard), box-shadow var(--settings-motion-standard);
+}
+
+input[type="range"] {
+  transition: background var(--settings-motion-standard), box-shadow var(--settings-motion-standard), transform var(--settings-motion-standard);
+}
+
+.button-tonal:hover {
+  background: color-mix(in srgb, var(--settings-primary) 12%, var(--settings-surface-variant));
+}
+
+.button-filled:hover {
+  background: color-mix(in srgb, var(--settings-primary) 88%, white);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallpaper-source:hover,
+  .wallpaper-option:hover,
+  .wallpaper-option:hover img,
+  .button:active {
+    transform: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

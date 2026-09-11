@@ -100,6 +100,302 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   overflow-y: auto !important;
 }
 
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-container {
+  box-sizing: border-box;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24) !important;
+  border-radius: 24px !important;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
+  box-shadow: 0 8px 24px rgb(19 16 29 / 0.14);
+  backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-content {
+  gap: 4px !important;
+  padding: 0 !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-wrapper {
+  min-height: 36px !important;
+  margin: 8px 0 4px !important;
+  padding: 0 8px !important;
+  border-radius: 12px !important;
+  color: var(--betterld-on-surface-variant) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-wrapper:hover {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header {
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 36px !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--betterld-on-surface-variant) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1.25;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header:focus-visible {
+  outline: 3px solid var(--betterld-primary);
+  outline-offset: -3px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-caret {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-caret .d-icon {
+  width: 16px;
+  height: 16px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button {
+  width: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px;
+  display: grid !important;
+  place-items: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--betterld-on-surface-variant) !important;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button:hover {
+  background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
+  color: var(--betterld-primary) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button:focus-visible {
+  outline: 3px solid var(--betterld-primary);
+  outline-offset: -3px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-wrapper {
+  min-height: 40px !important;
+  margin: 0 !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link {
+  min-height: 40px !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 14px !important;
+  background: transparent !important;
+  color: var(--betterld-on-surface-variant) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 20px;
+  text-decoration: none !important;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:hover,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:focus-within {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent) !important;
+  color: var(--betterld-primary) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:focus-visible {
+  outline: 3px solid var(--betterld-primary);
+  outline-offset: -3px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link.active,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--betterld-primary) 36%, transparent) !important;
+  background: color-mix(in srgb, var(--betterld-primary) 18%, rgb(var(--betterld-surface-rgb)) 82%) !important;
+  color: var(--betterld-primary) !important;
+  font-weight: 650 !important;
+  box-shadow: 0 2px 6px rgb(19 16 29 / 0.08);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix {
+  width: 24px !important;
+  height: 24px !important;
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix .d-icon {
+  width: 20px;
+  height: 20px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix img {
+  width: 24px;
+  height: 24px;
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-text {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px !important;
+  font-weight: inherit;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-suffix,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-badge {
+  min-width: 20px;
+  min-height: 20px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-suffix .d-icon,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-badge .d-icon {
+  width: 16px;
+  height: 16px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-hover {
+  visibility: hidden;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 160ms ease, visibility 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:hover .sidebar-section-link-hover,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:focus-within .sidebar-section-link-hover {
+  visibility: visible;
+  opacity: 1;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button {
+  width: 32px !important;
+  height: 32px !important;
+  display: grid !important;
+  place-items: center;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: currentColor !important;
+  transition: background 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button:hover {
+  background: color-mix(in srgb, var(--betterld-primary) 16%, transparent) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button:focus-visible {
+  outline: 3px solid var(--betterld-primary);
+  outline-offset: -3px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-wrapper {
+  min-height: 48px;
+  box-sizing: border-box;
+  border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.24) !important;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.9) !important;
+  backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-container {
+  padding: 8px !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions {
+  align-items: center;
+  gap: 4px;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle__wrapper {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header {
+  min-width: 0;
+  width: 100%;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header {
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 8px !important;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  color: var(--betterld-on-surface-variant) !important;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header:hover,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown[open] > .select-kit-header,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header:focus-visible {
+  border-color: color-mix(in srgb, var(--betterld-primary) 36%, transparent) !important;
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent) !important;
+  color: var(--betterld-primary) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button {
+  width: 32px !important;
+  height: 32px !important;
+  display: grid !important;
+  place-items: center;
+  flex: 0 0 32px;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: var(--betterld-on-surface-variant) !important;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:hover,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:focus-visible {
+  background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
+  color: var(--betterld-primary) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:focus-visible {
+  outline: 3px solid var(--betterld-primary);
+  outline-offset: -3px;
+}
+
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice {
   display: flex;
   align-items: center;
@@ -806,6 +1102,156 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .better
   cursor: progress;
 }
 
+@keyframes betterld-background-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0.9;
+  }
+}
+
+@keyframes betterld-mask-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes betterld-surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes betterld-grid-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes betterld-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes betterld-content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) {
+  transition: background-color 360ms ease, color 360ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::before {
+  animation: betterld-background-enter 560ms ease-out backwards;
+  transition: filter 360ms ease, opacity 360ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::after {
+  animation: betterld-mask-enter 420ms ease-out backwards;
+  transition: background-color 360ms ease, opacity 360ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice {
+  animation: betterld-surface-enter 360ms ease-out backwards;
+  transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice:hover {
+  transform: translateY(-1px) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills {
+  animation: betterld-surface-enter 360ms ease-out 40ms backwards;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a {
+  transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), transform var(--betterld-motion-standard);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li:not(.active) > a:hover,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:not(.active):hover {
+  transform: translateY(-1px) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable {
+  animation: betterld-surface-enter 360ms ease-out 80ms backwards;
+  transition: background var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), border-color var(--betterld-motion-standard), transform var(--betterld-motion-standard);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:hover {
+  transform: translateY(-1px) !important;
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo {
+  animation: betterld-surface-enter 360ms ease-out 80ms backwards;
+  transition: box-shadow var(--betterld-motion-standard), transform var(--betterld-motion-standard);
+}
+
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo:hover {
+  transform: translateY(-1px) !important;
+}
+
+body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
+body.betterld-topic-page .category-heading {
+  animation: betterld-surface-enter 360ms ease-out backwards;
+}
+
+body.betterld-categories-page .category-list > tbody > tr {
+  animation: betterld-surface-enter 360ms ease-out backwards;
+}
+
+body.betterld-categories-page .category-list > tbody > tr:hover {
+  transform: translateY(-1px) !important;
+}
+
+.betterld-topic-grid {
+  animation: betterld-grid-enter 420ms ease-out backwards;
+}
+
+.betterld-topic-card {
+  animation: betterld-card-enter 420ms ease-out backwards;
+}
+
+.betterld-topic-card:hover {
+  transform: translateY(-1px) !important;
+}
+
+.betterld-topic-card__excerpt[data-state="ready"],
+.betterld-topic-card__excerpt[data-state="failed"] {
+  animation: betterld-content-reveal 240ms ease-out backwards;
+}
+
 @supports not (backdrop-filter: blur(1px)) {
   body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice,
   body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills,
@@ -868,6 +1314,36 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
     border-color: CanvasText !important;
     box-shadow: none !important;
     color: CanvasText !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page),
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::before,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::after,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo,
+  body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
+  body.betterld-topic-page .category-heading,
+  body.betterld-categories-page .category-list > tbody > tr,
+  .betterld-topic-grid,
+  .betterld-topic-card,
+  .betterld-topic-card__excerpt {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice:hover,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li:not(.active) > a:hover,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:not(.active):hover,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:hover,
+  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo:hover,
+  body:is(.betterld-categories-page) .category-list > tbody > tr:hover,
+  .betterld-topic-card:hover {
+    transform: none !important;
   }
 }
 
