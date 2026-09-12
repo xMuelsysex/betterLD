@@ -1,5 +1,11 @@
 # betterLD 项目流水
 
+## 2026-09-12：增加 Orca 预览启动器与刷新恢复
+
+- 新增 `scripts/orca-preview.js` 并接入 `npm run preview:orca`：启动无依赖、禁缓存的本地源码服务，打开真实 LinuxDo 页面并通过页面 nonce 注入当前 `config/content/CSS`。
+- 启动器持续监控页面注入标记；刷新或整页导航导致页面上下文重置后自动重新注入，预览 storage 写入 LinuxDo `localStorage` 以跨刷新保留设置状态。
+- Orca 实测首页注入与刷新恢复均通过：刷新后仍为 `injected=true`、30 张卡片、原表格隐藏、浮动设置按钮存在；整页导航 `/latest` 后自动恢复。`npm run check`、`node --check scripts/orca-preview.js`、`git diff --check` 通过。
+
 ## 2026-09-12：修复 CF/API 失败后的主题作者占位
 
 - 真实首页中部分卡片因 `/t/{id}.json` 在 CF 挑战期间失败而永久停留在 `LinuxDo 用户`；`.topic-activity__username` 仍明确是最后回复者，不能作为作者。
