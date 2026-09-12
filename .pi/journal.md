@@ -1,5 +1,41 @@
 # betterLD 项目流水
 
+## 2026-09-12：修复 CF/API 失败后的主题作者占位
+
+- 真实首页中部分卡片因 `/t/{id}.json` 在 CF 挑战期间失败而永久停留在 `LinuxDo 用户`；`.topic-activity__username` 仍明确是最后回复者，不能作为作者。
+- `src/content.js` 现在只从 JSON `details.created_by.username` 回写作者，移除 `post.username`、头像 title、链接路径和最后回复者回退；请求支持有限重试，最终失败显示 `作者信息暂不可用`。
+- Orca 真实首页刷新并重新注入当前源码：首屏 16 张 ready 卡片与 JSON 创建者 `16/16` 一致，无错误用户名；`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：增加网页右侧浮动设置入口
+
+- `src/content.js` 增加幂等 `[data-betterld-settings-trigger]`，固定在网页右侧中部，点击复用 `runtime.openOptionsPage()` 打开现有设置页；不复制壁纸配置和存储逻辑。
+- `src/content.css` 增加 Material 3 主色 pill 按钮、齿轮图标、hover/active/focus、reduced-motion 和窄屏图标态。
+- Orca 真实 `/latest` 回归：按钮 1 个、`80 × 48px`、`right: 20px`、垂直居中；点击成功调用设置入口；`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：完善标签目录与标签主题页 Material 3
+
+- 扩展 `src/content.js` 路由：`/tag/<slug>[/id][/l/<view>]` 复用主题卡片网格，`/tags` 新增目录页面状态；从标签目录点击标签的 SPA 导航也能正确重建网格。
+- `src/content.css` 新增标签目录 Material 3：透明页面壳层、排序 pill、分组标签卡片、计数、hover/focus、响应式 3 列布局；主题页复用已有卡片、壁纸、侧栏和控制栏。
+- Orca 真实回归：`/tags` 9 个分组、1813 个标签项；`/tag/lottery/10` 30 张主题卡片；从 `/tags` 点击第一个标签后仍生成 30 张卡片；`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：修复主题卡片用户名错配
+
+- 根因是 `.topic-activity__username` 表示最后回复者，原作者解析把它当成主题创建者；真实 `/latest` 样本中 `Neo/luckyou`、`recardo/fengtang` 均出现错配。
+- `src/content.js` 现在只从创建者区域的 `data-user-card` / `aria-label` 读取初始身份，并复用已有 `/t/{id}.json` 请求，将 `details.created_by.username` 写回卡片；缺失时使用通用占位，不依赖头像或最后回复者；首页、最新页和分类页不增加页面特例。
+- Orca 真实首页、`/latest`、`/c/develop/4` 各抽查 10 个话题，均与 JSON 创建者 username 一致；`npm run check`、`git diff --check` 通过。
+
+## 2026-09-11：修复最新页持续闪烁
+
+- 根因是预览/重复注入同一 content script 后叠加多个 `MutationObserver`、滚动监听和入场动画；`src/content.js` 增加页面级幂等锁，滚动状态改为累计 `8px` 后切换且只在状态变化时写 DOM。
+- 移除动态主题网格、卡片和摘要的入场动画，保留 `.list-controls` 的滚动 transition；`betterld.config.js` 集中维护滚动阈值。
+- Orca cache-busting 真实 `/latest` 回归：静止 2 秒仅 8 条 mutation，重复 preview 仅 16 条；修复前对照约 429 条；上下滚动和顶部恢复均通过。`npm run check`、配置解析、`git diff --check` 通过。
+
+## 2026-09-11：最新页控制栏滚动收起展开
+
+- `src/content.js` 为主题列表页和分类列表页的 `.list-controls` 增加统一滚动方向状态：向下滚动收起，向上滚动展开，路由切换和节点重建后恢复可见状态；隐藏时使用 `inert` 保持键盘可用性边界。
+- `src/content.css` 增加 `transform`、`opacity` 和 `box-shadow` 过渡；Orca 真实 `https://linux.do/latest` cache-busting 回归确认下滚 `600px` 后隐藏、上滚 `300px` 后展开，sticky 顶部为 `52px`，减弱动画规则存在且页面已恢复顶部。
+- `npm run check`、`git diff --check` 通过；未引入依赖。
+
 ## 2026-09-09：修复分类页内容对齐与刷新提示层级
 
 - 分类页 `.list-controls` 受站点 `#main-outlet` 高 specificity 规则约束，原先宽度为 1320px，而帖子内容区为 1272px；现统一到同一内容基线，真实国产替代页与公告板块均为 `x=512、width=1272px`。
