@@ -10,6 +10,11 @@
     return;
   }
 
+  if (globalThis.__betterldContentScriptActive) {
+    return;
+  }
+  globalThis.__betterldContentScriptActive = true;
+
   const state = {
     currentHref: "",
     currentSettings: config.settingsDefaults,
@@ -20,7 +25,11 @@
     localWallpaper: null,
     excerptCache: new Map(),
     excerptObserver: null,
-    managedSources: new Map()
+    managedSources: new Map(),
+    listControlsCollapsed: false,
+    lastScrollY: 0,
+    scrollDirection: 0,
+    scrollDistance: 0
   };
 
   function storageGet(keys) {
@@ -313,11 +322,86 @@
       || /^\/(?:latest|new|unread|unseen|hot|top|read|posted|bookmarks)(?:\/|$)/.test(path)
       || /^\/my\/[^/]+(?:\/|$)/.test(path)
       || /^\/l\/(?:latest|new|unread|unseen|hot|top|read)(?:\/|$)/.test(path)
-      || /^\/c\/(?:[^/]+\/)+\d+(?:\/l\/(?:latest|new|unread|unseen|hot|top|read))?$/.test(path);
+      || /^\/c\/(?:[^/]+\/)+\d+(?:\/l\/(?:latest|new|unread|unseen|hot|top|read))?$/.test(path)
+      || /^\/tag\/[^/]+(?:\/\d+)?(?:\/l\/(?:latest|new|unread|unseen|hot|top|read))?$/.test(path);
   }
 
   function isCategoriesPage() {
     return currentPath() === "/categories";
+  }
+
+  function isTagsPage() {
+    return currentPath() === "/tags";
+  }
+
+  const listControlsSelector = "body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls";
+
+  function pageScrollTop() {
+    return Math.max(
+      window.scrollY || 0,
+      document.documentElement.scrollTop || 0,
+      document.body?.scrollTop || 0
+    );
+  }
+
+  function applyListControlsScrollState() {
+    const controls = new Set(document.querySelectorAll(listControlsSelector));
+    document.querySelectorAll("[data-betterld-scroll-state]").forEach((control) => {
+      if (controls.has(control)) {
+        return;
+      }
+      delete control.dataset.betterldScrollState;
+      if (control.inert) {
+        control.inert = false;
+      }
+    });
+    controls.forEach((control) => {
+      const hidden = state.listControlsCollapsed;
+      const scrollState = hidden ? "hidden" : "visible";
+      if (control.dataset.betterldScrollState !== scrollState) {
+        control.dataset.betterldScrollState = scrollState;
+      }
+      if (control.inert !== hidden) {
+        control.inert = hidden;
+      }
+    });
+  }
+
+  function updateListControlsScrollState() {
+    const scrollTop = pageScrollTop();
+    const delta = scrollTop - state.lastScrollY;
+    if (!delta) {
+      return;
+    }
+
+    state.lastScrollY = scrollTop;
+    if (scrollTop <= 16) {
+      state.scrollDirection = 0;
+      state.scrollDistance = 0;
+      if (state.listControlsCollapsed) {
+        state.listControlsCollapsed = false;
+        applyListControlsScrollState();
+      }
+      return;
+    }
+
+    const direction = delta > 0 ? 1 : -1;
+    if (direction !== state.scrollDirection) {
+      state.scrollDirection = direction;
+      state.scrollDistance = 0;
+    }
+    state.scrollDistance += Math.abs(delta);
+    if (state.scrollDistance < config.listControlsScrollThreshold) {
+      return;
+    }
+
+    state.scrollDistance = 0;
+    const collapsed = direction > 0;
+    if (collapsed === state.listControlsCollapsed) {
+      return;
+    }
+    state.listControlsCollapsed = collapsed;
+    applyListControlsScrollState();
   }
 
   function mainRoot() {
@@ -349,6 +433,46 @@
     return element;
   }
 
+  function openSettingsPage() {
+    const openOptionsPage = api.runtime?.openOptionsPage;
+    if (typeof openOptionsPage !== "function") {
+      const settingsUrl = api.runtime?.getURL?.("src/options.html");
+      if (settingsUrl) {
+        globalThis.open(settingsUrl, "_blank", "noopener");
+        return;
+      }
+      console.error("[betterLD] settings page API is unavailable");
+      return;
+    }
+
+    try {
+      const result = openOptionsPage.call(api.runtime);
+      result?.catch((error) => {
+        console.error("[betterLD] settings page could not be opened", error);
+      });
+    } catch (error) {
+      console.error("[betterLD] settings page could not be opened", error);
+    }
+  }
+
+  function ensureSettingsTrigger() {
+    if (!document.body || document.querySelector("[data-betterld-settings-trigger]")) {
+      return;
+    }
+
+    const trigger = createElement("button", "betterld-settings-trigger");
+    trigger.type = "button";
+    trigger.dataset.betterldSettingsTrigger = "true";
+    trigger.setAttribute("aria-label", "打开 betterLD 设置");
+    trigger.title = "打开 betterLD 设置";
+    trigger.addEventListener("click", openSettingsPage);
+
+    const icon = createElement("span", "betterld-settings-trigger__icon", "⚙");
+    icon.setAttribute("aria-hidden", "true");
+    trigger.append(icon, createElement("span", "betterld-settings-trigger__label", "设置"));
+    document.body.append(trigger);
+  }
+
   function topicInfo(item) {
     const link = item.querySelector('a.title[href], a.raw-link[href*="/t/"], a[href*="/t/"]');
     if (!link) {
@@ -372,27 +496,14 @@
   }
 
   function authorName(item) {
-    const link = item.querySelector('a[data-user-card], a[href^="/u/"], a[href*="/u/"]');
-    const activityName = cleanText(item.querySelector(".topic-activity__username")?.textContent);
-    let name = cleanText(link?.getAttribute("data-user-card"));
-    if (!name && link) {
-      name = cleanText(link?.getAttribute("aria-label")?.replace(/的个人资料\s*$/, ""));
-    }
-    if (!name) {
-      name = cleanText(link?.textContent);
-    }
+    const creator = item.querySelector(".topic-creator-data, .topic-poster, .posters, .creator");
+    const creatorNodes = creator ? [creator, ...creator.querySelectorAll("[data-user-card], [aria-label]")] : [];
+    const name = creatorNodes
+      .flatMap((node) => [node.getAttribute("data-user-card"), node.getAttribute("aria-label")])
+      .map((value) => cleanText(value?.replace(/的个人资料\s*$/, "")))
+      .find(Boolean);
 
-    if (!name && link) {
-      try {
-        const url = new URL(link.href, location.href);
-        const parts = url.pathname.split("/").filter(Boolean);
-        name = decodeURIComponent(parts[0] === "u" ? parts[1] || "" : "");
-      } catch {
-        name = "";
-      }
-    }
-
-    return name || activityName || cleanText(item.querySelector(".topic-poster, .poster, .creator")?.textContent) || "LinuxDo 用户";
+    return name || config.authorLoadingLabel;
   }
 
   function avatarElement(item, author) {
@@ -504,41 +615,56 @@
 
   async function fetchExcerpt(topicId) {
     const endpoint = new URL(`/t/${topicId}.json`, location.origin);
-    const response = await fetch(endpoint.href, {
-      credentials: "same-origin",
-      cache: "force-cache",
-      headers: { Accept: "application/json" }
-    });
+    let lastError;
 
-    if (!response.ok) {
-      throw new Error(`topic request failed with ${response.status}`);
+    for (let attempt = 0; attempt <= config.topicRequestRetryCount; attempt += 1) {
+      try {
+        const response = await fetch(endpoint.href, {
+          credentials: "same-origin",
+          cache: "force-cache",
+          headers: { Accept: "application/json" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`topic request failed with ${response.status}`);
+        }
+
+        const data = await response.json();
+        const post = data?.post_stream?.posts?.[0];
+        const text = plainText(post?.cooked || post?.raw) || config.excerptPlaceholder;
+        const author = cleanText(data?.details?.created_by?.username);
+        if (!author) {
+          throw new Error("topic creator username unavailable");
+        }
+        return { text, author };
+      } catch (error) {
+        lastError = error;
+        if (attempt >= config.topicRequestRetryCount) {
+          throw error;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, config.topicRequestRetryDelayMs * (attempt + 1)));
+      }
     }
 
-    const data = await response.json();
-    const post = data?.post_stream?.posts?.[0];
-    const text = plainText(post?.cooked || post?.raw);
-    if (!text) {
-      throw new Error("topic has no readable opening post");
-    }
-    return text;
+    throw lastError;
   }
 
   function requestExcerpt(topicId) {
     const cached = state.excerptCache.get(topicId);
     if (cached?.state === "ready") {
-      return Promise.resolve(cached.text);
+      return Promise.resolve(cached);
     }
     if (cached?.state === "failed") {
-      return Promise.reject(cached.error);
+      state.excerptCache.delete(topicId);
     }
     if (cached?.state === "pending") {
       return cached.promise;
     }
 
     const promise = fetchExcerpt(topicId)
-      .then((text) => {
-        state.excerptCache.set(topicId, { state: "ready", text });
-        return text;
+      .then(({ text, author }) => {
+        state.excerptCache.set(topicId, { state: "ready", text, author });
+        return { text, author };
       })
       .catch((error) => {
         state.excerptCache.set(topicId, { state: "failed", error });
@@ -549,7 +675,7 @@
     return promise;
   }
 
-  function setExcerpt(card, text, stateName) {
+  function setExcerpt(card, text, stateName, author) {
     const excerpt = card.querySelector(".betterld-topic-card__excerpt");
     if (!excerpt) {
       return;
@@ -558,6 +684,12 @@
     excerpt.dataset.state = stateName;
     card.dataset.excerptState = stateName;
     card.setAttribute("aria-busy", String(stateName === "loading"));
+    if (author) {
+      const authorElement = card.querySelector(".betterld-topic-card__author");
+      if (authorElement) {
+        authorElement.textContent = author;
+      }
+    }
   }
 
   function loadExcerpt(card) {
@@ -567,10 +699,23 @@
 
     const topicId = card.dataset.topicId;
     requestExcerpt(topicId)
-      .then((text) => setExcerpt(card, text, "ready"))
+      .then(({ text, author }) => setExcerpt(card, text, "ready", author))
       .catch((error) => {
-        console.warn(`[betterLD] opening post unavailable for topic ${topicId}`, error);
-        setExcerpt(card, config.excerptPlaceholder, "failed");
+        console.warn(`[betterLD] topic metadata unavailable for topic ${topicId}`, error);
+        setExcerpt(card, config.excerptPlaceholder, "failed", config.authorPlaceholder);
+        const retryCount = Number(card.dataset.excerptRetryCount || 0);
+        if (retryCount >= config.topicRequestRetryCount || !card.isConnected) {
+          return;
+        }
+        card.dataset.excerptRetryCount = String(retryCount + 1);
+        window.setTimeout(() => {
+          if (!card.isConnected || card.dataset.excerptState === "ready") {
+            return;
+          }
+          card.dataset.excerptState = "loading";
+          card.setAttribute("aria-busy", "true");
+          loadExcerpt(card);
+        }, config.topicRequestRetryDelayMs * (retryCount + 1));
       });
   }
 
@@ -791,6 +936,7 @@
     } finally {
       state.mutating = false;
     }
+    applyListControlsScrollState();
   }
 
   function scheduleSync() {
@@ -804,15 +950,24 @@
   }
 
   function updateRouteState() {
+    state.lastScrollY = pageScrollTop();
+    state.listControlsCollapsed = false;
+    state.scrollDirection = 0;
+    state.scrollDistance = 0;
+    applyListControlsScrollState();
     const home = isHomepage();
     const topicListPage = isTopicListPage();
     const categoriesPage = isCategoriesPage();
+    const tagsPage = isTagsPage();
+    const directoryPage = categoriesPage || tagsPage;
     document.documentElement.classList.toggle("betterld-home", home);
     document.body?.classList.toggle("betterld-home", home);
     document.documentElement.classList.toggle("betterld-topic-page", topicListPage && !home);
     document.body?.classList.toggle("betterld-topic-page", topicListPage && !home);
-    document.documentElement.classList.toggle("betterld-categories-page", categoriesPage);
-    document.body?.classList.toggle("betterld-categories-page", categoriesPage);
+    document.documentElement.classList.toggle("betterld-categories-page", directoryPage);
+    document.body?.classList.toggle("betterld-categories-page", directoryPage);
+    document.documentElement.classList.toggle("betterld-tags-page", tagsPage);
+    document.body?.classList.toggle("betterld-tags-page", tagsPage);
     applyColorMode();
     syncNavigationState();
     if (topicListPage) {
@@ -839,6 +994,8 @@
     state.currentHref = location.href;
     updateRouteState();
   }
+
+  ensureSettingsTrigger();
 
   state.excerptObserver = "IntersectionObserver" in globalThis
     ? new IntersectionObserver((entries) => {
@@ -903,6 +1060,7 @@
   const colorSchemeMedia = globalThis.matchMedia?.("(prefers-color-scheme: dark)");
   colorSchemeMedia?.addEventListener?.("change", applyColorMode);
 
+  window.addEventListener("scroll", updateListControlsScrollState, { passive: true });
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
   state.currentHref = location.href;
