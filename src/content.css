@@ -66,6 +66,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) {
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::before,
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page)::after {
   content: "";
+  display: block;
   position: fixed;
   inset: -24px;
   pointer-events: none;
@@ -2678,6 +2679,7 @@ body.betterld-unmanaged-page {
 body.betterld-unmanaged-page::before,
 body.betterld-unmanaged-page::after {
   content: "";
+  display: block;
   position: fixed;
   inset: -24px;
   pointer-events: none;
@@ -2781,6 +2783,7 @@ body.betterld-search-page {
 body.betterld-search-page::before,
 body.betterld-search-page::after {
   content: "";
+  display: block;
   position: fixed;
   inset: -24px;
   pointer-events: none;

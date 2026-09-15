@@ -1,5 +1,14 @@
 # betterLD 项目流水
 
+## 2026-09-15：修复背景图片（壁纸）不显示
+
+- 根因：Discourse 核心 CSS 的 clearfix `body::before, body::after { content: ""; display: table }`。betterLD 的壁纸/遮罩伪元素没声明 `display`，被这个 `display: table` 变成 shrink-to-fit 空表格盒，计算尺寸 `0px × 0px`，壁纸层和遮罩层从此都没被绘制（`data-betterld-wallpaper-state` 早已是 `ready`、`--betterld-wallpaper-image` 也已写入）。
+- 修复：`src/content.css` 三个壁纸/遮罩共享规则块补 `display: block`（home/topic/categories+tags、search、unmanaged），共 3 行，作用域仍限定在 betterLD 管理页面。
+- 第二个根因（同一功能、同一轮）：设置窗口的内置壁纸缩略图是 `<button>`，点击只改内存 state，不派发 `change`/`input`，因而不触发设置页的委派提交；修复为在缩略图 click 处理器里补 `commitSettings()`（`src/options.js` 共 1 行），复用既有即时生效链路。
+- 第二轮 Orca 真实 `/latest` 复核（先点过 Cloudflare 质询）：`.betterld-topic-card` 30 张、`data-betterld-wallpaper-state=ready`；点 `green-white-mountains` → 页面 `--betterld-wallpaper-image` 立即变为该图；点 `night-sky-stars` 500ms 后 `#settings-status` 为 `✓ 设置已保存。`（`hidden=false`、`display=block`、`opacity=1`、`success`）、`#wallpaper-status` 为 `✓ 已应用。`，且 `betterld.settings` 已持久化为 `wallpaperId=night-sky-stars` / `wallpaperMode=builtin`。
+- Orca 真实页面复核（`builtin` / `rocky-mountain-cloudscape`）：`/` → `::before` `block` `2030 × 1293` + 壁纸 URL，`::after` `block` `2030 × 1293` `rgba(20,18,24,0.63)`；`/search` → 均 `block` `2030 × 1354`；`/guidelines`（`applyToUnmanagedPages`）→ 均 `block` `2030 × 1293`。`maskOpacity=1` 全不透明遮罩下内容层仍完整可见，参数随后恢复 `0.63` / `blurPx 23` / `builtin`。
+- 性能对照：壁纸绘制与 `display: none` 两态 rAF 帧间隔一致（约 `1502ms` / `1469ms`），帧率由 Orca 窗口遮挡节流决定，不是壁纸层开销。`npm run check`、`git diff --check` 通过。详见 `.pi/tasks/2026-09-15-wallpaper-display/task.md`。
+
 ## 2026-09-15：阅读卡比例改为 1/√2
 
 - `src/content.css` 与 `src/reader-card-preview.css` 的阅读卡 `aspect-ratio` 由 `0.8 / 1` 改为 `0.7071 / 1`（宽高比 1/√2）。
