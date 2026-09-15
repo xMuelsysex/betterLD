@@ -530,9 +530,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-m
   position: static;
   z-index: auto;
   display: flex !important;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  width: 100% !important;
   min-height: 48px !important;
   box-sizing: border-box;
   margin: 0 !important;
