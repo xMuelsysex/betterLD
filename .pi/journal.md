@@ -1,5 +1,12 @@
 # betterLD 项目流水
 
+## 2026-09-15：设置界面按 BewlyCat 重做为双层导航大窗口
+
+- 以 `keleus/BewlyCat`（本地只读镜像 `~/.x-repo/github.com/keleus/BewlyCat`）为权威参考重做设置界面：页面内 `90% × 90%`（max `1000 × 900`）大窗口、悬浮在窗口左外侧的主分类 rail（折叠 `56px` / hover 展开 `206px`、圆角 `28 → 32px`）+ 内容区 `180px` 子分类导航，采用「标题 + 描述 / 右侧控件」设置行与 1px 分隔线、`fill-alt` 圆角分组卡与 edge-glow 阴影。
+- `betterld.config.js` 新增 `settingsCategories`（7 主分类 / 18 子分类，含 keys 归属）与 `settingsCommitDelayMs`、`settingsSearchResultLimit`、`settingsSearchHighlightMs`；`src/options.html/css/js` 全部重写 UI 层（开关 44×24、segmented、slider、搜索 popover 跳转高亮、事件委托即时生效 + toast），数据层（设置规范化、`storage.sync` 投影、导入导出、规则校验、壁纸引擎、结构化编辑器）保持不变。
+- 按用户决定移除保存按钮：改动即时写入并作用于页面；恢复默认、导入、清空历史保留独立确认。深浅模式跟随 betterLD 当前模式（`:host([data-betterld-theme])` + `light-dark()`），主色取页面主题色与对比前景。
+- Orca 真实 `/latest` 回归：窗口 `1000 × 900`，rail 7 项 / 子导航 4 项 / 字段 87 / segmented 25 / switch 38 / slider 11；7 个主分类逐一切换均正确；`frostedGlassEnabled` → `--betterld-surface-blur` `16px → 0px → 16px`、`topicListLayoutMode` `reading → cards`（30 张卡片重建）、`cardMinSize` `280 → 320` 且 output 同步；搜索「壁纸」→ 8 条结果 → 跳转「页面 › 搜索」并高亮；rail hover `56 → 211px`；关闭按钮与全部结构化编辑器正常。`npm run check`、`git diff --check` 通过；未覆盖恢复默认的原生 confirm 与 `≤760px` 窄屏实测。详见 `.pi/tasks/2026-09-15-settings-window-bewlycat/task.md`。
+
 ## 2026-09-15：三点菜单去圆形底并拉长阅读卡比例
 
 - `src/content.css` 的 `.betterld-topic-card__menu-trigger` 去掉边框、圆形底、圆角与 backdrop-filter，改为透明无边框按钮，只保留 `⋯` 字形和 `36 × 36` 可点击区域；hover/focus-visible 仍变色并保留焦点轮廓。

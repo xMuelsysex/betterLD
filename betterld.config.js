@@ -21,6 +21,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   routePollMs: 500,
   syncDebounceMs: 160,
   syncQuotaBytes: 102400,
+  settingsCommitDelayMs: 220,
+  settingsSearchResultLimit: 12,
+  settingsSearchHighlightMs: 2400,
   fontRecommendedStack: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
   listControlsScrollThreshold: 8,
   excerptRootMargin: "240px 0px",
@@ -204,6 +207,222 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     language: Object.freeze(["zh-CN", "en-US"]),
     wallpaperRemoteCacheDays: Object.freeze([0, 1, 7, 30])
   }),
+  settingsCategories: Object.freeze([
+    {
+      id: "general",
+      title: "常规",
+      icon: "settings",
+      subcategories: [
+        {
+          id: "theme",
+          title: "主题",
+          description: "跟随 LinuxDo 或系统偏好的明暗模式，以及 betterLD 自有主题色。",
+          keys: [
+            "language",
+            "themeMode",
+            "themeScheduleStart",
+            "themeScheduleEnd",
+            "themeColor",
+            "darkModeBaseColor",
+            "useGradientThemeColorBackground",
+            "liquidSegmentIndicatorEnabled"
+          ]
+        },
+        {
+          id: "surface",
+          title: "表面与毛玻璃",
+          description: "betterLD 自有卡片、菜单和面板的表面效果。",
+          keys: ["frostedGlassEnabled", "surfaceBlurPx", "sidebarCoverBlurEnabled", "shadowMode", "shadowHeight"]
+        },
+        {
+          id: "font",
+          title: "字体与文本",
+          description: "字体来源与中文排版。",
+          keys: ["fontMode", "fontScope", "fontFamily", "removeChinesePunctuationIndent"]
+        },
+        {
+          id: "behavior",
+          title: "页面行为",
+          description: "触屏目标、横向滚动与未管理页面的范围。",
+          keys: ["touchOptimization", "enableHorizontalNavigationScroll", "showHomeButtonInTouchMode", "applyToUnmanagedPages"]
+        }
+      ]
+    },
+    {
+      id: "pages",
+      title: "页面",
+      icon: "pages",
+      subcategories: [
+        {
+          id: "card",
+          title: "主题卡片",
+          description: "主题信息流的卡片形式、网格、内容显隐与字号。",
+          keys: [
+            "topicListLayoutMode",
+            "gridMode",
+            "cardMinSize",
+            "cardSideGutter",
+            "gridGap",
+            "showTopicAvatar",
+            "showTopicAuthor",
+            "showTopicCategory",
+            "showTopicExcerpt",
+            "showTopicMeta",
+            "showTopicUnreadState",
+            "showTopicPinnedState",
+            "topicTitleFontSize",
+            "topicAuthorFontSize",
+            "topicMetaFontSize"
+          ]
+        },
+        {
+          id: "filter",
+          title: "筛选",
+          description: "只影响 betterLD 生成的卡片，不改变 LinuxDo 原始查询与分页。",
+          keys: ["topicFilterEnabled", "topicFilterMode"]
+        },
+        {
+          id: "search",
+          title: "搜索",
+          description: "搜索页能力需经真实页面确认，未确认前保存后不生效。",
+          keys: [
+            "searchMode",
+            "searchHistoryEnabled",
+            "searchRecommendationEnabled",
+            "searchFocusDimming",
+            "searchFocusBlur",
+            "searchResultsPaginationMode",
+            "searchPageWallpaperMode",
+            "searchPageWallpaperId",
+            "searchPageWallpaperUrl"
+          ]
+        }
+      ]
+    },
+    {
+      id: "components",
+      title: "组件",
+      icon: "components",
+      subcategories: [
+        {
+          id: "navigation",
+          title: "主题导航",
+          description: "保留原站链接与 active 语义，只改变排列与可见性。",
+          keys: ["topicNavigationAlignment", "topicNavigationSticky", "showTopicNavigationCounts"]
+        },
+        {
+          id: "shell",
+          title: "Header 与 Sidebar",
+          description: "覆盖已确认的原生壳层 surface，不重建原站导航内容。",
+          keys: ["headerVisible", "headerVisualMode", "autoHideHeader", "sidebarPosition", "autoHideSidebar", "showSettingsTrigger", "showThemeToggle"]
+        },
+        {
+          id: "actionRail",
+          title: "浮动操作",
+          description: "betterLD 自有的浮动操作栏、返回顶部与刷新入口。",
+          keys: [
+            "actionRailEnabled",
+            "actionRailPosition",
+            "actionRailVisibility",
+            "actionRailGlow",
+            "showBackToTopButton",
+            "showRefreshButton",
+            "separateNavigationActions",
+            "enableUndoRefresh"
+          ]
+        },
+        {
+          id: "interaction",
+          title: "打开方式与抽屉",
+          description: "保留浏览器原生的修饰键点击与键盘行为。",
+          keys: [
+            "topicCardOpenMode",
+            "navigationOpenMode",
+            "searchOpenMode",
+            "notificationOpenMode",
+            "drawerCloseOnOverlay",
+            "drawerCloseOnEscape"
+          ]
+        }
+      ]
+    },
+    {
+      id: "appearance",
+      title: "外观",
+      icon: "appearance",
+      subcategories: [
+        {
+          id: "wallpaper",
+          title: "壁纸",
+          description: "网站随机图片、内置图片与自定义图片三类来源。",
+          keys: ["wallpaperMode", "wallpaper", "wallpaperId", "wallpaperUrl", "wallpaperLocalId"]
+        },
+        {
+          id: "effect",
+          title: "页面效果",
+          description: "壁纸之上的遮罩、模糊与卡片透明度。",
+          keys: ["maskOpacity", "blurPx", "cardOpacity"]
+        },
+        {
+          id: "customCss",
+          title: "自定义 CSS",
+          description: "只允许命中 betterLD 自有命名空间的规则。",
+          keys: ["customCssEnabled", "customCss"]
+        }
+      ]
+    },
+    {
+      id: "shortcuts",
+      title: "快捷键",
+      icon: "keyboard",
+      subcategories: [
+        {
+          id: "shortcuts",
+          title: "按键",
+          description: "输入框、编辑器和可编辑元素聚焦时不触发。",
+          keys: ["shortcutsEnabled"]
+        }
+      ]
+    },
+    {
+      id: "advanced",
+      title: "高级",
+      icon: "advanced",
+      subcategories: [
+        {
+          id: "maintenance",
+          title: "同步与缓存",
+          description: "浏览器同步只投影设置，不包含本地壁纸正文与搜索历史。",
+          keys: ["syncEnabled", "wallpaperRemoteCacheDays"]
+        },
+        {
+          id: "data",
+          title: "导入与导出",
+          description: "导出内容不包含本地壁纸正文、账号信息或页面内容。",
+          keys: []
+        },
+        {
+          id: "reset",
+          title: "恢复默认",
+          description: "恢复默认会立即覆盖当前全部设置。",
+          keys: []
+        }
+      ]
+    },
+    {
+      id: "about",
+      title: "关于",
+      icon: "about",
+      subcategories: [
+        {
+          id: "about",
+          title: "关于",
+          description: "版本、运行环境与项目链接。",
+          keys: []
+        }
+      ]
+    }
+  ]),
   settingsDefaults: Object.freeze({
     ...wallpaperDefaults,
     settingsVersion: 2,

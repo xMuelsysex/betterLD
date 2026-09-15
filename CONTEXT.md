@@ -73,3 +73,23 @@
 ### Card Presentation Style
 - **Definition**：用户为首页主题信息流选择的卡片视觉呈现方式，包含现有卡片形式和 Reading Topic Card。
 - **Rules/Invariants**：新安装或恢复默认时选择 Reading Topic Card；切换呈现方式只改变布局与视觉层次，不改变主题数据、互动语义、链接行为或原生列表恢复能力；互动数据缺失时不制造替代数值。
+
+### Settings Window
+- **Definition**：用户在 LinuxDo 页面上打开的 betterLD 设置界面，覆盖当前页面并集中呈现全部设置分类。
+- **Rules/Invariants**：在当前页面内打开并保留页面上下文，用户不需要离开 LinuxDo；窗口承载全部设置分类，分类之间只切换视野，不改变已生效的设置值。
+
+### Settings Category and Sub-category
+- **Definition**：设置窗口内的两级分类，主分类界定设置所属的功能域，子分类在主分类内部进一步组织设置项。
+- **Rules/Invariants**：每个设置项只属于一个子分类，并归属唯一主分类；分类只用于组织和定位设置项，不改变设置值、生效范围或保存结果。
+
+### Settings Item
+- **Definition**：设置窗口中最小的可调单元，由名称、说明和右侧控件组成。
+- **Rules/Invariants**：名称与说明共同解释该项设置的作用；同一项设置在同一时刻只有一个控件，且控件始终反映当前生效值。
+
+### Immediate Apply
+- **Definition**：用户调整设置后立即作用于当前页面并持久化的生效方式。
+- **Rules/Invariants**：任何设置项被调整后立即成为当前生效值，设置窗口不提供提交动作；破坏性操作（恢复默认、导入、清空搜索历史）必须保留独立确认；界面必须让「改动已生效」可见。
+
+### Settings Search
+- **Definition**：在设置窗口内按名称或关键词定位设置项的能力。
+- **Rules/Invariants**：搜索只定位分类与设置项，不修改任何设置值；跨分类跳转后仍保留搜索关键字与结果上下文。
