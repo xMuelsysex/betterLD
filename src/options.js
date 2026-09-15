@@ -1722,6 +1722,7 @@
       button.type = "button";
       button.className = "settings-rail__item";
       button.dataset.category = category.id;
+      button.title = category.title;
       button.addEventListener("click", () => showCategory(category.id));
       const icon = document.createElement("span");
       icon.className = "settings-rail__icon";

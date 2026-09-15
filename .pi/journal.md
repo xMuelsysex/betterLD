@@ -1,5 +1,11 @@
 # betterLD 项目流水
 
+## 2026-09-15：修复设置窗口主分类栏点击后不自动缩回
+
+- 根因：rail 的展开条件包含 `:focus-within`，点击按钮后焦点留在 rail 内，指针移开也不会缩回；先改成 `:has(:focus-visible)`，但 Orca 真实点击路径下该按钮仍为 `focus-visible: true`，问题依旧复现。
+- 现在只保留 `:hover` 展开（与 BewlyCat 的 `.settings-primary-navigation:hover` 一致），窄屏折叠规则同步；rail 按钮补 `title` 保留名称可读性。
+- Orca 真实页面复测：hover 展开 `216px`，点击「页面」后移开指针缩回 `56px`（`hovered:false`、`active:pages`、面板与 heading 正常切换）。`npm run check`、`git diff --check` 通过。
+
 ## 2026-09-15：设置界面按 BewlyCat 重做为双层导航大窗口
 
 - 以 `keleus/BewlyCat`（本地只读镜像 `~/.x-repo/github.com/keleus/BewlyCat`）为权威参考重做设置界面：页面内 `90% × 90%`（max `1000 × 900`）大窗口、悬浮在窗口左外侧的主分类 rail（折叠 `56px` / hover 展开 `206px`、圆角 `28 → 32px`）+ 内容区 `180px` 子分类导航，采用「标题 + 描述 / 右侧控件」设置行与 1px 分隔线、`fill-alt` 圆角分组卡与 edge-glow 阴影。
