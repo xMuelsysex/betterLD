@@ -313,8 +313,7 @@ body {
   transition: width var(--settings-duration-moderate) var(--settings-ease-standard), border-radius var(--settings-duration-moderate) var(--settings-ease-standard), transform var(--settings-duration-moderate) var(--settings-ease-standard);
 }
 
-.settings-rail:hover .settings-rail__list,
-.settings-rail:focus-within .settings-rail__list {
+.settings-rail:hover .settings-rail__list {
   width: calc(var(--settings-rail-expanded-item-width) + var(--settings-rail-inset) * 2);
   border-radius: var(--settings-radius-3xl);
   transform: scale(1.05);
@@ -1335,8 +1334,7 @@ body {
     display: none;
   }
 
-  .settings-rail:hover .settings-rail__list,
-  .settings-rail:focus-within .settings-rail__list {
+  .settings-rail:hover .settings-rail__list {
     width: calc(var(--settings-rail-item-size) + var(--settings-rail-inset) * 2);
     border-radius: 28px;
   }
