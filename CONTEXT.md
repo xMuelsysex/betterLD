@@ -61,3 +61,15 @@
 ### Real LinuxDo Homepage
 - **Definition**：用户访问 `https://linux.do/` 时的真实首页信息流，而不是仅用于开发验证的静态页面。
 - **Rules/Invariants**：本轮首版改造只在真实首页启用；离开首页后恢复 LinuxDo 原页面结构。
+
+### Reading Topic Card
+- **Definition**：首页主题卡片的一种可选展示形式，以略长的桌面端圆角矩形集中呈现标题、作者、头像、标签、Markdown 正文预览、互动数据和详情入口。
+- **Rules/Invariants**：它与现有主题卡片共享帖子语义、作者身份和原帖导航；用户可以在设置中选择展示形式；新安装或恢复默认时优先使用此形式。
+
+### Markdown Opening Preview
+- **Definition**：将主题首帖开头按 Markdown 语义呈现的卡片正文预览，保留段落、强调、链接、列表、引用和代码等内容层次。
+- **Rules/Invariants**：核心范围包含标题、段落、加粗、斜体、链接、列表、引用、行内代码和围栏代码；预览服务于阅读和识别主题，不改变原帖内容；无法读取正文时保留标题、作者和分区信息，并展示可见占位状态。
+
+### Card Presentation Style
+- **Definition**：用户为首页主题信息流选择的卡片视觉呈现方式，包含现有卡片形式和 Reading Topic Card。
+- **Rules/Invariants**：新安装或恢复默认时选择 Reading Topic Card；切换呈现方式只改变布局与视觉层次，不改变主题数据、互动语义、链接行为或原生列表恢复能力；互动数据缺失时不制造替代数值。

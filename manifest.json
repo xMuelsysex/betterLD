@@ -8,6 +8,9 @@
     "https://linux.do/*",
     "https://www.linux.do/*"
   ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -16,6 +19,8 @@
       ],
       "js": [
         "betterld.config.js",
+        "src/settings.js",
+        "src/markdown.js",
         "src/content.js"
       ],
       "css": ["src/content.css"],
@@ -30,6 +35,21 @@
     "page": "src/options.html",
     "open_in_tab": true
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "betterld.config.js",
+        "src/options.html",
+        "src/options.css",
+        "src/options.js",
+        "src/settings.js"
+      ],
+      "matches": [
+        "https://linux.do/*",
+        "https://www.linux.do/*"
+      ]
+    }
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "betterld@linux.do",
