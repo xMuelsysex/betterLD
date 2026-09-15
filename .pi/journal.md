@@ -1,5 +1,14 @@
 # betterLD 项目流水
 
+## 2026-09-15：审计设置界面全部控件的提交行为
+
+- 静态枚举后发现：设置项本身靠 `settingsPageBody` 的委派 `change`（input/textarea/select）与 `input`（仅 range，220ms 防抖）落盘，分段控件会派发冒泡 `change`、开关是原生 checkbox，都走同一条路径；真正漏提交的是自绘控件与结构化编辑器。
+- 修复 3 处同族缺陷：规则行「删除」只改 DOM 不提交、选择本地图片后不落盘、移除本地图片不落盘（后两处旧文案还写着「保存后生效/移除」，与已取消保存按钮的架构矛盾）。文件 input 的 `change` 会冒泡到委派监听，在异步准备完成前先提交旧状态，因此把它排除出委派提交，改由各自处理器在准备完成后提交。
+- 补齐 `docs/adr/0001-settings-immediate-apply.md` 与 `CONTEXT.md` 要求但代码里缺失的确认：导入设置、导入规则、清空搜索历史（原先只有恢复默认有）。
+- 顺带修一处设置界面缺陷：`validateCustomCss` 遍历 `rule.style` 拿到的是 CSSOM 展开后的长属性，`margin`/`padding`/`border`/`border-radius` 等简写永远匹配不上白名单，合法简写被误拒（实测报 `不允许的 CSS 属性：border-top-left-radius`）；改为按作者书写的声明属性名校验。
+- Orca 真实 `/latest` 逐类控件验证：switch / segmented / range / color / time / text / textarea / radio+url / 有序编辑器 / 规则编辑器 / 壁纸缩略图 / 本地壁纸选择与移除全部即时落盘；白名单仍能拒绝非法属性、at-rule 与非命名空间选择器。
+- 破坏性操作用临时覆盖 `globalThis.confirm` 验证两个分支：清空历史、恢复默认、导入设置、导入规则在 false 分支保持不变、true 分支生效；真实点击「清空搜索历史」时页面被模态对话框阻塞（`orca eval` 超时、`dialog accept` 无响应），确认对话框确实弹出。详见 `.pi/tasks/2026-09-15-settings-controls-audit/task.md`。
+
 ## 2026-09-15：修复背景图片（壁纸）不显示
 
 - 根因：Discourse 核心 CSS 的 clearfix `body::before, body::after { content: ""; display: table }`。betterLD 的壁纸/遮罩伪元素没声明 `display`，被这个 `display: table` 变成 shrink-to-fit 空表格盒，计算尺寸 `0px × 0px`，壁纸层和遮罩层从此都没被绘制（`data-betterld-wallpaper-state` 早已是 `ready`、`--betterld-wallpaper-image` 也已写入）。

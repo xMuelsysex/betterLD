@@ -56,6 +56,28 @@
     "backdrop-filter"
   ]);
   const forbiddenCustomCssValue = /url\s*\(|image-set\s*\(|@import|expression\s*\(|javascript\s*:|behavior\s*:|-moz-binding|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/i;
+
+  // CSSOM 会把 margin、padding、border-radius 这类简写展开成长属性，白名单校验按作者书写的属性名进行
+  function declaredProperties(cssText) {
+    const open = cssText.indexOf("{");
+    const close = cssText.lastIndexOf("}");
+    if (open < 0 || close <= open) {
+      return [];
+    }
+    const result = [];
+    cssText.slice(open + 1, close).split(";").forEach((declaration) => {
+      const separator = declaration.indexOf(":");
+      if (separator < 0) {
+        return;
+      }
+      const property = declaration.slice(0, separator).trim().toLowerCase();
+      if (!property) {
+        return;
+      }
+      result.push({ property, value: declaration.slice(separator + 1).trim() });
+    });
+    return result;
+  }
   const booleanKeys = [
     "useGradientThemeColorBackground",
     "liquidSegmentIndicatorEnabled",
@@ -423,13 +445,11 @@
             errors.push("选择器不能包含通配符、html、body 或 :root");
           }
         }
-        for (let index = 0; index < rule.style.length; index += 1) {
-          const property = rule.style[index].toLowerCase();
-          const propertyValue = rule.style.getPropertyValue(property);
+        for (const { property, value } of declaredProperties(rule.cssText)) {
           if (!allowedCustomCssProperties.has(property)) {
             errors.push(`不允许的 CSS 属性：${property}`);
           }
-          if (forbiddenCustomCssValue.test(propertyValue)) {
+          if (forbiddenCustomCssValue.test(value)) {
             errors.push(`CSS 属性值包含禁止内容：${property}`);
           }
         }
