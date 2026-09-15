@@ -57,9 +57,13 @@
   `#wallpaper-status` `text="✓ 已应用。"`、`data-status=success`；`[name="wallpaperMode"]:checked=builtin`、选中项 `night-sky-stars`；
   页面壁纸同步变为 `night-sky-stars.jpg`。
 - 持久化确认：预览存储 `betterld.settings` → `wallpaperId=night-sky-stars`、`wallpaperMode=builtin`（键集合 `betterld.settings` / `betterld.local-wallpaper` / `betterld.sync-meta`）。
+- 宿主变体补充实测（新开预览，质询已过）：`/latest`（`betterld-topic-page`）→ `::before` / `::after` 均 `display: block`，`2030 × 1354`，遮罩 `rgba(20, 18, 24, 0.63)`，`--betterld-wallpaper-image` = `night-sky-stars.jpg`。
+- `/tags` 本轮未能实测：该导航再次触发 Cloudflare 质询，`reload` 后重试一次仍停在「请稍候…」（无 nonce → 预览注入无法进行）。
+  `betterld-categories-page` 与 `betterld-home` 处于同一个 `:is()` 规则块，三个类都是单类选择器，特异性相同且声明相同；
+  在 home / topic 两个变体上已验证 `display: block` 能赢过 Discourse 的 `display: table`，因此 categories 变体按共享规则推定，仍标为未实测。
 - 静态检查：`npm run check` 通过；`git diff --check` 通过。
 
-未覆盖：Firefox 真实页面；`/tags` 与 `/tag/<slug>` 仅按 `betterld-categories-page` 共享同一规则块推断，未单独截图。
+未覆盖：Firefox 真实页面；`/tags` 与 `/tag/<slug>`（`betterld-categories-page`）未实测（Cloudflare 拦截），仅按同一 `:is()` 规则块与相同特异性推定。
 
 ## 结论
 
