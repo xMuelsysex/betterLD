@@ -1,5 +1,10 @@
 # betterLD 项目流水
 
+## 2026-09-15：刷新提示条铺满内容区
+
+- 外层 `.show-more.has-topics` 本来就已是全内容宽，但内层可点击的 `a.alert.alert-info.clickable` 没有宽度约束，收缩成居中窄胶囊（`x=607 w=199`）；给内层补 `flex: 1 1 auto; width: 100%`。
+- Orca 真实 `/latest` 复核：提示条由 `x=607 w=199` 变为 `x=315 w=783`，与卡片网格左右边缘完全对齐（`leftDiff=0`、`widthDiff=0`）；截图确认横跨内容区。`npm run check`、`git diff --check` 通过。详见 `.pi/tasks/2026-09-15-refresh-notice-full-width/task.md`。
+
 ## 2026-09-15：审计设置界面全部控件的提交行为
 
 - 静态枚举后发现：设置项本身靠 `settingsPageBody` 的委派 `change`（input/textarea/select）与 `input`（仅 range，220ms 防抖）落盘，分段控件会派发冒泡 `change`、开关是原生 checkbox，都走同一条路径；真正漏提交的是自绘控件与结构化编辑器。
