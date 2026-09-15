@@ -2875,7 +2875,8 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
 .betterld-topic-card--reading {
   position: relative;
   min-height: 210px;
-  aspect-ratio: 0.8 / 1;
+  /* 宽高比 1 / √2（0.7071 / 1）。 */
+  aspect-ratio: 0.7071 / 1;
   overflow: hidden;
   border-radius: 28px;
   background: linear-gradient(145deg, rgb(var(--betterld-surface-rgb) / 0.92), rgb(var(--betterld-surface-container-high-rgb) / 0.78));
