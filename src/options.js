@@ -30,8 +30,15 @@
     throw new Error("betterLD settings could not initialize: extension API is unavailable");
   }
 
-  const form = document.querySelector("#settings-form");
-  const wallpaper = document.querySelector("#wallpaper");
+  const settingsRailList = document.querySelector("#settings-rail-list");
+  const settingsSubnav = document.querySelector("#settings-subnav");
+  const settingsBreadcrumb = document.querySelector("#settings-breadcrumb");
+  const settingsSectionHeading = document.querySelector("#settings-section-heading");
+  const settingsSearchInput = document.querySelector("#settings-search-input");
+  const settingsSearchResults = document.querySelector("#settings-search-results");
+  const settingsScroll = document.querySelector("#settings-scroll");
+  const settingsClose = document.querySelector("#settings-close");
+  const settingsPageBody = document.querySelector("#settings-page-body");
   const wallpaperSources = document.querySelector("#wallpaper-sources");
   const wallpaperRandomPanel = document.querySelector("#wallpaper-random-panel");
   const wallpaperRandomPreview = document.querySelector("#wallpaper-random-preview");
@@ -46,14 +53,10 @@
   const wallpaperLocalName = document.querySelector("#wallpaper-local-name");
   const removeLocalWallpaper = document.querySelector("#remove-local-wallpaper");
   const wallpaperStatus = document.querySelector("#wallpaper-status");
-  const maskOpacity = document.querySelector("#mask-opacity");
-  const blur = document.querySelector("#blur");
-  const cardOpacity = document.querySelector("#card-opacity");
-  const maskOpacityValue = document.querySelector("#mask-opacity-value");
-  const blurValue = document.querySelector("#blur-value");
-  const cardOpacityValue = document.querySelector("#card-opacity-value");
   const reset = document.querySelector("#reset");
-  const status = document.querySelector("#status");
+  const status = document.querySelector("#settings-status");
+
+  let wallpaper = null;
 
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
@@ -76,12 +79,27 @@
     language: "zh-CN"
   };
 
+  let toastTimer = 0;
+
   function setStatusMessage(element, message, statusType = "") {
     element.textContent = message;
+    element.hidden = !message;
     if (statusType) {
       element.dataset.status = statusType;
     } else {
       delete element.dataset.status;
+    }
+    if (element === status) {
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = 0;
+      }
+      if (message) {
+        toastTimer = window.setTimeout(() => {
+          toastTimer = 0;
+          status.hidden = true;
+        }, 2600);
+      }
     }
   }
 
@@ -287,18 +305,6 @@
     }
   }
 
-  function setRangeAttributes(input, limits) {
-    input.min = String(limits.min);
-    input.max = String(limits.max);
-    input.step = String(limits.step);
-  }
-
-  function updateOutputs() {
-    maskOpacityValue.value = `${Math.round(Number(maskOpacity.value) * 100)}%`;
-    blurValue.value = `${blur.value}px`;
-    cardOpacityValue.value = `${Math.round(Number(cardOpacity.value) * 100)}%`;
-  }
-
   function selectedMode() {
     return wallpaperSources.querySelector('input[name="wallpaperMode"]:checked')?.value || modes.none;
   }
@@ -441,10 +447,6 @@
       ? "当前存储：本地设置 + 浏览器同步投影。"
       : "当前存储：浏览器本地存储。";
     state.selectedWallpaperId = settings.wallpaperId;
-    wallpaper.value = settings.wallpaperUrl || (settings.wallpaperMode === modes.url ? settings.wallpaper : "");
-    maskOpacity.value = String(settings.maskOpacity);
-    blur.value = String(settings.blurPx);
-    cardOpacity.value = String(settings.cardOpacity);
     writeAdvancedSettings(settings);
     applyLanguage(settings.language);
     const mode = settings.wallpaperMode === modes.builtin && !catalogItem(settings.wallpaperId, modes.builtin)
@@ -452,7 +454,6 @@
       : settings.wallpaperMode;
     renderWallpaperCatalog();
     setWallpaperMode(mode);
-    updateOutputs();
   }
 
   function readForm() {
@@ -497,10 +498,7 @@
       wallpaperUrl,
       wallpaperLocalId: mode === modes.local ? state.localWallpaper.id : "",
       wallpaperRandomDate: keepRandomResult ? state.settings.wallpaperRandomDate : "",
-      wallpaperRandomUrl: keepRandomResult ? state.settings.wallpaperRandomUrl : "",
-      maskOpacity: maskOpacity.value,
-      blurPx: blur.value,
-      cardOpacity: cardOpacity.value
+      wallpaperRandomUrl: keepRandomResult ? state.settings.wallpaperRandomUrl : ""
     });
   }
 
@@ -803,7 +801,7 @@
   };
 
   const englishFieldLabels = {
-    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Theme color", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
+    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Theme color", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
     topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
@@ -851,7 +849,70 @@
     "立即同步": "Sync now",
     "Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。": "Manifest V3 · Chrome / Firefox desktop · Processes only the topic and settings data required by betterLD.",
     "项目主页": "Project home",
-    "问题反馈": "Report an issue"
+    "问题反馈": "Report an issue",
+    "设置": "Settings",
+    "常规": "General",
+    "主题": "Theme",
+    "表面与毛玻璃": "Surface and frosted glass",
+    "字体与文本": "Font and text",
+    "页面行为": "Page behavior",
+    "页面": "Pages",
+    "组件": "Components",
+    "主题导航": "Topic navigation",
+    "Header 与 Sidebar": "Header and Sidebar",
+    "浮动操作": "Floating actions",
+    "打开方式与抽屉": "Open mode and drawer",
+    "壁纸": "Wallpaper",
+    "页面效果": "Page effects",
+    "自定义 CSS": "Custom CSS",
+    "快捷键": "Shortcuts",
+    "按键": "Keys",
+    "同步与缓存": "Sync and cache",
+    "导入与导出": "Import and export",
+    "恢复默认设置": "Restore default settings",
+    "背景来源": "Background source",
+    "远程图片": "Remote image",
+    "本地图片": "Local image",
+    "选择图片": "Choose image",
+    "移除本地图片": "Remove local image",
+    "同步": "Sync",
+    "设置文件": "Settings file",
+    "筛选规则文件": "Filter rule file",
+    "搜索历史": "Search history",
+    "标题规则": "Title rules",
+    "作者规则": "Author rules",
+    "分类规则": "Category rules",
+    "暂无标题规则": "No title rules",
+    "暂无作者规则": "No author rules",
+    "暂无分类规则": "No category rules",
+    "暂无规则": "No rules",
+    "添加规则": "Add rule",
+    "删除": "Delete",
+    "关键词": "Keyword",
+    "备注（可选）": "Note (optional)",
+    "近处": "Near",
+    "中段": "Middle",
+    "远处": "Far",
+    "阴影曲线": "Shadow curve",
+    "断点列数": "Breakpoint columns",
+    "卡片操作菜单": "Card action menu",
+    "导航项": "Navigation items",
+    "操作栏项目": "Action rail items",
+    "图片会压缩后保存在扩展本地，不会上传到 LinuxDo。": "Images are compressed and stored locally in the extension; nothing is uploaded to LinuxDo.",
+    "导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。": "Exported JSON excludes wallpaper bodies, account information, and page content.",
+    "恢复默认会立即覆盖当前全部设置，包含壁纸来源与卡片布局。": "Restoring defaults immediately overwrites all current settings, including wallpaper source and card layout.",
+    "本地壁纸和搜索历史不会同步。": "Local wallpapers and search history are never synced.",
+    "保存前会执行 CSSOM、选择器和属性白名单校验。": "CSSOM, selector, and property allowlist validation runs before saving.",
+    "只接受 HTTPS 图片地址。": "Only HTTPS image URLs are accepted.",
+    "按高度位置调整 betterLD 自有卡片阴影的透明度。": "Adjusts betterLD card shadow opacity by height position.",
+    "固定网格模式与自动布局在断点不足时使用的列数。": "Column counts used by fixed grid mode and by auto layout at each breakpoint.",
+    "控制卡片菜单项的显隐与顺序。": "Controls visibility and order of card menu entries.",
+    "控制主题导航入口的显隐与顺序。": "Controls visibility and order of topic navigation entries.",
+    "控制浮动操作栏项目的显隐与顺序。": "Controls visibility and order of floating action rail entries.",
+    "留空表示不绑定按键。": "Leave blank to bind no shortcut.",
+    "标题、作者与分类规则统一使用上面的命中行为。": "Title, author, and category rules all use the match behavior above.",
+    "参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。": "Supports random, built-in, remote, and local images, following BewlyCat.",
+    "每天固定一张，进入下一天后自动更新。": "One fixed image per day; updates when the next day begins."
   };
 
   function applyLanguage(language) {
@@ -874,32 +935,29 @@
         element.textContent = english ? staticTranslations[source] : source;
       }
     });
-    document.querySelectorAll("[data-settings-title]").forEach((group) => {
-      const source = group.dataset.betterldSettingsTitle || group.dataset.settingsTitle;
-      group.dataset.betterldSettingsTitle = source;
-      if (source) {
-        group.dataset.settingsTitle = english ? (staticTranslations[source] || source) : source;
+    document.querySelectorAll(".settings-field[data-settings-key]").forEach((field) => {
+      const key = field.dataset.settingsKey;
+      const label = field.querySelector(".settings-field__title");
+      const source = field.dataset.betterldSettingLabel || label?.textContent.trim();
+      if (!source) {
+        return;
       }
-    });
-    document.querySelectorAll("[data-settings-key]").forEach((item) => {
-      const key = item.dataset.settingsKey;
-      const label = item.querySelector(".settings-item__label");
-      const source = item.dataset.betterldSettingLabel || label?.textContent.trim();
-      if (source) {
-        item.dataset.betterldSettingLabel = source;
-        if (label) {
-          label.textContent = english ? (englishFieldLabels[key] || source) : source;
-        }
-        const input = item.querySelector("[data-setting-key]");
-        input?.setAttribute("aria-label", english ? (englishFieldLabels[key] || source) : source);
-        if (input?.tagName === "SELECT") {
-          input.querySelectorAll("option").forEach((option) => {
-            const value = option.value;
-            const chinese = option.dataset.betterldZh || enumLabels[key]?.[value] || option.textContent;
-            option.dataset.betterldZh = chinese;
-            option.textContent = english ? (englishEnumLabels[key]?.[value] || value) : chinese;
-          });
-        }
+      field.dataset.betterldSettingLabel = source;
+      const text = english ? (englishFieldLabels[key] || source) : source;
+      if (label) {
+        label.textContent = text;
+      }
+      const input = field.querySelector("[data-setting-key]");
+      input?.setAttribute("aria-label", text);
+      const group = field.querySelector(".settings-segmented");
+      if (group) {
+        group.setAttribute("aria-label", text);
+        group.querySelectorAll(".settings-segmented__item").forEach((button) => {
+          const value = button.dataset.segmentValue;
+          const chinese = button.dataset.betterldZh || enumLabels[key]?.[value] || button.textContent;
+          button.dataset.betterldZh = chinese;
+          button.textContent = english ? (englishEnumLabels[key]?.[value] || value) : chinese;
+        });
       }
     });
     if (aboutStorage) {
@@ -917,87 +975,91 @@
   }
 
   const fieldDefinitions = [
-    { section: "appearance", key: "language", type: "select", label: "设置页语言", help: "只改变 betterLD 自有设置和状态文案。" },
-    { section: "appearance", key: "themeMode", type: "select", label: "主题模式", help: "自动模式优先读取 LinuxDo 的主题状态。" },
-    { section: "appearance", key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "按时间切换时使用。", dependsOn: ["themeMode", "scheduled"] },
-    { section: "appearance", key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "支持跨午夜时间段。", dependsOn: ["themeMode", "scheduled"] },
-    { section: "appearance", key: "themeColor", type: "color", label: "主题色", help: "只作用于 betterLD 自有控件和卡片。" },
-    { section: "appearance", key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
-    { section: "appearance", key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
-    { section: "appearance", key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "减少动效时会自动使用静态指示器。" },
-    { section: "appearance", key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
-    { section: "appearance", key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "只影响 betterLD 侧栏覆盖层。" },
-    { section: "appearance", key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、菜单、导航和 Header 的独立模糊强度。" },
-    { section: "appearance", key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
-    { section: "appearance", key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "控制卡片阴影的整体高度。" },
-    { section: "appearance", key: "fontMode", type: "select", label: "字体偏好", help: "不加载远程字体。" },
-    { section: "appearance", key: "fontScope", type: "select", label: "字体作用范围", help: "默认只覆盖 betterLD 自有内容。" },
-    { section: "appearance", key: "fontFamily", type: "text", label: "自定义字体族", help: "只使用本机或系统已有字体。", dependsOn: ["fontMode", "custom"] },
-    { section: "appearance", key: "removeChinesePunctuationIndent", type: "toggle", label: "移除中文标点缩进", help: "只作用于 betterLD 自有文本。" },
-    { section: "appearance", key: "customCssEnabled", type: "toggle", label: "启用自定义 CSS", help: "保存前会执行 CSSOM、选择器和属性白名单校验。" },
-    { section: "appearance", key: "customCss", type: "textarea", label: "自定义 CSS", help: "每条规则必须命中 .betterld- 或 [data-betterld-] 命名空间。", wide: true, dependsOn: ["customCssEnabled", true] },
-    { section: "advanced", key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
-    { section: "advanced", key: "applyToUnmanagedPages", type: "toggle", label: "对未管理页面应用壳层视觉", help: "只扩展背景、Header 和 Sidebar，不注入主题卡片。" },
+    { key: "language", type: "select", label: "设置页语言", help: "只改变 betterLD 自有设置和状态文案。" },
+    { key: "themeMode", type: "select", label: "主题模式", help: "自动模式优先读取 LinuxDo 的主题状态。" },
+    { key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "按时间切换时使用。", dependsOn: ["themeMode", "scheduled"] },
+    { key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "支持跨午夜时间段。", dependsOn: ["themeMode", "scheduled"] },
+    { key: "themeColor", type: "color", label: "主题色", help: "只作用于 betterLD 自有控件和卡片。" },
+    { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
+    { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
+    { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "减少动效时会自动使用静态指示器。" },
+    { key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
+    { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "只影响 betterLD 侧栏覆盖层。" },
+    { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、菜单、导航和 Header 的独立模糊强度。" },
+    { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
+    { key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "控制卡片阴影的整体高度。" },
+    { key: "fontMode", type: "select", label: "字体偏好", help: "不加载远程字体。" },
+    { key: "fontScope", type: "select", label: "字体作用范围", help: "默认只覆盖 betterLD 自有内容。" },
+    { key: "fontFamily", type: "text", label: "自定义字体族", help: "只使用本机或系统已有字体。", wide: true, dependsOn: ["fontMode", "custom"] },
+    { key: "removeChinesePunctuationIndent", type: "toggle", label: "移除中文标点缩进", help: "只作用于 betterLD 自有文本。" },
+    { key: "customCssEnabled", type: "toggle", label: "启用自定义 CSS", help: "保存前会执行 CSSOM、选择器和属性白名单校验。" },
+    { key: "customCss", type: "textarea", label: "自定义 CSS", help: "每条规则必须命中 .betterld- 或 [data-betterld-] 命名空间。", wide: true, dependsOn: ["customCssEnabled", true] },
+    { key: "wallpaperUrl", type: "url", label: "图片 URL", help: "只接受 HTTPS 图片地址。", wide: true },
+    { key: "maskOpacity", type: "range", label: "页面遮罩", unit: "%", help: "范围 0–80%。" },
+    { key: "blurPx", type: "range", label: "背景模糊", unit: "px", help: "范围 0–32px。" },
+    { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
+    { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
+    { key: "applyToUnmanagedPages", type: "toggle", label: "对未管理页面应用壳层视觉", help: "只扩展背景、Header 和 Sidebar，不注入主题卡片。" },
 
-    { section: "card", key: "gridMode", type: "select", label: "网格模式", help: "自适应模式保留可用宽度和窄屏单列边界。" },
-    { section: "card", key: "cardMinSize", type: "range", label: "卡片最小宽度", unit: "px", help: "自适应网格的最小轨道宽度。" },
-    { section: "card", key: "cardSideGutter", type: "range", label: "卡片左右内缩", unit: "px", help: "保持页面内容与边缘的安全间距。" },
-    { section: "card", key: "gridGap", type: "range", label: "卡片间距", unit: "px", help: "卡片网格的行列间距。" },
-    { section: "card", key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
-    { section: "card", key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "不会改变作者 JSON 请求和权威来源。" },
-    { section: "card", key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },
-    { section: "card", key: "showTopicExcerpt", type: "toggle", label: "显示正文摘要", help: "关闭后停止仅摘要观察请求。" },
-    { section: "card", key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "控制回复数和活动时间。" },
-    { section: "card", key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "不改变原站未读语义。" },
-    { section: "card", key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
-    { section: "card", key: "topicListLayoutMode", type: "select", label: "主题卡片样式", help: "阅读卡适配核心 Markdown；原生模式恢复原始列表、分页和控制项。" },
-    { section: "card", key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题。" },
-    { section: "card", key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者。" },
-    { section: "card", key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "只调整 betterLD 卡片元信息。" },
+    { key: "gridMode", type: "select", label: "网格模式", help: "自适应模式保留可用宽度和窄屏单列边界。" },
+    { key: "cardMinSize", type: "range", label: "卡片最小宽度", unit: "px", help: "自适应网格的最小轨道宽度。" },
+    { key: "cardSideGutter", type: "range", label: "卡片左右内缩", unit: "px", help: "保持页面内容与边缘的安全间距。" },
+    { key: "gridGap", type: "range", label: "卡片间距", unit: "px", help: "卡片网格的行列间距。" },
+    { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
+    { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "不会改变作者 JSON 请求和权威来源。" },
+    { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },
+    { key: "showTopicExcerpt", type: "toggle", label: "显示正文摘要", help: "关闭后停止仅摘要观察请求。" },
+    { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "控制回复数和活动时间。" },
+    { key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "不改变原站未读语义。" },
+    { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
+    { key: "topicListLayoutMode", type: "select", label: "主题卡片样式", help: "阅读卡适配核心 Markdown；原生模式恢复原始列表、分页和控制项。" },
+    { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题。" },
+    { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者。" },
+    { key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "只调整 betterLD 卡片元信息。" },
 
-    { section: "navigation", key: "topicNavigationAlignment", type: "select", label: "主题导航对齐", help: "保留原始链接和 active 语义。" },
-    { section: "navigation", key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "与列表控制栏滚动收起协调。" },
-    { section: "navigation", key: "showTopicNavigationCounts", type: "toggle", label: "显示导航数量", help: "隐藏视觉数量但保留可访问语义。" },
-    { section: "navigation", key: "headerVisible", type: "toggle", label: "显示 Header", help: "不重建原站 Logo、搜索、通知或用户菜单。" },
-    { section: "navigation", key: "headerVisualMode", type: "select", label: "Header 视觉", help: "只覆盖已确认的原生 Header surface。" },
-    { section: "navigation", key: "autoHideHeader", type: "toggle", label: "自动隐藏 Header", help: "移动端默认不隐藏，焦点进入 Header 时恢复。" },
-    { section: "navigation", key: "sidebarPosition", type: "select", label: "Sidebar 位置", help: "窄屏会保留原站移动抽屉。" },
-    { section: "navigation", key: "autoHideSidebar", type: "toggle", label: "自动隐藏 Sidebar", help: "仅宽屏启用，并保留悬停和键盘热区。" },
-    { section: "navigation", key: "showSettingsTrigger", type: "toggle", label: "显示设置入口", help: "使用 runtime.openOptionsPage() 打开本页。" },
-    { section: "navigation", key: "showThemeToggle", type: "toggle", label: "显示主题切换入口", help: "保留原站主题切换语义。" },
-    { section: "navigation", key: "actionRailEnabled", type: "toggle", label: "启用浮动操作栏", help: "只创建一个 betterLD 操作组。" },
-    { section: "navigation", key: "actionRailPosition", type: "select", label: "操作栏位置", help: "仅启用操作栏时生效。", dependsOn: ["actionRailEnabled", true] },
-    { section: "navigation", key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "自动模式会随滚动半隐藏。", dependsOn: ["actionRailEnabled", true] },
-    { section: "navigation", key: "actionRailGlow", type: "toggle", label: "操作栏发光", help: "仅作用于 betterLD 操作栏。", dependsOn: ["actionRailEnabled", true] },
-    { section: "navigation", key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "使用 window.scrollTo，不改变路由。" },
-    { section: "navigation", key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "使用原生 location.reload()。" },
-    { section: "navigation", key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "避免与原站按钮重复。" },
-    { section: "navigation", key: "enableUndoRefresh", type: "toggle", label: "启用刷新撤销", help: "需要刷新前状态恢复链路支持。" },
+    { key: "topicNavigationAlignment", type: "select", label: "主题导航对齐", help: "保留原始链接和 active 语义。" },
+    { key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "与列表控制栏滚动收起协调。" },
+    { key: "showTopicNavigationCounts", type: "toggle", label: "显示导航数量", help: "隐藏视觉数量但保留可访问语义。" },
+    { key: "headerVisible", type: "toggle", label: "显示 Header", help: "不重建原站 Logo、搜索、通知或用户菜单。" },
+    { key: "headerVisualMode", type: "select", label: "Header 视觉", help: "只覆盖已确认的原生 Header surface。" },
+    { key: "autoHideHeader", type: "toggle", label: "自动隐藏 Header", help: "移动端默认不隐藏，焦点进入 Header 时恢复。" },
+    { key: "sidebarPosition", type: "select", label: "Sidebar 位置", help: "窄屏会保留原站移动抽屉。" },
+    { key: "autoHideSidebar", type: "toggle", label: "自动隐藏 Sidebar", help: "仅宽屏启用，并保留悬停和键盘热区。" },
+    { key: "showSettingsTrigger", type: "toggle", label: "显示设置入口", help: "在当前页面打开设置窗口，缺少资源 API 时回退扩展设置页。" },
+    { key: "showThemeToggle", type: "toggle", label: "显示主题切换入口", help: "保留原站主题切换语义。" },
+    { key: "actionRailEnabled", type: "toggle", label: "启用浮动操作栏", help: "只创建一个 betterLD 操作组。" },
+    { key: "actionRailPosition", type: "select", label: "操作栏位置", help: "仅启用操作栏时生效。", dependsOn: ["actionRailEnabled", true] },
+    { key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "自动模式会随滚动半隐藏。", dependsOn: ["actionRailEnabled", true] },
+    { key: "actionRailGlow", type: "toggle", label: "操作栏发光", help: "仅作用于 betterLD 操作栏。", dependsOn: ["actionRailEnabled", true] },
+    { key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "使用 window.scrollTo，不改变路由。" },
+    { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "使用原生 location.reload()。" },
+    { key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "避免与原站按钮重复。" },
+    { key: "enableUndoRefresh", type: "toggle", label: "启用刷新撤销", help: "需要刷新前状态恢复链路支持。" },
 
-    { section: "filter", key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "只影响 betterLD 生成的卡片。" },
-    { section: "filter", key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "标题、作者和分类规则统一使用此模式。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "只影响 betterLD 生成的卡片。" },
+    { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "标题、作者和分类规则统一使用此模式。", dependsOn: ["topicFilterEnabled", true] },
 
-    { section: "search", key: "searchMode", type: "select", label: "搜索结果模式", help: "当前 /search 仍以原生结果为默认。" },
-    { section: "search", key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
-    { section: "search", key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "需确认 LinuxDo 搜索建议来源后生效。" },
-    { section: "search", key: "searchFocusDimming", type: "toggle", label: "搜索聚焦遮罩", help: "只遮罩 betterLD 自有背景。" },
-    { section: "search", key: "searchFocusBlur", type: "toggle", label: "搜索聚焦模糊", help: "独立于全局壁纸模糊，可能影响性能。" },
-    { section: "search", key: "searchResultsPaginationMode", type: "select", label: "搜索结果分页", help: "真实分页机制确认后生效。" },
-    { section: "search", key: "searchPageWallpaperMode", type: "select", label: "搜索页壁纸", help: "默认继承全局壁纸。" },
-    { section: "search", key: "searchPageWallpaperId", type: "text", label: "搜索页内置壁纸 ID", help: "仅在搜索页壁纸选择内置图片时生效。", dependsOn: ["searchPageWallpaperMode", "builtin"] },
-    { section: "search", key: "searchPageWallpaperUrl", type: "url", label: "搜索页远程壁纸 URL", help: "只接受 HTTPS 地址。", dependsOn: ["searchPageWallpaperMode", "url"] },
+    { key: "searchMode", type: "select", label: "搜索结果模式", help: "当前 /search 仍以原生结果为默认。" },
+    { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
+    { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "需确认 LinuxDo 搜索建议来源后生效。" },
+    { key: "searchFocusDimming", type: "toggle", label: "搜索聚焦遮罩", help: "只遮罩 betterLD 自有背景。" },
+    { key: "searchFocusBlur", type: "toggle", label: "搜索聚焦模糊", help: "独立于全局壁纸模糊，可能影响性能。" },
+    { key: "searchResultsPaginationMode", type: "select", label: "搜索结果分页", help: "真实分页机制确认后生效。" },
+    { key: "searchPageWallpaperMode", type: "select", label: "搜索页壁纸", help: "默认继承全局壁纸。" },
+    { key: "searchPageWallpaperId", type: "text", label: "搜索页内置壁纸 ID", help: "仅在搜索页壁纸选择内置图片时生效。", dependsOn: ["searchPageWallpaperMode", "builtin"] },
+    { key: "searchPageWallpaperUrl", type: "url", label: "搜索页远程壁纸 URL", help: "只接受 HTTPS 地址。", wide: true, dependsOn: ["searchPageWallpaperMode", "url"] },
 
-    { section: "interaction", key: "topicCardOpenMode", type: "select", label: "主题卡片打开方式", help: "默认保持当前标签页行为。" },
-    { section: "interaction", key: "navigationOpenMode", type: "select", label: "导航链接打开方式", help: "保留 modifier-click 和键盘行为。" },
-    { section: "interaction", key: "searchOpenMode", type: "select", label: "搜索链接打开方式", help: "只作用于 betterLD 接管的搜索链接。" },
-    { section: "interaction", key: "notificationOpenMode", type: "select", label: "通知链接打开方式", help: "不修改原站通知内容。" },
-    { section: "interaction", key: "drawerCloseOnOverlay", type: "toggle", label: "点击遮罩关闭抽屉", help: "抽屉关闭后焦点回到触发卡片。" },
-    { section: "interaction", key: "drawerCloseOnEscape", type: "toggle", label: "按 Escape 关闭抽屉", help: "保留原生键盘关闭路径。" },
-    { section: "interaction", key: "touchOptimization", type: "select", label: "触屏优化", help: "开启时操作目标至少 44 × 44px。" },
-    { section: "interaction", key: "enableHorizontalNavigationScroll", type: "toggle", label: "允许导航横向滚动", help: "只作用于主题导航和设置页标签。" },
-    { section: "interaction", key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "提供可发现的返回首页路径。" },
-    { section: "interaction", key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入框、编辑器和可编辑元素聚焦时不触发。" },
-    { section: "interaction", key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "下一步同步实现会使用 storage.sync；本地壁纸和搜索历史不会同步。" }
+    { key: "topicCardOpenMode", type: "select", label: "主题卡片打开方式", help: "默认保持当前标签页行为。" },
+    { key: "navigationOpenMode", type: "select", label: "导航链接打开方式", help: "保留 modifier-click 和键盘行为。" },
+    { key: "searchOpenMode", type: "select", label: "搜索链接打开方式", help: "只作用于 betterLD 接管的搜索链接。" },
+    { key: "notificationOpenMode", type: "select", label: "通知链接打开方式", help: "不修改原站通知内容。" },
+    { key: "drawerCloseOnOverlay", type: "toggle", label: "点击遮罩关闭抽屉", help: "抽屉关闭后焦点回到触发卡片。" },
+    { key: "drawerCloseOnEscape", type: "toggle", label: "按 Escape 关闭抽屉", help: "保留原生键盘关闭路径。" },
+    { key: "touchOptimization", type: "select", label: "触屏优化", help: "开启时操作目标至少 44 × 44px。" },
+    { key: "enableHorizontalNavigationScroll", type: "toggle", label: "允许导航横向滚动", help: "只作用于主题导航。" },
+    { key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "提供可发现的返回首页路径。" },
+    { key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入框、编辑器和可编辑元素聚焦时不触发。" },
+    { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" }
   ];
 
   const labelMap = {
@@ -1008,9 +1070,6 @@
   };
 
   const controlMap = new Map();
-  const settingsSearch = document.querySelector("#settings-search");
-  const settingsSearchClear = document.querySelector("#settings-search-clear");
-  const settingsSearchEmpty = document.querySelector("#settings-search-empty");
   const maintenanceStatus = document.querySelector("#maintenance-status");
   const clearSearchHistory = document.querySelector("#clear-search-history");
   const syncNow = document.querySelector("#sync-now");
@@ -1036,86 +1095,167 @@
     return `${number}${definition.unit || ""}`;
   }
 
-  function createSettingsField(definition) {
-    const item = document.createElement("label");
-    item.className = `settings-item${definition.wide ? " settings-item--wide" : ""}`;
-    item.dataset.settingsItem = "true";
-    item.dataset.settingsKey = definition.key;
-    if (definition.dependsOn) {
-      item.dataset.dependsOn = definition.dependsOn[0];
-      item.dataset.dependsValue = String(definition.dependsOn[1]);
+  function createControl(definition) {
+    if (definition.type === "toggle") {
+      const wrapper = document.createElement("span");
+      wrapper.className = "settings-switch";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.className = "settings-switch__input";
+      const track = document.createElement("span");
+      track.className = "settings-switch__track";
+      track.setAttribute("aria-hidden", "true");
+      wrapper.append(input, track);
+      return { input, control: wrapper };
     }
 
-    const controlId = `setting-${definition.key.replace(/[^a-z0-9-]/gi, "-")}`;
-    const input = document.createElement(definition.type === "select" ? "select" : definition.type === "textarea" ? "textarea" : "input");
-    input.id = controlId;
+    if (definition.type === "select") {
+      const group = document.createElement("div");
+      group.className = "settings-segmented";
+      group.setAttribute("role", "radiogroup");
+      group.setAttribute("aria-label", definition.label);
+      const input = document.createElement("input");
+      input.type = "hidden";
+      fieldOptions(definition).forEach((option) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "settings-segmented__item";
+        button.dataset.segmentValue = String(option.value);
+        button.setAttribute("role", "radio");
+        button.textContent = option.label;
+        button.addEventListener("click", () => {
+          if (input.value === button.dataset.segmentValue) {
+            return;
+          }
+          input.value = button.dataset.segmentValue;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        group.append(button);
+      });
+      group.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+          return;
+        }
+        const buttons = [...group.querySelectorAll(".settings-segmented__item")];
+        const index = buttons.indexOf(document.activeElement);
+        if (index < 0) {
+          return;
+        }
+        event.preventDefault();
+        const step = event.key === "ArrowRight" ? 1 : buttons.length - 1;
+        const next = buttons[(index + step) % buttons.length];
+        next.focus();
+        next.click();
+      });
+      group.prepend(input);
+      return { input, control: group };
+    }
+
+    if (definition.type === "range") {
+      const wrapper = document.createElement("span");
+      wrapper.className = "settings-slider";
+      const input = document.createElement("input");
+      input.type = "range";
+      const output = document.createElement("output");
+      output.dataset.settingOutput = definition.key;
+      input.addEventListener("input", () => {
+        output.textContent = displayRangeValue(definition, input.value);
+      });
+      wrapper.append(input, output);
+      return { input, control: wrapper };
+    }
+
+    const control = document.createElement(definition.type === "textarea" ? "textarea" : "input");
+    if (definition.type === "color") {
+      control.type = "color";
+      control.className = "settings-color-input";
+    } else if (definition.type === "time") {
+      control.type = "time";
+      control.className = "settings-text-input";
+    } else if (definition.type === "url") {
+      control.type = "url";
+      control.inputMode = "url";
+      control.className = "settings-text-input";
+    } else if (definition.type === "textarea") {
+      control.className = "settings-textarea";
+    } else {
+      control.type = "text";
+      control.autocomplete = "off";
+      control.className = "settings-text-input";
+    }
+    return { input: control, control };
+  }
+
+  function createSettingsField(definition) {
+    const field = document.createElement("div");
+    field.className = "settings-field";
+    field.dataset.settingsItem = "true";
+    field.dataset.settingsKey = definition.key;
+    if (definition.wide) {
+      field.classList.add("settings-field--stacked");
+    }
+    if (definition.dependsOn) {
+      field.dataset.dependsOn = definition.dependsOn[0];
+      field.dataset.dependsValue = String(definition.dependsOn[1]);
+    }
+
+    const row = document.createElement("div");
+    row.className = "settings-field__row";
+    const left = document.createElement("div");
+    left.className = "settings-field__left";
+    const title = document.createElement("span");
+    title.className = "settings-field__title";
+    title.textContent = definition.label;
+    left.append(title);
+    if (definition.help) {
+      const help = document.createElement("p");
+      help.className = "settings-field__desc";
+      help.textContent = definition.help;
+      left.append(help);
+    }
+
+    const right = document.createElement("div");
+    right.className = "settings-field__right";
+    const { input, control } = createControl(definition);
+    input.id = `setting-${definition.key.replace(/[^a-z0-9-]/gi, "-")}`;
     input.dataset.settingKey = definition.key;
     input.name = definition.key;
     input.setAttribute("aria-label", definition.label);
-
-    if (definition.type === "toggle") {
-      item.classList.add("settings-item--check");
-      input.type = "checkbox";
-      const title = document.createElement("span");
-      title.className = "settings-item__label";
-      title.textContent = definition.label;
-      item.append(input, title);
-    } else {
-      const title = document.createElement("span");
-      title.className = "settings-item__label";
-      title.textContent = definition.label;
-      const wrapper = document.createElement("span");
-      wrapper.className = "settings-item__control";
-      if (definition.type === "range") {
-        input.type = "range";
-        const output = document.createElement("output");
-        output.dataset.settingOutput = definition.key;
-        wrapper.append(input, output);
-        input.addEventListener("input", () => {
-          output.textContent = displayRangeValue(definition, input.value);
-        });
-      } else if (definition.type === "color") {
-        input.type = "color";
-      } else if (definition.type === "time") {
-        input.type = "time";
-      } else if (definition.type === "url") {
-        input.type = "url";
-        input.inputMode = "url";
-      } else if (definition.type === "text") {
-        input.type = "text";
-        input.autocomplete = "off";
-      } else if (definition.type === "select") {
-        fieldOptions(definition).forEach((option) => {
-          const optionElement = document.createElement("option");
-          optionElement.value = String(option.value);
-          optionElement.textContent = option.label;
-          input.append(optionElement);
-        });
-      }
-      wrapper.append(input);
-      item.append(title, wrapper);
-    }
-
-    if (definition.help) {
-      const help = document.createElement("small");
-      help.textContent = definition.help;
-      item.append(help);
-    }
+    right.append(control);
+    row.append(left, right);
+    field.append(row);
     controlMap.set(definition.key, input);
-    return item;
+    return field;
+  }
+
+  function keysBySubcategory() {
+    const map = new Map();
+    (config.settingsCategories || []).forEach((category) => {
+      category.subcategories.forEach((subcategory) => {
+        map.set(subcategory.id, subcategory.keys || []);
+      });
+    });
+    return map;
   }
 
   function renderFieldDefinitions() {
-    const containers = {
-      appearance: document.querySelector("#appearance-settings"),
-      card: document.querySelector("#card-settings"),
-      navigation: document.querySelector("#navigation-settings"),
-      filter: document.querySelector("#filter-settings"),
-      search: document.querySelector("#search-settings"),
-      interaction: document.querySelector("#interaction-settings"),
-      advanced: document.querySelector("#advanced-settings")
-    };
-    fieldDefinitions.forEach((definition) => containers[definition.section]?.append(createSettingsField(definition)));
+    const definitionByKey = new Map(fieldDefinitions.map((definition) => [definition.key, definition]));
+    const keys = keysBySubcategory();
+    document.querySelectorAll("[data-fields]").forEach((container) => {
+      (keys.get(container.dataset.fields) || []).forEach((key) => {
+        const definition = definitionByKey.get(key);
+        if (definition) {
+          container.append(createSettingsField(definition));
+        }
+      });
+    });
+    document.querySelectorAll("[data-field]").forEach((container) => {
+      const definition = definitionByKey.get(container.dataset.field);
+      if (definition) {
+        container.append(createSettingsField(definition));
+      }
+    });
+    wallpaper = controlMap.get("wallpaperUrl") || null;
   }
 
   function addRangeLimits() {
@@ -1137,19 +1277,20 @@
     return entry || { visible: true, order: index };
   }
 
-  function renderOrderedEditor(containerId, title, key, items) {
-    const container = document.querySelector(containerId);
-    const heading = document.createElement("h3");
-    heading.textContent = title;
+  function renderOrderedEditor(containerSelector, key, items) {
+    const container = document.querySelector(containerSelector);
+    if (!container) {
+      return;
+    }
     const list = document.createElement("div");
-    list.className = "settings-ordered-list";
+    list.className = "settings-stack-editor";
     list.dataset.orderedKey = key;
     items.forEach((id, index) => {
       const row = document.createElement("div");
-      row.className = "settings-ordered-row";
+      row.className = "settings-stack-row";
       row.dataset.orderedId = id;
       const label = document.createElement("span");
-      label.className = "settings-ordered-row__label";
+      label.className = "settings-stack-row__label";
       label.textContent = labelMap[id] || id;
       const order = document.createElement("input");
       order.type = "number";
@@ -1164,53 +1305,58 @@
       row.append(label, order, visible);
       list.append(row);
     });
-    container.replaceChildren(heading, list);
+    container.replaceChildren(list);
   }
 
   function renderRuleEditor(container, kind, title, emptyLabel) {
     const section = document.createElement("section");
-    section.className = "rule-editor";
+    section.className = "settings-stack-editor";
     section.dataset.ruleEditor = kind;
-    const heading = document.createElement("h3");
+    const heading = document.createElement("p");
+    heading.className = "settings-stack-editor__title";
     heading.textContent = title;
     const list = document.createElement("div");
-    list.className = "rule-list";
+    list.className = "settings-stack-editor__list";
     list.dataset.ruleList = kind;
     const empty = document.createElement("small");
-    empty.className = "rule-empty";
+    empty.className = "settings-stack-editor__empty";
     empty.textContent = emptyLabel;
     list.append(empty);
-    const actions = document.createElement("div");
-    actions.className = "settings-subsection__actions";
     const add = document.createElement("button");
     add.type = "button";
-    add.className = "button button-tonal";
+    add.className = "settings-button settings-button--tonal";
     add.dataset.addRule = kind;
     add.textContent = "添加规则";
-    actions.append(add);
-    section.append(heading, list, actions);
+    add.addEventListener("click", () => {
+      list.querySelector(".settings-stack-editor__empty")?.remove();
+      list.append(createRuleRow(kind));
+      list.lastElementChild?.querySelector("input")?.focus();
+    });
+    section.append(heading, list, add);
     container.append(section);
   }
 
   function createRuleRow(kind, rule = {}) {
     const row = document.createElement("div");
-    row.className = "settings-rule-row";
+    row.className = "settings-stack-row";
     row.dataset.ruleRow = kind;
     const keyword = document.createElement("input");
     keyword.type = "text";
+    keyword.className = "settings-text-input";
     keyword.placeholder = "关键词";
     keyword.value = rule.keyword || "";
     keyword.dataset.ruleKeyword = "true";
     keyword.setAttribute("aria-label", "关键词");
     const remark = document.createElement("input");
     remark.type = "text";
+    remark.className = "settings-text-input";
     remark.placeholder = "备注（可选）";
     remark.value = rule.remark || "";
     remark.dataset.ruleRemark = "true";
     remark.setAttribute("aria-label", "规则备注");
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "button button-tonal";
+    remove.className = "settings-button settings-button--tonal";
     remove.textContent = "删除";
     remove.addEventListener("click", () => row.remove());
     row.append(keyword, remark, remove);
@@ -1224,7 +1370,7 @@
         return;
       }
       const rules = Array.isArray(settings[kind]) ? settings[kind] : [];
-      list.replaceChildren(...(rules.length ? rules.map((rule) => createRuleRow(kind, rule)) : [Object.assign(document.createElement("small"), { className: "rule-empty", textContent: "暂无规则" })]));
+      list.replaceChildren(...(rules.length ? rules.map((rule) => createRuleRow(kind, rule)) : [Object.assign(document.createElement("small"), { className: "settings-stack-editor__empty", textContent: "暂无规则" })]));
     });
   }
 
@@ -1249,51 +1395,65 @@
     });
   }
 
+  function createEditorField(title, control, help = "") {
+    const field = document.createElement("div");
+    field.className = "settings-field";
+    const row = document.createElement("div");
+    row.className = "settings-field__row";
+    const left = document.createElement("div");
+    left.className = "settings-field__left";
+    const label = document.createElement("span");
+    label.className = "settings-field__title";
+    label.textContent = title;
+    left.append(label);
+    if (help) {
+      const desc = document.createElement("p");
+      desc.className = "settings-field__desc";
+      desc.textContent = help;
+      left.append(desc);
+    }
+    const right = document.createElement("div");
+    right.className = "settings-field__right";
+    right.append(control);
+    row.append(left, right);
+    field.append(row);
+    return field;
+  }
+
   function renderShortcutEditor() {
-    const container = document.querySelector("#shortcut-settings");
-    const heading = document.createElement("h3");
-    heading.textContent = "快捷键（可选）";
+    const container = document.querySelector("[data-shortcut-editor]");
+    if (!container) {
+      return;
+    }
     const list = document.createElement("div");
-    list.className = "settings-fields";
+    list.className = "settings-stack-editor";
     [
       ["refreshTopics", "刷新主题列表"],
       ["openSettings", "打开设置"],
       ["toggleListControls", "切换列表控制栏"]
     ].forEach(([key, label]) => {
-      const item = document.createElement("label");
-      item.className = "settings-item";
-      const title = document.createElement("span");
-      title.className = "settings-item__label";
-      title.textContent = label;
       const input = document.createElement("input");
       input.type = "text";
+      input.className = "settings-text-input";
       input.maxLength = config.settingsLimits.shortcut.maxLength;
       input.placeholder = "例如 R 或 Ctrl+Shift+R";
       input.dataset.shortcutKey = key;
       input.setAttribute("aria-label", label);
-      item.append(title, input);
-      list.append(item);
+      list.append(createEditorField(label, input));
     });
-    container.replaceChildren(heading, list);
+    container.replaceChildren(list);
   }
 
   function renderShadowCurveEditor() {
-    const container = document.querySelector("#shadow-curve-settings");
-    const heading = document.createElement("h3");
-    heading.textContent = "自定义阴影曲线";
-    const description = document.createElement("small");
-    description.textContent = "固定 3 个控制点，从近处到远处调整透明度。仅在自定义阴影模式下生效。";
+    const container = document.querySelector("[data-shadow-curve-editor]");
+    if (!container) {
+      return;
+    }
     const list = document.createElement("div");
-    list.className = "settings-fields";
+    list.className = "settings-stack-editor";
     [[0, "近处"], [0.5, "中段"], [1, "远处"]].forEach(([position, label]) => {
-      const item = document.createElement("label");
-      item.className = "settings-item";
-      item.dataset.shadowCurveItem = String(position);
-      const title = document.createElement("span");
-      title.className = "settings-item__label";
-      title.textContent = label;
       const wrapper = document.createElement("span");
-      wrapper.className = "settings-item__control";
+      wrapper.className = "settings-slider";
       const input = document.createElement("input");
       input.type = "range";
       input.min = String(config.settingsLimits.shadowCurveOpacity.min);
@@ -1307,44 +1467,49 @@
       input.addEventListener("input", () => {
         output.textContent = `${Math.round(Number(input.value) * 100)}%`;
       });
-      item.append(title, wrapper);
-      list.append(item);
+      const field = createEditorField(label, wrapper);
+      field.dataset.shadowCurveItem = String(position);
+      list.append(field);
     });
-    container.replaceChildren(heading, description, list);
+    container.replaceChildren(list);
   }
 
   function renderStructuredEditors() {
     renderShadowCurveEditor();
-    renderOrderedEditor("#topic-navigation-settings", "主题导航项目", "topicNavigationConfig", config.topicNavigationItems);
-    renderOrderedEditor("#action-rail-settings", "操作栏项目", "actionRailItemsConfig", config.actionRailItems);
-    renderOrderedEditor("#card-menu-settings", "卡片菜单项目", "topicCardContextMenuConfig", config.topicCardContextMenuActions);
-    const gridContainer = document.querySelector("#grid-columns-settings");
-    const heading = document.createElement("h3");
-    heading.textContent = "固定网格断点列数";
-    const list = document.createElement("div");
-    list.className = "settings-ordered-list";
-    Object.keys(config.gridBreakpoints).forEach((key) => {
-      const row = document.createElement("label");
-      row.className = "settings-ordered-row";
-      row.dataset.gridColumn = key;
-      const text = document.createElement("span");
-      text.className = "settings-ordered-row__label";
-      text.textContent = `${key}（${config.gridBreakpoints[key]}px 起）`;
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = String(config.settingsLimits.gridColumn.min);
-      input.max = String(config.settingsLimits.gridColumn.max);
-      input.step = String(config.settingsLimits.gridColumn.step);
-      input.dataset.gridColumnInput = key;
-      input.setAttribute("aria-label", `${key}断点列数`);
-      row.append(text, input);
-      list.append(row);
-    });
-    gridContainer.replaceChildren(heading, list);
-    const rules = document.querySelector("#rule-editors");
-    renderRuleEditor(rules, "topicTitleRules", "标题规则", "暂无标题规则");
-    renderRuleEditor(rules, "topicAuthorRules", "作者规则", "暂无作者规则");
-    renderRuleEditor(rules, "topicCategoryRules", "分类规则", "暂无分类规则");
+    renderOrderedEditor("[data-topic-navigation-editor]", "topicNavigationConfig", config.topicNavigationItems);
+    renderOrderedEditor("[data-action-rail-editor]", "actionRailItemsConfig", config.actionRailItems);
+    renderOrderedEditor("[data-card-menu-editor]", "topicCardContextMenuConfig", config.topicCardContextMenuActions);
+
+    const gridContainer = document.querySelector("[data-grid-columns-editor]");
+    if (gridContainer) {
+      const list = document.createElement("div");
+      list.className = "settings-stack-editor";
+      Object.keys(config.gridBreakpoints).forEach((key) => {
+        const row = document.createElement("label");
+        row.className = "settings-stack-row";
+        row.dataset.gridColumn = key;
+        const text = document.createElement("span");
+        text.className = "settings-stack-row__label";
+        text.textContent = `${key}（${config.gridBreakpoints[key]}px 起）`;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = String(config.settingsLimits.gridColumn.min);
+        input.max = String(config.settingsLimits.gridColumn.max);
+        input.step = String(config.settingsLimits.gridColumn.step);
+        input.dataset.gridColumnInput = key;
+        input.setAttribute("aria-label", `${key}断点列数`);
+        row.append(text, input);
+        list.append(row);
+      });
+      gridContainer.replaceChildren(list);
+    }
+
+    const rules = document.querySelector("[data-rule-editors]");
+    if (rules) {
+      renderRuleEditor(rules, "topicTitleRules", "标题规则", "暂无标题规则");
+      renderRuleEditor(rules, "topicAuthorRules", "作者规则", "暂无作者规则");
+      renderRuleEditor(rules, "topicCategoryRules", "分类规则", "暂无分类规则");
+    }
     renderShortcutEditor();
   }
 
@@ -1398,6 +1563,18 @@
       if (input) {
         input.value = value;
       }
+    });
+    document.querySelectorAll(".settings-segmented").forEach((group) => {
+      const input = group.querySelector("input[data-setting-key]");
+      if (!input) {
+        return;
+      }
+      group.querySelectorAll(".settings-segmented__item").forEach((button) => {
+        const active = button.dataset.segmentValue === input.value;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-checked", String(active));
+        button.tabIndex = active ? 0 : -1;
+      });
     });
     updateDependencies();
   }
@@ -1456,28 +1633,6 @@
     });
   }
 
-  function filterSettings() {
-    const query = settingsSearch.value.trim().toLocaleLowerCase();
-    let hasVisibleGroup = false;
-    document.querySelectorAll("[data-settings-group]").forEach((group) => {
-      const groupText = `${group.dataset.settingsTitle || ""} ${group.textContent}`.toLocaleLowerCase();
-      let visibleItems = 0;
-      group.querySelectorAll("[data-settings-item]").forEach((item) => {
-        const searchable = `${item.dataset.settingsKey || ""} ${item.textContent}`.toLocaleLowerCase();
-        const visible = !query || searchable.includes(query) || groupText.includes(query);
-        item.hidden = !visible;
-        if (visible) {
-          visibleItems += 1;
-        }
-      });
-      const visible = !query || groupText.includes(query) || visibleItems > 0;
-      group.hidden = !visible;
-      hasVisibleGroup ||= visible;
-    });
-    settingsSearchClear.hidden = !query;
-    settingsSearchEmpty.hidden = hasVisibleGroup;
-  }
-
   function downloadJson(filename, value) {
     const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1534,25 +1689,255 @@
     setStatusMessage(maintenanceStatus, "筛选规则已导入并保存。", "success");
   }
 
+  function iconMask(svg) {
+    return `url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round">${svg}</svg>')`;
+  }
+
+  const railIcons = {
+    settings: iconMask('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'),
+    pages: iconMask('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M9 9v12"/>'),
+    components: iconMask('<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>'),
+    appearance: iconMask('<path d="M12 3a9 9 0 1 0 0 18c1.7 0 2.5-1.2 2.5-2.4 0-1.1-.8-2.1-2-2.1h-1.2a2 2 0 0 1 0-4H15a4 4 0 0 0 4-4c0-3.4-3.1-5.5-7-5.5Z"/><circle cx="8.5" cy="10.5" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/>'),
+    keyboard: iconMask('<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/>'),
+    advanced: iconMask('<path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="17" r="2"/>'),
+    about: iconMask('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 8h.01"/>')
+  };
+
+  const navigationState = { category: "", subcategory: "" };
+
+  function applyIcon(element, icon) {
+    const value = railIcons[icon] || railIcons.settings;
+    element.style.maskImage = value;
+    element.style.webkitMaskImage = value;
+  }
+
+  function renderRail() {
+    settingsRailList.replaceChildren(...config.settingsCategories.map((category) => {
+      const item = document.createElement("li");
+      item.className = "settings-rail__group";
+      if (category.sectionStart) {
+        item.classList.add("is-section-start");
+      }
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "settings-rail__item";
+      button.dataset.category = category.id;
+      button.addEventListener("click", () => showCategory(category.id));
+      const icon = document.createElement("span");
+      icon.className = "settings-rail__icon";
+      icon.setAttribute("aria-hidden", "true");
+      applyIcon(icon, category.icon);
+      const label = document.createElement("span");
+      label.className = "settings-rail__label";
+      label.textContent = category.title;
+      button.append(icon, label);
+      item.append(button);
+      return item;
+    }));
+  }
+
+  function renderBreadcrumb(category, subcategory) {
+    const parts = [];
+    const root = document.createElement("span");
+    root.textContent = "设置";
+    parts.push(root);
+    [category.title, subcategory.title].forEach((title) => {
+      const separator = document.createElement("span");
+      separator.setAttribute("aria-hidden", "true");
+      separator.textContent = "›";
+      const strong = document.createElement("strong");
+      strong.textContent = title;
+      parts.push(separator, strong);
+    });
+    settingsBreadcrumb.replaceChildren(...parts);
+  }
+
+  function renderSectionHeading(category, subcategory) {
+    const icon = document.createElement("span");
+    icon.className = "settings-section-heading__icon";
+    icon.setAttribute("aria-hidden", "true");
+    applyIcon(icon, category.icon);
+    const content = document.createElement("div");
+    const title = document.createElement("h2");
+    title.textContent = subcategory.title;
+    content.append(title);
+    if (subcategory.description) {
+      const description = document.createElement("p");
+      description.textContent = subcategory.description;
+      content.append(description);
+    }
+    settingsSectionHeading.replaceChildren(icon, content);
+  }
+
+  function showCategory(categoryId, subcategoryId = "") {
+    const category = config.settingsCategories.find((item) => item.id === categoryId) || config.settingsCategories[0];
+    const subcategory = category.subcategories.find((item) => item.id === subcategoryId) || category.subcategories[0];
+    navigationState.category = category.id;
+    navigationState.subcategory = subcategory.id;
+
+    settingsRailList.querySelectorAll(".settings-rail__item").forEach((button) => {
+      const active = button.dataset.category === category.id;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-current", active ? "page" : "false");
+    });
+
+    settingsSubnav.replaceChildren(...category.subcategories.map((item) => {
+      const active = item.id === subcategory.id;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `settings-subnav__item${active ? " is-active" : ""}`;
+      button.setAttribute("aria-current", active ? "page" : "false");
+      button.textContent = item.title;
+      button.addEventListener("click", () => showCategory(category.id, item.id));
+      return button;
+    }));
+
+    renderBreadcrumb(category, subcategory);
+    renderSectionHeading(category, subcategory);
+    settingsPageBody.querySelectorAll("[data-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== category.id || panel.dataset.subpanel !== subcategory.id;
+    });
+    settingsScroll.scrollTop = 0;
+    updateDependencies();
+  }
+
+  function searchEntries() {
+    return [...settingsPageBody.querySelectorAll(".settings-field")].map((field) => {
+      const panel = field.closest("[data-panel]");
+      const category = config.settingsCategories.find((item) => item.id === panel?.dataset.panel);
+      const subcategory = category?.subcategories.find((item) => item.id === panel?.dataset.subpanel);
+      return {
+        field,
+        title: field.querySelector(".settings-field__title")?.textContent || "",
+        description: field.querySelector(".settings-field__desc")?.textContent || "",
+        location: [category?.title, subcategory?.title].filter(Boolean).join(" › ")
+      };
+    });
+  }
+
+  function closeSearchResults() {
+    settingsSearchResults.replaceChildren();
+    settingsSearchResults.hidden = true;
+    settingsSearchInput.setAttribute("aria-expanded", "false");
+  }
+
+  function revealSearchEntry(entry) {
+    const panel = entry.field.closest("[data-panel]");
+    showCategory(panel.dataset.panel, panel.dataset.subpanel);
+    settingsSearchInput.value = "";
+    closeSearchResults();
+    entry.field.scrollIntoView({ block: "center" });
+    entry.field.classList.add("is-search-target");
+    window.setTimeout(() => entry.field.classList.remove("is-search-target"), config.settingsSearchHighlightMs);
+  }
+
+  function renderSearchResults() {
+    const query = settingsSearchInput.value.trim().toLocaleLowerCase();
+    if (!query) {
+      closeSearchResults();
+      return;
+    }
+    const matches = searchEntries()
+      .filter((entry) => `${entry.title} ${entry.description} ${entry.location}`.toLocaleLowerCase().includes(query))
+      .slice(0, config.settingsSearchResultLimit);
+    if (matches.length) {
+      settingsSearchResults.replaceChildren(...matches.map((entry) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "settings-search-results__item";
+        button.setAttribute("role", "option");
+        const title = document.createElement("strong");
+        title.textContent = entry.title;
+        const location = document.createElement("span");
+        location.textContent = entry.location;
+        button.append(title, location);
+        button.addEventListener("click", () => revealSearchEntry(entry));
+        return button;
+      }));
+    } else {
+      const empty = document.createElement("p");
+      empty.className = "settings-search-results__empty";
+      empty.textContent = "没有匹配的设置。";
+      settingsSearchResults.replaceChildren(empty);
+    }
+    settingsSearchResults.hidden = false;
+    settingsSearchInput.setAttribute("aria-expanded", "true");
+  }
+
+  let commitTimer = 0;
+
+  function scheduleCommit() {
+    if (commitTimer) {
+      clearTimeout(commitTimer);
+    }
+    commitTimer = window.setTimeout(() => {
+      commitTimer = 0;
+      commitSettings();
+    }, config.settingsCommitDelayMs);
+  }
+
+  async function commitSettings() {
+    if (commitTimer) {
+      clearTimeout(commitTimer);
+      commitTimer = 0;
+    }
+    try {
+      await save(readForm());
+    } catch (error) {
+      const detail = error instanceof Error ? ` ${error.message}` : "";
+      setStatusMessage(status, `设置未生效。${detail}`, "error");
+      console.error("[betterLD] settings commit failed", error);
+    }
+  }
+
   renderFieldDefinitions();
   addRangeLimits();
   renderStructuredEditors();
-  document.querySelectorAll("[data-add-rule]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const kind = button.dataset.addRule;
-      const list = document.querySelector(`[data-rule-list="${kind}"]`);
-      list.querySelector(".rule-empty")?.remove();
-      list.append(createRuleRow(kind));
-      list.lastElementChild?.querySelector("input")?.focus();
-    });
+  renderRail();
+  showCategory(config.settingsCategories[0].id);
+
+  settingsPageBody.addEventListener("change", (event) => {
+    if (!(event.target instanceof HTMLElement) || !event.target.matches("input, textarea, select")) {
+      return;
+    }
+    updateDependencies();
+    commitSettings();
   });
-  settingsSearch.addEventListener("input", filterSettings);
-  settingsSearchClear.addEventListener("click", () => {
-    settingsSearch.value = "";
-    filterSettings();
-    settingsSearch.focus();
+
+  settingsPageBody.addEventListener("input", (event) => {
+    if (!(event.target instanceof HTMLElement) || !event.target.matches('input[type="range"]')) {
+      return;
+    }
+    scheduleCommit();
   });
-  document.querySelectorAll("[data-setting-key]").forEach((input) => input.addEventListener("change", updateDependencies));
+
+  settingsSearchInput.addEventListener("input", renderSearchResults);
+  settingsSearchInput.addEventListener("focus", renderSearchResults);
+  settingsSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      settingsSearchInput.value = "";
+      closeSearchResults();
+      return;
+    }
+    if (event.key === "Enter") {
+      settingsSearchResults.querySelector(".settings-search-results__item")?.click();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    const insideSearch = event.composedPath().some((node) => node instanceof HTMLElement && (node.id === "settings-search" || node.id === "settings-search-results"));
+    if (!insideSearch) {
+      closeSearchResults();
+    }
+  });
+
+  settingsClose.addEventListener("click", () => {
+    if (isEmbedded) {
+      settingsClose.dispatchEvent(new CustomEvent("betterld-settings-close", { bubbles: true, composed: true }));
+      return;
+    }
+    window.close();
+  });
 
   document.querySelector("#export-settings").addEventListener("click", () => {
     const size = downloadJson(`betterld-settings-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "-")}.json`, {
@@ -1597,12 +1982,6 @@
 
   wallpaperSources.replaceChildren(...sourceOptions.map(createSourceOption));
   renderWallpaperCatalog();
-  setRangeAttributes(maskOpacity, config.settingsLimits.maskOpacity);
-  setRangeAttributes(blur, config.settingsLimits.blurPx);
-  setRangeAttributes(cardOpacity, config.settingsLimits.cardOpacity);
-  maskOpacity.addEventListener("input", updateOutputs);
-  blur.addEventListener("input", updateOutputs);
-  cardOpacity.addEventListener("input", updateOutputs);
   wallpaper.addEventListener("input", scheduleRemoteProbe);
   wallpaper.addEventListener("change", scheduleRemoteProbe);
   chooseWallpaperFile.addEventListener("click", () => wallpaperFile.click());
@@ -1662,31 +2041,19 @@
     }
   });
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    setStatusMessage(status, "");
-    if (selectedMode() !== modes.url) {
-      setStatusMessage(wallpaperStatus, "");
-    }
-    try {
-      await save(readForm());
-    } catch (error) {
-      const detail = error instanceof Error ? ` ${error.message}` : "";
-      setStatusMessage(status, `设置保存失败，已保留当前输入。${detail}`, "error");
-      console.error("[betterLD] settings save failed", error);
-    }
-  });
-
   reset.addEventListener("click", async () => {
+    if (!globalThis.confirm("恢复默认会立即覆盖当前全部设置，是否继续？")) {
+      return;
+    }
     state.removeLocalWallpaper = false;
-    populate(config.settingsDefaults);
-    setStatusMessage(status, "");
     setStatusMessage(wallpaperStatus, "");
     try {
       await save(normalizeSettings(config.settingsDefaults));
+      populate(config.settingsDefaults);
+      setStatusMessage(status, "✓ 已恢复默认设置。", "success");
     } catch (error) {
       const detail = error instanceof Error ? ` ${error.message}` : "";
-      setStatusMessage(status, `默认设置保存失败，已保留当前输入。${detail}`, "error");
+      setStatusMessage(status, `默认设置保存失败。${detail}`, "error");
       console.error("[betterLD] default settings save failed", error);
     }
   });

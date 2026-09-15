@@ -791,19 +791,10 @@
   }
 
   function scopedOptionsStyles(cssText) {
-    return `${cssText
+    return cssText
       .replace(/:root\\b/g, ":host")
       .replace(/\\bhtml\\b/g, ":host")
-      .replace(/\\bbody\\b/g, ":host")}
-
-:host {
-  display: block;
-  min-width: 0;
-  min-height: 100%;
-  height: 100%;
-  overflow: auto;
-}
-`;
+      .replace(/\\bbody\\b/g, ":host");
   }
 
   function renderSettingsLoadState(shadowRoot, message, statusType = "") {
@@ -889,25 +880,16 @@
     const dialog = document.createElement("dialog");
     dialog.className = "betterld-settings-dialog";
     dialog.dataset.betterldSettingsDialog = "true";
-    const header = createElement("div", "betterld-settings-dialog__header");
-    const title = createElement("h2", "betterld-settings-dialog__title", "betterLD 设置");
-    title.id = "betterld-settings-dialog-title";
-    const close = createElement("button", "betterld-settings-dialog__close", "×");
-    close.type = "button";
-    close.setAttribute("aria-label", "关闭 betterLD 设置");
-    close.title = "关闭设置";
-    close.addEventListener("click", closeSettingsDialog);
-    header.append(title, close);
-
     const surface = document.createElement("div");
     surface.className = "betterld-settings-dialog__surface";
     surface.dataset.betterldEmbedded = "true";
     surface.dataset.betterldSettingsSurface = "true";
     const shadowRoot = surface.attachShadow({ mode: "open" });
     renderSettingsLoadState(shadowRoot, "正在加载 betterLD 设置…");
+    shadowRoot.addEventListener("betterld-settings-close", closeSettingsDialog);
 
-    dialog.setAttribute("aria-labelledby", title.id);
-    dialog.append(header, surface);
+    dialog.setAttribute("aria-label", "betterLD 设置");
+    dialog.append(surface);
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) {
         closeSettingsDialog();
@@ -926,10 +908,11 @@
     });
     document.body.append(dialog);
 
-    const panel = { dialog, close, surface, shadowRoot, ready: null };
+    const panel = { dialog, surface, shadowRoot, ready: null };
     state.settingsDialog = panel;
     panel.ready = loadEmbeddedSettings(panel);
     panel.ready.catch((error) => {
+      panel.failed = true;
       renderSettingsLoadState(panel.shadowRoot, "设置界面加载失败，请重试。", "error");
       console.error("[betterLD] embedded settings could not load", error);
     });
@@ -939,6 +922,16 @@
   function closeSettingsDialog() {
     const panel = state.settingsDialog;
     if (!panel) {
+      return;
+    }
+    if (panel.failed) {
+      panel.dialog.remove();
+      state.settingsDialog = null;
+      const trigger = state.settingsDialogTrigger;
+      state.settingsDialogTrigger = null;
+      if (trigger?.isConnected) {
+        trigger.focus();
+      }
       return;
     }
     if (panel.dialog.open && typeof panel.dialog.close === "function") {
@@ -962,8 +955,9 @@
         showActionStatus("betterLD 设置面板不可用");
         return;
       }
+      panel.surface.dataset.betterldTheme = document.documentElement.dataset.betterldMode || "";
       if (panel.dialog.open) {
-        panel.close.focus();
+        panel.shadowRoot.querySelector("#settings-close")?.focus();
         return;
       }
       if (typeof panel.dialog.showModal === "function") {
@@ -971,7 +965,7 @@
       } else {
         panel.dialog.setAttribute("open", "");
       }
-      window.requestAnimationFrame(() => panel.close.focus());
+      window.requestAnimationFrame(() => panel.shadowRoot.querySelector("#settings-close")?.focus());
       return;
     }
 
