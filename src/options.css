@@ -1198,6 +1198,11 @@ body {
   font-size: var(--settings-font-size-control);
 }
 
+.settings-stack-editor__help {
+  color: var(--settings-text-3);
+  font-size: var(--settings-font-size-control);
+}
+
 .settings-stack-row__label {
   flex: 1 1 auto;
   min-width: 0;

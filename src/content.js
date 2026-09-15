@@ -1230,6 +1230,7 @@
     card.dataset.betterldCardStyle = isReadingCard ? "reading" : "cards";
     card.dataset.filterTitle = topic.title;
     card.dataset.filterCategory = category.name;
+    card.dataset.filterTags = topicTags(item, category.name).join(" ");
     card.dataset.filterAuthor = "";
     card.dataset.authorState = topic.id ? "loading" : "failed";
     card.dataset.excerptState = topic.id ? "loading" : "failed";
@@ -2076,35 +2077,76 @@
     document.querySelectorAll('[data-betterld-grid="true"]').forEach(syncFilterEmptyState);
   }
 
-  function filterRuleMatches(value, rules) {
-    const text = cleanText(value).toLocaleLowerCase();
-    return rules.some((rule) => text.includes(cleanText(rule.keyword).toLocaleLowerCase()));
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function filterRuleMatches(value, rules, matchMode) {
+    const text = cleanText(value);
+    if (!text || !rules.length) {
+      return false;
+    }
+    const lower = text.toLocaleLowerCase();
+    return rules.some((rule) => {
+      const keyword = cleanText(rule.keyword);
+      if (!keyword) {
+        return false;
+      }
+      if (matchMode === "regex") {
+        try {
+          return new RegExp(keyword, "iu").test(text);
+        } catch (error) {
+          console.warn("[betterLD] 过滤规则不是合法正则，已忽略", keyword, error);
+          return false;
+        }
+      }
+      if (matchMode === "whole") {
+        return new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(keyword)}(?![\\p{L}\\p{N}])`, "iu").test(text);
+      }
+      return lower.includes(keyword.toLocaleLowerCase());
+    });
   }
 
   function topicFilterSettings() {
     return {
       enabled: state.currentSettings.topicFilterEnabled === true,
       mode: state.currentSettings.topicFilterMode,
+      matchMode: state.currentSettings.topicFilterMatchMode,
       titleRules: state.currentSettings.topicTitleRules || [],
       authorRules: state.currentSettings.topicAuthorRules || [],
-      categoryRules: state.currentSettings.topicCategoryRules || []
+      categoryRules: state.currentSettings.topicCategoryRules || [],
+      tagRules: state.currentSettings.topicTagRules || [],
+      whitelistRules: state.currentSettings.topicWhitelistRules || []
     };
+  }
+
+  function filterMatchesWhitelist(settings, title, category, tags) {
+    return filterRuleMatches(title, settings.whitelistRules, settings.matchMode)
+      || filterRuleMatches(category, settings.whitelistRules, settings.matchMode)
+      || filterRuleMatches(tags, settings.whitelistRules, settings.matchMode);
   }
 
   function itemPassesDomFilter(item) {
     const settings = topicFilterSettings();
-    if (!settings.enabled) {
+    if (!settings.enabled || settings.mode === "dim") {
       return true;
     }
-    const titleMatch = filterRuleMatches(topicInfo(item)?.title, settings.titleRules);
-    const categoryMatch = filterRuleMatches(categoryInfo(item).name, settings.categoryRules);
-    const hasDomRules = settings.titleRules.length > 0 || settings.categoryRules.length > 0;
+    const title = topicInfo(item)?.title;
+    const category = categoryInfo(item).name;
+    const tags = topicTags(item, category).join(" ");
+    if (filterMatchesWhitelist(settings, title, category, tags)) {
+      return true;
+    }
+    const titleMatch = filterRuleMatches(title, settings.titleRules, settings.matchMode);
+    const categoryMatch = filterRuleMatches(category, settings.categoryRules, settings.matchMode);
+    const tagMatch = filterRuleMatches(tags, settings.tagRules, settings.matchMode);
+    const hasDomRules = settings.titleRules.length > 0 || settings.categoryRules.length > 0 || settings.tagRules.length > 0;
     if (!hasDomRules) {
       return true;
     }
     return settings.mode === "include"
-      ? titleMatch || categoryMatch || settings.authorRules.length > 0
-      : !titleMatch && !categoryMatch;
+      ? titleMatch || categoryMatch || tagMatch || settings.authorRules.length > 0
+      : !titleMatch && !categoryMatch && !tagMatch;
   }
 
   function applyCardFilter(card) {
@@ -2114,17 +2156,35 @@
       card.dataset.filterState = "visible";
       return true;
     }
-    const titleMatch = filterRuleMatches(card.dataset.filterTitle, settings.titleRules);
-    const categoryMatch = filterRuleMatches(card.dataset.filterCategory, settings.categoryRules);
+    const whitelisted = filterMatchesWhitelist(settings, card.dataset.filterTitle, card.dataset.filterCategory, card.dataset.filterTags);
+    const titleMatch = filterRuleMatches(card.dataset.filterTitle, settings.titleRules, settings.matchMode);
+    const categoryMatch = filterRuleMatches(card.dataset.filterCategory, settings.categoryRules, settings.matchMode);
+    const tagMatch = filterRuleMatches(card.dataset.filterTags, settings.tagRules, settings.matchMode);
     const authorKnown = card.dataset.authorState !== "loading";
-    const authorMatch = authorKnown && filterRuleMatches(card.dataset.filterAuthor, settings.authorRules);
-    const domMatch = titleMatch || categoryMatch;
+    const authorMatch = authorKnown && filterRuleMatches(card.dataset.filterAuthor, settings.authorRules, settings.matchMode);
+    const domMatch = titleMatch || categoryMatch || tagMatch;
     const hasAuthorRules = settings.authorRules.length > 0;
     const match = domMatch || authorMatch;
     const pendingAuthor = hasAuthorRules && !authorKnown && !domMatch;
-    const visible = settings.mode === "include" ? match : !match && !pendingAuthor;
+    const dimmed = settings.mode === "dim" && match;
+    const isIncludeMode = settings.mode === "include";
+    let visible;
+    let filterState;
+    if (whitelisted) {
+      visible = true;
+      filterState = "visible";
+    } else if (isIncludeMode) {
+      visible = match;
+      filterState = visible ? "visible" : "hidden";
+    } else if (settings.mode === "dim") {
+      visible = true;
+      filterState = pendingAuthor ? "pending" : (dimmed ? "dimmed" : "visible");
+    } else {
+      visible = !match && !pendingAuthor;
+      filterState = pendingAuthor ? "pending" : (visible ? "visible" : "hidden");
+    }
     card.hidden = !visible;
-    card.dataset.filterState = pendingAuthor ? "pending" : (visible ? "visible" : "hidden");
+    card.dataset.filterState = filterState;
     if (visible) {
       observeExcerpt(card);
     }
