@@ -1359,7 +1359,10 @@
     remove.type = "button";
     remove.className = "settings-button settings-button--tonal";
     remove.textContent = "删除";
-    remove.addEventListener("click", () => row.remove());
+    remove.addEventListener("click", () => {
+      row.remove();
+      commitSettings();
+    });
     row.append(keyword, remark, remove);
     return row;
   }
@@ -1902,6 +1905,10 @@
     if (!(event.target instanceof HTMLElement) || !event.target.matches("input, textarea, select")) {
       return;
     }
+    if (event.target.type === "file") {
+      // 文件控件在异步准备完成后由自己的处理器提交，否则会提交准备前的旧状态
+      return;
+    }
     updateDependencies();
     commitSettings();
   });
@@ -1957,6 +1964,9 @@
     if (!file) {
       return;
     }
+    if (!globalThis.confirm("导入会用文件内容覆盖当前全部设置，是否继续？")) {
+      return;
+    }
     try {
       await importSettingsFile(file);
     } catch (error) {
@@ -1972,6 +1982,9 @@
     const file = rulesImportFile.files?.[0];
     rulesImportFile.value = "";
     if (!file) {
+      return;
+    }
+    if (!globalThis.confirm("导入会用文件内容覆盖三组筛选规则，是否继续？")) {
       return;
     }
     try {
@@ -1997,7 +2010,7 @@
       state.localWallpaper = await prepareLocalWallpaper(file);
       state.removeLocalWallpaper = false;
       setWallpaperMode(modes.local);
-      setStatusMessage(wallpaperStatus, "图片已准备，保存设置后生效", "success");
+      await commitSettings();
     } catch (error) {
       setStatusMessage(wallpaperStatus, error instanceof Error ? error.message : "本地图片处理失败", "error");
       console.error("[betterLD] local wallpaper failed", error);
@@ -2014,10 +2027,13 @@
     } else {
       updateLocalPreview();
     }
-    setStatusMessage(wallpaperStatus, "本地图片将在保存后移除");
+    commitSettings();
   });
 
   clearSearchHistory.addEventListener("click", async () => {
+    if (!globalThis.confirm("清空搜索历史会删除全部已保存的搜索词，是否继续？")) {
+      return;
+    }
     try {
       await save(normalizeSettings({ ...state.settings, searchHistory: [] }));
       setStatusMessage(maintenanceStatus, "搜索历史已清空。", "success");
