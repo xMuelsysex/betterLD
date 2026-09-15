@@ -417,6 +417,7 @@
     option.addEventListener("click", () => {
       state.selectedWallpaperId = item.id;
       setWallpaperMode(item.mode);
+      commitSettings();
     });
 
     const image = document.createElement("img");
