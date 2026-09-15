@@ -14,6 +14,7 @@
   const contextMenuActions = new Set(config.topicCardContextMenuActions || []);
   const navigationItems = new Set(config.topicNavigationItems || []);
   const actionRailItems = new Set(config.actionRailItems || []);
+  const ruleGroupKeys = (config.topicRuleGroups || []).map((group) => group.key);
   const allowedCustomCssProperties = new Set([
     "accent-color",
     "background",
@@ -394,9 +395,9 @@
     result.topicNavigationConfig = normalizeNavigationConfig(source.topicNavigationConfig);
     result.actionRailItemsConfig = normalizeOrderedConfig(source.actionRailItemsConfig, actionRailItems, defaults.actionRailItemsConfig);
     result.topicCardContextMenuConfig = normalizeOrderedConfig(source.topicCardContextMenuConfig, contextMenuActions, defaults.topicCardContextMenuConfig);
-    result.topicTitleRules = normalizeRules(source.topicTitleRules);
-    result.topicAuthorRules = normalizeRules(source.topicAuthorRules);
-    result.topicCategoryRules = normalizeRules(source.topicCategoryRules);
+    ruleGroupKeys.forEach((key) => {
+      result[key] = normalizeRules(source[key]);
+    });
     result.shortcuts = normalizeShortcuts(source.shortcuts);
     result.searchPageWallpaperId = text(source.searchPageWallpaperId, defaults.searchPageWallpaperId, 120);
     result.searchPageWallpaperUrl = safeHttpsUrl(source.searchPageWallpaperUrl);
@@ -467,12 +468,14 @@
     if (settings.customCssEnabled && !css.valid) {
       errors.push(...css.errors);
     }
+    errors.push(...validateRuleArrays(settings));
     return { valid: errors.length === 0, settings, errors };
   }
 
   function validateRuleArrays(value) {
     const errors = [];
-    ["topicTitleRules", "topicAuthorRules", "topicCategoryRules"].forEach((key) => {
+    const matchMode = value.topicFilterMatchMode ?? defaults.topicFilterMatchMode;
+    ruleGroupKeys.forEach((key) => {
       if (!Object.prototype.hasOwnProperty.call(value, key)) {
         return;
       }
@@ -483,6 +486,14 @@
       value[key].forEach((item, index) => {
         if (!isPlainObject(item) || !text(item.keyword)) {
           errors.push(`${key}[${index}] 的关键词不能为空`);
+          return;
+        }
+        if (matchMode === "regex") {
+          try {
+            new RegExp(text(item.keyword));
+          } catch (error) {
+            errors.push(`${key}[${index}] 不是合法的正则表达式`);
+          }
         }
       });
     });
@@ -508,7 +519,7 @@
     if (!validation.valid) {
       rejectedKeys.push("customCss");
     }
-    ["topicTitleRules", "topicAuthorRules", "topicCategoryRules"].forEach((key) => {
+    ruleGroupKeys.forEach((key) => {
       if (ruleErrors.some((error) => error.startsWith(`${key} `) || error.startsWith(`${key}[`))) {
         rejectedKeys.push(key);
       }

@@ -1,5 +1,14 @@
 # betterLD 项目流水
 
+## 2026-09-15：主题过滤升级（标签轴 / 匹配模式 / 白名单 / 淡化）
+
+- 先调研 GitHub 与 GreasyFork 上面向 linux.do 的插件与脚本（共 17 个过滤类项目）：社区既定基准是「标题 / 作者 / 分类 / **标签**」四轴，其中 9 个支持标签轴；另有整词与正则匹配、独立白名单、淡化中间态、追加式规则导入。betterLD 原先只有前三轴 + 纯子串匹配 + 隐藏/只显示两种行为。
+- 本轮把过滤补齐到基准：新增 `topicTagRules` 与 `topicWhitelistRules`（白名单优先级最高，命中即不过滤）、`topicFilterMatchMode`（contains / whole / regex）、`topicFilterMode` 增加 `dim`；规则导入由全量覆盖改为追加 + 关键词去重；非法正则在保存时被拒绝并给出字段级错误。
+- 规则组 key 原来散落在 settings.js / options.js 六处，现收敛到 `betterld.config.js` 的 `topicRuleGroups`，三端从同一处派生；`CONTEXT.md` 新增 Topic Filter 术语与不变量。
+- Orca 真实 `/new`（30 张卡）逐项复核：标签轴隐藏 16/30；`whole` 下的「智能」命中 0 张而 `contains` 下命中 16 张（语义差异对照）；`regex ^人工` 命中 10 张；白名单使隐藏数由 16 降为 15；`dim` 下 16 张淡化、0 张隐藏且计算 `opacity: 0.4`（截图灰度统计也确认绘制变暗）；`include` 只留 16 张。设置界面渲染 5 组规则编辑器与新控件，非法正则 `C++((` 被拒、合法 `^【` 通过，规则导入在 confirm 两个分支行为正确且重复关键词未被二次追加。
+- 首轮矩阵暴露 `include` 模式被改动条件写坏（30 张全可见），已改为白名单 / include / dim / hide 四分支显式状态机并复测。`npm run check`、`git diff --check` 通过。详见 `.pi/tasks/2026-09-15-topic-filter-github-integration/task.md`。
+- 明确不集成：自动浏览 / 自动点赞 / 刷已读（会改服务端数据与其他用户可见状态，与 betterLD 不改变服务端数据的既有不变量冲突）与调用 Discourse API 的服务端 ignore（写到账号上，待主人明确要求）。
+
 ## 2026-09-15：刷新提示条铺满内容区
 
 - 外层 `.show-more.has-topics` 本来就已是全内容宽，但内层可点击的 `a.alert.alert-info.clickable` 没有宽度约束，收缩成居中窄胶囊（`x=607 w=199`）；给内层补 `flex: 1 1 auto; width: 100%`。

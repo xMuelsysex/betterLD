@@ -199,7 +199,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     navigationOpenMode: Object.freeze(["currentTab", "newTab"]),
     searchOpenMode: Object.freeze(["currentTab", "newTab"]),
     notificationOpenMode: Object.freeze(["page", "newTab"]),
-    topicFilterMode: Object.freeze(["hide", "include"]),
+    topicFilterMode: Object.freeze(["hide", "dim", "include"]),
+    topicFilterMatchMode: Object.freeze(["contains", "whole", "regex"]),
     searchMode: Object.freeze(["native", "cards"]),
     searchResultsPaginationMode: Object.freeze(["scroll", "pagination"]),
     searchPageWallpaperMode: Object.freeze(["inherit", "builtin", "url"]),
@@ -207,6 +208,14 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     language: Object.freeze(["zh-CN", "en-US"]),
     wallpaperRemoteCacheDays: Object.freeze([0, 1, 7, 30])
   }),
+  // 主题过滤的规则组顺序即设置窗口里的展示顺序；白名单最后且优先级最高
+  topicRuleGroups: Object.freeze([
+    { key: "topicTitleRules", title: "标题规则", empty: "暂无标题规则", help: "匹配主题标题。" },
+    { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配主题所属分类名称。" },
+    { key: "topicTagRules", title: "标签规则", empty: "暂无标签规则", help: "匹配主题标签；分类页面行内可能不渲染标签。" },
+    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "匹配主题创建者，名字来自 /t/{id}.json。" },
+    { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "命中白名单的主题永远不参与过滤。" }
+  ]),
   settingsCategories: Object.freeze([
     {
       id: "general",
@@ -279,7 +288,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "filter",
           title: "筛选",
           description: "只影响 betterLD 生成的卡片，不改变 LinuxDo 原始查询与分页。",
-          keys: ["topicFilterEnabled", "topicFilterMode"]
+          keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode"]
         },
         {
           id: "search",
@@ -517,9 +526,12 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     drawerCloseOnEscape: true,
     topicFilterEnabled: false,
     topicFilterMode: "hide",
+    topicFilterMatchMode: "contains",
     topicTitleRules: [],
     topicAuthorRules: [],
     topicCategoryRules: [],
+    topicTagRules: [],
+    topicWhitelistRules: [],
     searchMode: "native",
     searchHistoryEnabled: false,
     searchRecommendationEnabled: false,

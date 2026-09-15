@@ -17,6 +17,7 @@
     : pageDocument;
   const config = globalThis.BETTERLD_CONFIG;
   const settingsApi = globalThis.BETTERLD_SETTINGS;
+  const ruleGroupKeys = (config?.topicRuleGroups || []).map((group) => group.key);
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
   const normalizeSettings = settingsApi?.normalizeSettings;
@@ -766,7 +767,8 @@
     navigationOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     searchOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
-    topicFilterMode: { hide: "隐藏命中项", include: "只显示命中项" },
+    topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", include: "只显示命中项" },
+    topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
     searchMode: { native: "原生结果", cards: "主题卡片" },
     searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
     searchPageWallpaperMode: { inherit: "继承全局", builtin: "内置图片", url: "远程图片" },
@@ -794,7 +796,8 @@
     navigationOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     searchOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
-    topicFilterMode: { hide: "Hide matches", include: "Show matches only" },
+    topicFilterMode: { hide: "Hide matches", dim: "Dim matches", include: "Show matches only" },
+    topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
     searchMode: { native: "Native results", cards: "Topic cards" },
     searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
     searchPageWallpaperMode: { inherit: "Inherit global", builtin: "Built-in image", url: "Remote image" },
@@ -805,7 +808,7 @@
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Theme color", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
-    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
+    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
     topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
   };
 
@@ -1038,7 +1041,8 @@
     { key: "enableUndoRefresh", type: "toggle", label: "启用刷新撤销", help: "需要刷新前状态恢复链路支持。" },
 
     { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "只影响 betterLD 生成的卡片。" },
-    { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "标题、作者和分类规则统一使用此模式。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "隐藏、淡化或只显示命中项；白名单命中项永不受影响。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterMatchMode", type: "select", label: "关键词匹配方式", help: "整词匹配避免 AI、Go 这类短词误伤；正则模式下非法表达式会在保存时被拒绝。", dependsOn: ["topicFilterEnabled", true] },
 
     { key: "searchMode", type: "select", label: "搜索结果模式", help: "当前 /search 仍以原生结果为默认。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
@@ -1309,7 +1313,7 @@
     container.replaceChildren(list);
   }
 
-  function renderRuleEditor(container, kind, title, emptyLabel) {
+  function renderRuleEditor(container, kind, title, emptyLabel, help) {
     const section = document.createElement("section");
     section.className = "settings-stack-editor";
     section.dataset.ruleEditor = kind;
@@ -1333,7 +1337,14 @@
       list.append(createRuleRow(kind));
       list.lastElementChild?.querySelector("input")?.focus();
     });
-    section.append(heading, list, add);
+    section.append(heading);
+    if (help) {
+      const note = document.createElement("small");
+      note.className = "settings-stack-editor__help";
+      note.textContent = help;
+      section.append(note);
+    }
+    section.append(list, add);
     container.append(section);
   }
 
@@ -1368,7 +1379,7 @@
   }
 
   function writeRuleEditors(settings) {
-    ["topicTitleRules", "topicAuthorRules", "topicCategoryRules"].forEach((kind) => {
+    ruleGroupKeys.forEach((kind) => {
       const list = document.querySelector(`[data-rule-list="${kind}"]`);
       if (!list) {
         return;
@@ -1380,7 +1391,7 @@
 
   function readRuleEditors() {
     const result = {};
-    ["topicTitleRules", "topicAuthorRules", "topicCategoryRules"].forEach((kind) => {
+    ruleGroupKeys.forEach((kind) => {
       result[kind] = [...document.querySelectorAll(`[data-rule-row="${kind}"]`)].map((row) => ({
         keyword: row.querySelector("[data-rule-keyword]")?.value || "",
         remark: row.querySelector("[data-rule-remark]")?.value || ""
@@ -1510,9 +1521,9 @@
 
     const rules = document.querySelector("[data-rule-editors]");
     if (rules) {
-      renderRuleEditor(rules, "topicTitleRules", "标题规则", "暂无标题规则");
-      renderRuleEditor(rules, "topicAuthorRules", "作者规则", "暂无作者规则");
-      renderRuleEditor(rules, "topicCategoryRules", "分类规则", "暂无分类规则");
+      (config.topicRuleGroups || []).forEach((group) => {
+        renderRuleEditor(rules, group.key, group.title, group.empty, group.help);
+      });
     }
     renderShortcutEditor();
   }
@@ -1681,16 +1692,21 @@
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       throw new Error("规则文件必须是 JSON 对象");
     }
-    const keys = ["topicTitleRules", "topicAuthorRules", "topicCategoryRules"];
-    if (!keys.some((key) => Array.isArray(parsed[key]))) {
+    if (!ruleGroupKeys.some((key) => Array.isArray(parsed[key]))) {
       throw new Error("规则文件没有可识别的规则数组");
     }
-    const importedRules = Object.fromEntries(keys.filter((key) => Array.isArray(parsed[key])).map((key) => [key, parsed[key]]));
-    validateRuleValues(importedRules);
-    const next = normalizeSettings({ ...state.settings, ...importedRules });
+    const merged = Object.fromEntries(ruleGroupKeys.map((key) => [key, [
+      ...(Array.isArray(state.settings[key]) ? state.settings[key] : []),
+      ...(Array.isArray(parsed[key]) ? parsed[key] : [])
+    ]]));
+    validateRuleValues(merged);
+    const next = normalizeSettings({ ...state.settings, ...merged });
     writeRuleEditors(next);
     await save(next);
-    setStatusMessage(maintenanceStatus, "筛选规则已导入并保存。", "success");
+    const counts = ruleGroupKeys
+      .map((key) => `${key} ${(state.settings[key] || []).length}`)
+      .join("、");
+    setStatusMessage(maintenanceStatus, `筛选规则已追加并去重保存（${counts}）。`, "success");
   }
 
   function iconMask(svg) {
@@ -1984,7 +2000,7 @@
     if (!file) {
       return;
     }
-    if (!globalThis.confirm("导入会用文件内容覆盖三组筛选规则，是否继续？")) {
+    if (!globalThis.confirm("导入会把文件里的规则追加到现有各组规则之后并自动去重，是否继续？")) {
       return;
     }
     try {

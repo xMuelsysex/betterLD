@@ -1691,6 +1691,18 @@ body.betterld-tags-page .tags-index {
   box-sizing: border-box;
 }
 
+.betterld-topic-card[data-filter-state="dimmed"] {
+  opacity: 0.4;
+  filter: grayscale(0.85);
+  transition: opacity var(--betterld-motion-standard), filter var(--betterld-motion-standard);
+}
+
+.betterld-topic-card[data-filter-state="dimmed"]:hover,
+.betterld-topic-card[data-filter-state="dimmed"]:focus-within {
+  opacity: 1;
+  filter: none;
+}
+
 .betterld-topic-empty {
   grid-column: 1 / -1;
   min-height: 180px;
