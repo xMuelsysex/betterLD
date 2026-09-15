@@ -1,5 +1,69 @@
 # betterLD 项目流水
 
+## 2026-09-15：三点菜单去圆形底并拉长阅读卡比例
+
+- `src/content.css` 的 `.betterld-topic-card__menu-trigger` 去掉边框、圆形底、圆角与 backdrop-filter，改为透明无边框按钮，只保留 `⋯` 字形和 `36 × 36` 可点击区域；hover/focus-visible 仍变色并保留焦点轮廓。
+- 阅读卡比例改为竖长卡片（`1.42:1` → `1.2` → `0.7` → 最终 `0.8:1`，`src/content.css` 与 `src/reader-card-preview.css` 同步），多出的高度由 `flex: 1 1 auto` 的正文区吸收，不改动紧凑排版与窄屏 `250px` 固定高度。
+- Orca 真实页面复核（`1.2` 阶段）：卡片 `304.6 × 253.9px`；触发器背景透明、无边框/圆角/阴影，展开菜单仍可命中 9 个菜单项。最终 `0.8` 比例下 1440px 独立预览卡片 `437.7 × 547.1px`、正文区 `375px`、无裁切与横向溢出，生产规则已在浏览器加载的 `src/content.css` 中确认。`npm run check`、`git diff --check` 通过。
+
+## 2026-09-15：修复紧凑阅读卡的菜单、设置和元数据显示
+
+- 阅读卡展开菜单现在将打开卡片提升至 `z-index: 20`、解除卡片 `overflow` 裁切，面板使用 `z-index: 40`；设置 dialog surface 改为 `overflow: auto`，可滚动查看完整设置。
+- 标题和正文预览统一调整为 `14px`；主题元数据请求改用 `cache: "no-store"`，并在有限重试耗尽后按配置执行一次恢复重试，避免 Cloudflare 错误响应被 HTTP cache 固化。
+- Orca 真实 LinuxDo 回归确认 30 张阅读卡作者状态全部 `ready`，菜单面板实际可命中，设置 surface `scrollHeight=8571` / `clientHeight=828` 可滚动；独立预览在 1280px、390px 无横向溢出，5 种状态和 console 检查通过。`npm run check`、`node --check scripts/orca-preview.js`、`git diff --check` 通过。
+
+## 2026-09-14：增加可切换的 Markdown 阅读卡
+
+- 新增 `reading` 主题卡布局并设为新安装默认值，保留 `cards` / `native` 兼容路径；设置页沿用 `topicListLayoutMode` 枚举自动生成选项。
+- 共享 `src/markdown.js` 渲染核心 Markdown，生产卡片从 `/t/{id}.json?include_raw=1` 读取原始正文、权威作者、可用统计与参与者；空字段隐藏、空正文标记为 `empty`，链接协议与 HTML 节点经过安全过滤。
+- 新增 `reader-card-preview.html` 独立预览，覆盖 ready、loading、failed、empty 和长 Markdown；桌面卡片约 `1.42:1`，网格下限收缩为 `270px`，预览卡约 `327 × 230px`，窄屏固定 `250px` 高度。
+- 按视觉反馈同步紧凑化内边距、标题/元信息字号、头像、标签、正文区和底部操作，缩小后仍保留 Markdown 状态与 `View details`。
+- `npm run check`、配置/Manifest 解析、`node --check scripts/orca-preview.js`、`git diff --check` 和本地浏览器/临时 Discourse DOM 烟测通过；1440px / 390px 预览均无横向溢出。真实 LinuxDo 网络回归未在本轮重复执行。详见 `.pi/tasks/2026-09-14-reading-card/task.md`。
+
+## 2026-09-14：将设置页嵌入原网页并改为 Material 3
+
+- 设置入口现在在当前 LinuxDo 页面打开原生 `<dialog>`，不再新建设置 Tab；Shadow DOM 载入并复用现有 `src/options.html`、`src/options.css`、`src/options.js`，外层提供 BewlyCat 风格遮罩、圆角 surface、关闭和焦点恢复。
+- 页面 CSP 会阻止 localhost/extension iframe，因此改为 DOMParser + scoped CSS + Shadow root；Orca preview 的 localhost nonce 注入额外桥接页面执行的 `options.js`，生产扩展仍通过 `runtime.getURL()` 读取 web-accessible 资源。
+- Orca cache-busting `/latest` 回归确认 `iframe=0`、完整 `#settings-form`、dialog 圆角 `28px`、设置卡片圆角 `24px`；真实保存 `maskOpacity=0.63` 后原页面 CSS 同步为 `0.63`，关闭并重复打开通过。`npm run check`、3 个 Node 语法检查和 `git diff --check` 通过；详见 `.pi/tasks/2026-09-14-orca-options-page/task.md`。
+
+## 2026-09-14：修复 Orca 预览设置页无法打开
+
+- 根因是 preview mock 的 `runtime.openOptionsPage()` 只记录点击，不创建设置页面；现在由本机 preview service 调用 Orca `tab create` 打开现有 `src/options.html`。
+- 设置页通过预览 bridge 将 `storage.local` 读写转发到当前 LinuxDo Tab，保持原设置入口、单一配置语义和实时 CSS 更新；不复制设置表单。
+- Orca 回归确认设置 Tab 标题为 `betterLD 设置`、表单和存储 bridge 可用；保存 `maskOpacity=0.63` 后原页面存储值与 CSS 同步为 `0.63`。`npm run check`、`node --check scripts/orca-preview.js`、`git diff --check` 通过；详见 `.pi/tasks/2026-09-14-orca-options-page/task.md`。
+
+## 2026-09-13：完成 BewlyCat 非 Bilibili 通用能力实现
+
+- 按设计文档落地共享设置规范化、可操作设置页、主题卡片生命周期、导航壳层、action rail、链接打开模式、摘要抽屉、标题/作者/分类过滤、快捷键、响应式触屏、主题与字体、自定义 CSSOM、远程壁纸元数据缓存、搜索设置、语言、导入导出、storage.sync 白名单投影和关于页；Bilibili 专属业务保持排除。
+- 运行时保持无依赖 Manifest V3，主题卡片覆盖原始 DOM 可逆恢复；作者只消费 `/t/{id}.json` 的 `details.created_by.username`，远端同步不包含本地壁纸正文、摘要缓存或搜索历史，关于链接指向 `xMuelsysex/betterLD`。
+- 通过 `npm run check`、`node --check src/background.js`、Manifest/设置模型解析、`git diff --check`、规范化/CSSOM/sync smoke，以及浏览器设置页语言回切、sync/local 事件、content active-sync/卡片过滤 fixture；详细记录见 `.pi/tasks/2026-09-12-bewlycat-reuse-implementation/task.md`。
+
+## 2026-09-12：完成 BewlyCat 非 Bilibili 设置复用设计
+
+- 新增 `.pi/tasks/2026-09-12-bewlycat-reuse-design/design.md`，将 BewlyCat 中非 Bilibili 专属的外观、卡片、导航壳层、链接抽屉、过滤、搜索、响应式、快捷键、语言、备份同步和关于能力映射到 betterLD。
+- 设计保持无依赖 MV3、现有壁纸 / 主题 / 作者权威数据约束和原站 DOM 可恢复边界；补充共享规范化、`storage.sync` 白名单投影、MV3 后台打开消息链、受限 CSSOM、自定义阴影曲线与原始 1/2/3 审计项追踪。
+- 文档级 Node 设置模型解析、重复顶层键检查、`git diff --check` 通过；本轮只修改设计和项目留痕，未修改运行时代码。
+
+## 2026-09-12：解除主题卡片网格宽度上限
+
+- 根因是 Discourse `.container.list-container.--topic-list` 的 `1320px` `max-width`，使已有 `auto-fit` 网格只能使用 `1272px` 并排 4 列；`src/content.css` 现在对 betterLD 主题列表解除该上限，保留 `280px` 最小卡宽、`24px` 内缩和 `16px` 间距。
+- Orca cache-busting `/latest` 回归确认主内容宽度 `3207px`、网格宽度 `3159px`、实际 10 列且卡片约 `297px`，右侧空白已被轨道填充；窄屏单列断点保持不变。`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：调整用户菜单头像通知与文字布局
+
+- `src/content.css` 将通知类型 `.icon-avatar__icon-wrapper` 定位为头像右上方的 `20px` Material badge（`top: -4px; right: -4px`），并将通知标题/描述调整为 `14px/13px`。
+- Orca cache-busting `/latest` 回归确认 badge 位于头像右上方，30 个头像为 `40 × 40px`；“赞”标签切换与菜单关闭正常。`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：移除用户菜单通知头像右上角叠层
+
+- 真实 DOM 确认右上角元素是 Discourse `.icon-avatar__icon-wrapper` 通知类型图标；原生偏移位置叠加在 `40 × 40px` 头像上，导致视觉上像被裁切的异常元素。
+- `src/content.css` 隐藏该装饰节点，保留头像图片、通知文字、未读 badge、tab 和路由交互；Orca cache-busting 回归确认 30 个头像均为 `40 × 40px`，切换“赞”和关闭菜单正常。`npm run check`、`git diff --check` 通过。
+
+## 2026-09-12：用户菜单 Material 3 改造
+
+- `src/content.css` 针对真实 `div.user-menu.revamped.menu-panel` 增加 Material 3 surface、右侧竖向 tab rail、active/hover/focus、未读 badge、通知卡片、底部操作 pill、窄屏、fallback、forced-colors 和 reduced-motion 样式；不改动站点 DOM、路由或菜单交互。
+- Orca cache-busting `/latest` 回归：面板 `24px` 圆角、右侧 `56px` rail、标签 `40px` active pill、通知项 `16px` 卡片；切换“赞”标签后 active 状态与内容更新正常。`npm run check`、`git diff --check` 通过。
+
 ## 2026-09-12：增加 Orca 预览启动器与刷新恢复
 
 - 新增 `scripts/orca-preview.js` 并接入 `npm run preview:orca`：启动无依赖、禁缓存的本地源码服务，打开真实 LinuxDo 页面并通过页面 nonce 注入当前 `config/content/CSS`。

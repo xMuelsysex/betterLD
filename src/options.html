@@ -11,7 +11,14 @@
       <header class="settings-header">
         <p class="eyebrow">betterLD</p>
         <h1>首页视觉设置</h1>
-        <p>调整 LinuxDo 首页卡片的背景与层次效果。</p>
+        <p>调整 LinuxDo 首页卡片、导航和页面外观。所有修改在点击“保存设置”后生效。</p>
+        <label class="settings-search">
+          <span>搜索设置</span>
+          <input id="settings-search" type="search" placeholder="搜索外观、卡片、快捷键…" autocomplete="off" aria-describedby="settings-search-help">
+          <small id="settings-search-help">按名称或关键词筛选设置，不会改变当前输入。</small>
+        </label>
+        <button id="settings-search-clear" class="button button-tonal search-clear" type="button" hidden>清空搜索</button>
+        <p id="settings-search-empty" class="empty-state" role="status" hidden>没有匹配的设置。</p>
       </header>
 
       <form id="settings-form" class="settings-card">
@@ -76,6 +83,84 @@
           </label>
         </fieldset>
 
+        <div id="settings-groups" class="settings-groups">
+          <section class="settings-group" data-settings-group data-settings-title="外观 Appearance">
+            <h2>外观</h2>
+            <p class="section-description">主题、毛玻璃、字体和页面范围。</p>
+            <div id="appearance-settings" class="settings-fields"></div>
+            <div id="shadow-curve-settings" class="settings-subsection"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="主题卡片 Card">
+            <h2>主题卡片</h2>
+            <p class="section-description">控制网格、卡片内容、字号和操作菜单。</p>
+            <div id="card-settings" class="settings-fields"></div>
+            <div id="grid-columns-settings" class="settings-subsection"></div>
+            <div id="card-menu-settings" class="settings-subsection"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="页面导航 Navigation">
+            <h2>页面导航</h2>
+            <p class="section-description">调整主题导航、Header、Sidebar 和浮动操作。</p>
+            <div id="navigation-settings" class="settings-fields"></div>
+            <div id="topic-navigation-settings" class="settings-subsection"></div>
+            <div id="action-rail-settings" class="settings-subsection"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="筛选 Filter">
+            <h2>筛选</h2>
+            <p class="section-description">仅影响 betterLD 生成的主题卡片，不改变 LinuxDo 原始查询。</p>
+            <div id="filter-settings" class="settings-fields"></div>
+            <div id="rule-editors" class="rule-editors"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="搜索 Search">
+            <h2>搜索</h2>
+            <p class="section-description">搜索页能力需经过真实页面确认；当前控件保存后仅在对应能力启用时生效。</p>
+            <div id="search-settings" class="settings-fields"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="交互 Interaction">
+            <h2>交互</h2>
+            <p class="section-description">触屏尺寸、链接打开方式、抽屉和快捷键。</p>
+            <div id="interaction-settings" class="settings-fields"></div>
+            <div id="shortcut-settings" class="settings-subsection"></div>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="高级 Advanced">
+            <h2>高级</h2>
+            <p class="section-description">高级外观和未确认页面范围设置。自定义 CSS 只允许作用于 betterLD 自有节点。</p>
+            <div id="advanced-settings" class="settings-fields"></div>
+            <p class="warning" id="custom-css-warning">自定义 CSS 可能破坏 betterLD 自有布局，保存前会执行 CSSOM 和属性白名单校验。</p>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="备份 同步 Maintenance">
+            <h2>备份与同步</h2>
+            <p class="section-description">导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。</p>
+            <div class="maintenance-actions">
+              <button id="export-settings" class="button button-tonal" type="button">导出设置</button>
+              <button id="import-settings" class="button button-tonal" type="button">导入设置</button>
+              <input id="settings-import-file" type="file" accept="application/json,.json" hidden>
+              <button id="export-rules" class="button button-tonal" type="button">导出筛选规则</button>
+              <button id="import-rules" class="button button-tonal" type="button">导入筛选规则</button>
+              <button id="clear-search-history" class="button button-tonal" type="button">清空搜索历史</button>
+              <button id="sync-now" class="button button-tonal" type="button">立即同步</button>
+              <input id="rules-import-file" type="file" accept="application/json,.json" hidden>
+            </div>
+            <p id="maintenance-status" class="inline-status" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="settings-group" data-settings-group data-settings-title="关于 About">
+            <h2>关于</h2>
+            <div id="about-settings" class="about-settings">
+              <p id="about-version"></p>
+              <p id="about-storage"></p>
+              <p>Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。</p>
+              <p><a href="https://github.com/xMuelsysex/betterLD" target="_blank" rel="noreferrer">项目主页</a> · <a href="https://github.com/xMuelsysex/betterLD/issues" target="_blank" rel="noreferrer">问题反馈</a></p>
+            </div>
+          </section>
+        </div>
+
         <div class="actions">
           <button id="reset" class="button button-tonal" type="button">恢复默认</button>
           <button class="button button-filled" type="submit">保存设置</button>
@@ -84,6 +169,7 @@
       </form>
     </main>
     <script src="../betterld.config.js"></script>
+    <script src="settings.js"></script>
     <script src="options.js"></script>
   </body>
 </html>
