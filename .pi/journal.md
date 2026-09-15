@@ -1,5 +1,11 @@
 # betterLD 项目流水
 
+## 2026-09-15：阅读卡比例改为 1/√2
+
+- `src/content.css` 与 `src/reader-card-preview.css` 的阅读卡 `aspect-ratio` 由 `0.8 / 1` 改为 `0.7071 / 1`（宽高比 1/√2）。
+- 独立预览（1440px 视口，本地静态服务）：卡片 `438 × 619`，比例 `0.7071`，无横向溢出，ready / loading / failed / empty 四种状态均正常。
+- Orca 真实 `/latest`：30 张阅读卡 `305 × 431`，比例 `0.7071`，5 列网格（每列 `304.66px`），无横向溢出。
+
 ## 2026-09-15：修复设置窗口主分类栏点击后不自动缩回
 
 - 根因：rail 的展开条件包含 `:focus-within`，点击按钮后焦点留在 rail 内，指针移开也不会缩回；先改成 `:has(:focus-visible)`，但 Orca 真实点击路径下该按钮仍为 `focus-visible: true`，问题依旧复现。

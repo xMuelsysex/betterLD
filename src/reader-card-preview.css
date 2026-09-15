@@ -80,7 +80,8 @@ body.reader-card-preview .reader-preview-grid {
 
 body.reader-card-preview .betterld-topic-card--reading {
   min-height: 230px;
-  aspect-ratio: 0.8 / 1;
+  /* 宽高比 1 / √2（0.7071 / 1）。 */
+  aspect-ratio: 0.7071 / 1;
   background: rgb(255 255 255 / 0.84);
   box-shadow: 0 18px 46px rgb(61 91 119 / 0.14);
 }
