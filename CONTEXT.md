@@ -29,6 +29,8 @@
 ### Author Identity
 - **Definition**：帖子的用户 ID 与头像组合，用于识别发帖人。
 - **Rules/Invariants**：首版保留原有 ID 和头像，不用帖子内容替换身份信息。
+- **Rules/Invariants**：作者 ID 同时是该用户的链接入口，指向 `/u/{username}` 用户主页；只有拿到真实用户名（ASCII 用户名形态）才生成链接，加载中/失败占位文案与显示名不生成链接，链接形态与参数由 `betterld.config.js` 的 `userProfilePath` 统一提供。
+- **Rules/Invariants**：作者链接的点击不进入主题导航（不触发卡片的打开方式设置），也不改变卡片其余区域的原有链接行为。
 
 ### Adaptive Card Grid
 - **Definition**：首页主题卡片按照可用桌面宽度自动排列的网格，单张卡片目标尺寸约为 350 × 350 像素。
@@ -49,6 +51,7 @@
 ### Visual Enhancement
 - **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次和氛围的效果集合。
 - **Rules/Invariants**：首版默认启用可调整的背景图片、页面遮罩和模糊效果；背景图片的加载和呈现方式参考 BewlyCat；没有可用背景图片时仍保持可用的明暗对应渐变视觉。
+- **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
 
 ### BewlyCat Wallpaper Selection
 - **Definition**：首页背景图片的来源选择模型，包含网站随机图片、内置图片和用户自定义图片 3 类来源。

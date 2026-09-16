@@ -1227,7 +1227,13 @@
     const title = createElement(isReadingCard ? "a" : "span", isReadingCard ? "betterld-topic-card__link betterld-topic-card__title betterld-topic-card__reading-title" : "betterld-topic-card__title", topic.title);
     const excerpt = createElement(isReadingCard ? "div" : "span", "betterld-topic-card__excerpt", topic.id ? config.excerptLoadingLabel : config.excerptPlaceholder);
     const identity = createElement("span", "betterld-topic-card__identity");
-    const authorElement = createElement("span", "betterld-topic-card__author", author);
+    const authorElement = createElement("a", "betterld-topic-card__author");
+    authorElement.addEventListener("click", (event) => {
+      if (authorElement.hasAttribute("href")) {
+        event.stopPropagation();
+      }
+    });
+    applyAuthorIdentity(authorElement, author);
     const chip = createElement("span", "betterld-topic-card__chip", category.name);
     const meta = createElement("span", "betterld-topic-card__meta", compactMeta(item));
 
@@ -1347,6 +1353,24 @@
   function topicAuthorHref(item) {
     const link = item.querySelector(".topic-creator-data a[href], .topic-poster a[href], .creator a[href]");
     return safeSiteUrl(link?.href);
+  }
+
+  function userProfileHref(name) {
+    const username = cleanText(name);
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(username)) {
+      return "";
+    }
+    return `${location.origin}${config.userProfilePath}${encodeURIComponent(username)}`;
+  }
+
+  function applyAuthorIdentity(authorElement, name) {
+    const href = userProfileHref(name);
+    authorElement.textContent = name;
+    if (href) {
+      authorElement.href = href;
+    } else {
+      authorElement.removeAttribute("href");
+    }
   }
 
   function showActionStatus(message, statusName = "error") {
@@ -1929,7 +1953,7 @@
     if (!authorElement) {
       return;
     }
-    authorElement.textContent = author;
+    applyAuthorIdentity(authorElement, author);
     card.dataset.authorState = stateName;
     card.dataset.filterAuthor = stateName === "ready" ? author : "";
     applyCardFilter(card);

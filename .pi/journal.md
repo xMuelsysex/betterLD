@@ -1,5 +1,15 @@
 # betterLD 项目流水
 
+## 2026-09-16：主题列表灰底透明化 + 作者用户名可点击进入用户主页
+
+- 「灰底」定位到站点色 token `oklch(0.217785 0.0000108703 23.5956)`：它不在可读的 CSSOM 里（Discourse 样式表在 `cdn.ldstatic.com`，跨源读 `cssRules` 直接 `SecurityError`），只能按计算值反查。全元素扫描得到的可见实例是 `#list-area`（主题列表底板）、分类页的 `#header-list-area` 与 3 个 `.category-box-inner`；首页还多出 `.list-controls`（导航胶囊底板）与欢迎横幅搜索框。
+- `#list-area`、`#header-list-area` 加入 content.css 已有的「受管页面容器透明化」规则组（与 `#main-outlet`、`#main-container`、`.topic-list-container` 同一处），分类盒子改用与 `.category-heading` 同一套 betterLD 材质面（`surface-rgb/0.56` + blur + 圆角），内层 `.category-box-inner` 置透明。验证后 `/c/develop/4` 与 `/tag/31-tag/31` 已无任何可见灰底，`/`、`/latest`、`/new`、`/tags` 也一致。
+- 作者元素从纯 `<span>` 改为 `<a>`，href 由新增的 `userProfileHref()` 用**权威用户名**拼出（`betterld.config.js` 新增 `userProfilePath: "/u/"`）；用户名形态用 `/^[A-Za-z0-9][A-Za-z0-9_.-]*$/` 判定，加载中/失败占位与显示名一律不建 href（失败方向是「不建链」，不会指向错误用户）；30 张卡片 ready 与 `[href]` 计数都是 30/30。
+- cards 模式下作者链接必然嵌在卡片级 `<a>` 内（CONTEXT.md 的 Card Navigation 不变量要求整张卡片保留原帖链接与浏览器原生操作），因此作者链接在 click 上 `stopPropagation()`（不 `preventDefault`），复用菜单触发器已有做法。真实鼠标点击验证：reading 与 cards 两种模式、currentTab 与 drawer 两种打开方式下点作者都落在 `/u/{username}`（再跳 `/u/{username}/summary`），抽屉未被劫持；对照组点卡片本体仍正常打开抽屉。
+- 有意不动（同色但语义不同，留给主人决定）：首页 `.list-controls`（导航胶囊的灰色底板，纳入那条规则会连带把宽度/内边距/外边距带到首页，属于布局变更）与欢迎横幅里的搜索输入框（表单控件需要自带填充底）。
+- 「整张卡片一个链接 + 内部二级链接」在 HTML 上是嵌套 `<a>`：该 DOM 由 `createElement` 构建，不经解析器，浏览器按最近可激活祖先执行导航（实测内层链接获胜）。Firefox 未实机验证（Orca 只能跑 Chromium）。
+- `npm run check`、`git diff --check` 通过。详见 `.pi/tasks/2026-09-16-list-area-author-link/task.md`。
+
 ## 2026-09-15：集成服务端屏蔽、等级/旧帖过滤、高亮、垃圾桶与 WebDAV 规则备份
 
 - 服务端 ignore 的接口不从猜：拉社区已验证脚本源码确认是 `PUT /u/{username}/notification_level.json`（表单体 `notification_level=ignore` + `expiring_at` + `acting_user_id`，`X-CSRF-Token` 取自 `meta[name=csrf-token]`），过期时间作为参数放到 `betterld.config.js`。入口是卡片菜单里的显式动作，默认不显示、执行前确认，不做自动批量。

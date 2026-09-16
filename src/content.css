@@ -1007,6 +1007,8 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-container,
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper,
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #list-area,
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #header-list-area,
 body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-list-container {
   position: relative;
   z-index: 1;
@@ -1062,6 +1064,20 @@ body.betterld-topic-page .category-heading {
   box-shadow: var(--betterld-shadow-level-1);
   -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+body:is(.betterld-topic-page, .betterld-categories-page) .category-box {
+  box-sizing: border-box;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.22) !important;
+  border-radius: var(--betterld-radius-xl) !important;
+  background: rgb(var(--betterld-surface-rgb) / 0.56) !important;
+  box-shadow: var(--betterld-shadow-level-1);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+body:is(.betterld-topic-page, .betterld-categories-page) .category-box-inner {
+  background: transparent !important;
 }
 
 body.betterld-topic-page .category-heading__logo {
@@ -2018,8 +2034,22 @@ body.betterld-tags-page .tags-index {
   font-size: 14px;
   font-weight: 650;
   line-height: 1.2;
+  text-decoration: none !important;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.betterld-topic-card__author[href]:hover {
+  color: var(--betterld-primary);
+  text-decoration: underline !important;
+}
+
+.betterld-topic-card__author[href]:focus-visible {
+  border-radius: 4px;
+  color: var(--betterld-primary);
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: var(--betterld-focus-offset);
+  text-decoration: underline !important;
 }
 
 .betterld-topic-card__chip {
