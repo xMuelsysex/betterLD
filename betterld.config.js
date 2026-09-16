@@ -177,7 +177,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     "copyCleanUrl",
     "copyTopicId",
     "openCategory",
-    "openAuthor"
+    "openAuthor",
+    "ignoreAuthor"
   ]),
   actionRailItems: Object.freeze(["settings", "theme", "top", "refresh"]),
   settingsEnums: Object.freeze({
@@ -199,7 +200,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     navigationOpenMode: Object.freeze(["currentTab", "newTab"]),
     searchOpenMode: Object.freeze(["currentTab", "newTab"]),
     notificationOpenMode: Object.freeze(["page", "newTab"]),
-    topicFilterMode: Object.freeze(["hide", "dim", "include"]),
+    topicFilterMode: Object.freeze(["hide", "dim", "highlight", "include"]),
     topicFilterMatchMode: Object.freeze(["contains", "whole", "regex"]),
     searchMode: Object.freeze(["native", "cards"]),
     searchResultsPaginationMode: Object.freeze(["scroll", "pagination"]),
@@ -209,6 +210,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     wallpaperRemoteCacheDays: Object.freeze([0, 1, 7, 30])
   }),
   // 主题过滤的规则组顺序即设置窗口里的展示顺序；白名单最后且优先级最高
+  // 服务端屏蔽使用 Discourse 的 notification_level 接口，过期时间给一个远期值即相当于永久
+  discourseIgnoreExpiringAt: "3026-08-01 08:00+08:00",
   topicRuleGroups: Object.freeze([
     { key: "topicTitleRules", title: "标题规则", empty: "暂无标题规则", help: "匹配主题标题。" },
     { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配主题所属分类名称。" },
@@ -288,7 +291,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "filter",
           title: "筛选",
           description: "只影响 betterLD 生成的卡片，不改变 LinuxDo 原始查询与分页。",
-          keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode"]
+          keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode", "topicFilterMaxAgeDays", "topicFilterHideLv1", "topicFilterHideLv2", "topicFilterHideLv3", "topicFilterBinEnabled"]
         },
         {
           id: "search",
@@ -401,8 +404,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "maintenance",
           title: "同步与缓存",
-          description: "浏览器同步只投影设置，不包含本地壁纸正文与搜索历史。",
-          keys: ["syncEnabled", "wallpaperRemoteCacheDays"]
+          description: "浏览器同步只投影设置，不包含本地壁纸正文、搜索历史与 WebDAV 凭据。",
+          keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword"]
         },
         {
           id: "data",
@@ -527,6 +530,11 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     topicFilterEnabled: false,
     topicFilterMode: "hide",
     topicFilterMatchMode: "contains",
+    topicFilterMaxAgeDays: 0,
+    topicFilterHideLv1: false,
+    topicFilterHideLv2: false,
+    topicFilterHideLv3: false,
+    topicFilterBinEnabled: true,
     topicTitleRules: [],
     topicAuthorRules: [],
     topicCategoryRules: [],
@@ -551,7 +559,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       openSettings: "",
       toggleListControls: ""
     },
-    syncEnabled: false
+    syncEnabled: false,
+    webdavUrl: "",
+    webdavUsername: "",
+    webdavPassword: ""
   }),
   settingsLimits: Object.freeze({
     maskOpacity: Object.freeze({ min: 0, max: 0.8, step: 0.01 }),
@@ -569,6 +580,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     ruleKeyword: Object.freeze({ maxLength: 200 }),
     ruleRemark: Object.freeze({ maxLength: 200 }),
     ruleCount: Object.freeze({ max: 64 }),
+    topicFilterMaxAgeDays: Object.freeze({ min: 0, max: 3650, step: 1 }),
+    webdavUsername: Object.freeze({ maxLength: 200 }),
+    webdavPassword: Object.freeze({ maxLength: 200 }),
+    webdavUrl: Object.freeze({ maxLength: 2048 }),
     shortcut: Object.freeze({ maxLength: 24 }),
     searchHistory: Object.freeze({ maxItems: 50, maxLength: 200 })
   })

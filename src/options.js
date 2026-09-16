@@ -462,6 +462,10 @@
     const mode = selectedMode();
     const ruleValues = readRuleEditors();
     validateRuleValues(ruleValues);
+    const advanced = readAdvancedSettings();
+    if (!settingsApi.webdavUrlAllowed(advanced.webdavUrl)) {
+      throw new Error("WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址");
+    }
     let wallpaperUrl = "";
     let legacyWallpaper = "";
     let wallpaperId = "";
@@ -491,7 +495,7 @@
 
     const keepRandomResult = mode === modes.random && state.settings.wallpaperMode === modes.random;
     return normalizeSettings({
-      ...readAdvancedSettings(),
+      ...advanced,
       ...ruleValues,
       searchHistory: state.settings.searchHistory,
       wallpaper: legacyWallpaper,
@@ -767,7 +771,7 @@
     navigationOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     searchOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
-    topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", include: "只显示命中项" },
+    topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", highlight: "高亮命中项", include: "只显示命中项" },
     topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
     searchMode: { native: "原生结果", cards: "主题卡片" },
     searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
@@ -796,7 +800,7 @@
     navigationOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     searchOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
-    topicFilterMode: { hide: "Hide matches", dim: "Dim matches", include: "Show matches only" },
+    topicFilterMode: { hide: "Hide matches", dim: "Dim matches", highlight: "Highlight matches", include: "Show matches only" },
     topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
     searchMode: { native: "Native results", cards: "Topic cards" },
     searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
@@ -808,7 +812,7 @@
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Theme color", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
-    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
+    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
     topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
   };
 
@@ -1043,6 +1047,11 @@
     { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "只影响 betterLD 生成的卡片。" },
     { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "隐藏、淡化或只显示命中项；白名单命中项永不受影响。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterMatchMode", type: "select", label: "关键词匹配方式", help: "整词匹配避免 AI、Go 这类短词误伤；正则模式下非法表达式会在保存时被拒绝。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterMaxAgeDays", type: "range", label: "隐藏旧主题（天）", unit: " 天", help: "隐藏超过该天数没有新回复的主题；0 表示不按时间过滤。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv1", type: "toggle", label: "隐藏 Lv1 主题", help: "等级取自分类 slug，无等级分类不受影响。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv2", type: "toggle", label: "隐藏 Lv2 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后命中项不再生成卡片。", dependsOn: ["topicFilterEnabled", true] },
 
     { key: "searchMode", type: "select", label: "搜索结果模式", help: "当前 /search 仍以原生结果为默认。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
@@ -1064,7 +1073,10 @@
     { key: "enableHorizontalNavigationScroll", type: "toggle", label: "允许导航横向滚动", help: "只作用于主题导航。" },
     { key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "提供可发现的返回首页路径。" },
     { key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入框、编辑器和可编辑元素聚焦时不触发。" },
-    { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" }
+    { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" },
+    { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "指向规则备份文件的完整地址；只接受 https://，本机地址可用 http://。", wide: true },
+    { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "留空则不发送认证头。" },
+    { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" }
   ];
 
   const labelMap = {
@@ -1183,6 +1195,10 @@
       control.className = "settings-text-input";
     } else if (definition.type === "textarea") {
       control.className = "settings-textarea";
+    } else if (definition.type === "password") {
+      control.type = "password";
+      control.autocomplete = "off";
+      control.className = "settings-text-input";
     } else {
       control.type = "text";
       control.autocomplete = "off";
@@ -1687,13 +1703,12 @@
     setStatusMessage(maintenanceStatus, `设置已导入，${Object.keys(result.settings).length} 个字段生效。${notes.length ? ` ${notes.join("；")}` : ""}`, "success");
   }
 
-  async function importRulesFile(file) {
-    const parsed = JSON.parse(await file.text());
+  async function appendRules(parsed) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("规则文件必须是 JSON 对象");
+      throw new Error("规则内容必须是 JSON 对象");
     }
     if (!ruleGroupKeys.some((key) => Array.isArray(parsed[key]))) {
-      throw new Error("规则文件没有可识别的规则数组");
+      throw new Error("规则内容没有可识别的规则数组");
     }
     const merged = Object.fromEntries(ruleGroupKeys.map((key) => [key, [
       ...(Array.isArray(state.settings[key]) ? state.settings[key] : []),
@@ -1703,10 +1718,106 @@
     const next = normalizeSettings({ ...state.settings, ...merged });
     writeRuleEditors(next);
     await save(next);
-    const counts = ruleGroupKeys
+    return ruleGroupKeys
       .map((key) => `${key} ${(state.settings[key] || []).length}`)
       .join("、");
+  }
+
+  async function importRulesFile(file) {
+    const counts = await appendRules(JSON.parse(await file.text()));
     setStatusMessage(maintenanceStatus, `筛选规则已追加并去重保存（${counts}）。`, "success");
+  }
+
+  function sendRuntimeMessage(message) {
+    const sendMessage = api.runtime?.sendMessage;
+    if (typeof sendMessage !== "function") {
+      return Promise.reject(new Error("后台消息 API 不可用，请在扩展页面中使用 WebDAV"));
+    }
+    return new Promise((resolve, reject) => {
+      const onResponse = (response) => {
+        const error = api.runtime?.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+        resolve(response);
+      };
+      try {
+        const result = sendMessage.call(api.runtime, message, onResponse);
+        if (result?.then) {
+          result.then(resolve).catch(reject);
+        }
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async function requestWebdavPermission(url) {
+    if (!api.permissions?.request || !api.permissions?.contains) {
+      throw new Error("当前环境不支持权限申请，请在扩展设置页或工具栏弹窗中使用 WebDAV");
+    }
+    const origin = `${new URL(url).origin}/*`;
+    if (await api.permissions.contains({ origins: [origin] })) {
+      return;
+    }
+    const granted = await api.permissions.request({ origins: [origin] });
+    if (!granted) {
+      throw new Error("未授予该地址的访问权限");
+    }
+  }
+
+  async function webdavSettings() {
+    await save(readForm());
+    const settings = state.settings;
+    if (!settings.webdavUrl) {
+      throw new Error("请先填写 WebDAV 地址");
+    }
+    await requestWebdavPermission(settings.webdavUrl);
+    return settings;
+  }
+
+  async function webdavUpload() {
+    try {
+      const settings = await webdavSettings();
+      const response = await sendRuntimeMessage({
+        type: "webdav",
+        method: "PUT",
+        url: settings.webdavUrl,
+        username: settings.webdavUsername,
+        password: settings.webdavPassword,
+        body: JSON.stringify(currentRules(), null, 2)
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "WebDAV 上传失败");
+      }
+      setStatusMessage(maintenanceStatus, `规则已上传到 ${new URL(settings.webdavUrl).host}。`, "success");
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `WebDAV 上传失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
+  }
+
+  async function webdavDownload() {
+    if (!globalThis.confirm("下载的规则会追加到现有各组规则之后并自动去重，是否继续？")) {
+      return;
+    }
+    try {
+      const settings = await webdavSettings();
+      const response = await sendRuntimeMessage({
+        type: "webdav",
+        method: "GET",
+        url: settings.webdavUrl,
+        username: settings.webdavUsername,
+        password: settings.webdavPassword
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "WebDAV 下载失败");
+      }
+      const counts = await appendRules(JSON.parse(response.text || "{}"));
+      setStatusMessage(maintenanceStatus, `已从 WebDAV 追加规则（${counts}）。`, "success");
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `WebDAV 下载失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
   }
 
   function iconMask(svg) {
@@ -1965,13 +2076,14 @@
   });
 
   document.querySelector("#export-settings").addEventListener("click", () => {
+    const exported = Object.fromEntries(Object.entries(state.settings).filter(([key]) => key !== "webdavPassword"));
     const size = downloadJson(`betterld-settings-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "-")}.json`, {
       schema: "betterld.settings",
       settingsVersion: state.settings.settingsVersion,
       exportedAt: new Date().toISOString(),
-      ...state.settings
+      ...exported
     });
-    setStatusMessage(maintenanceStatus, `设置已导出（${size} 字节，${Object.keys(state.settings).length} 个字段）。`, "success");
+    setStatusMessage(maintenanceStatus, `设置已导出（${size} 字节，${Object.keys(exported).length} 个字段，不含 WebDAV 密码）。`, "success");
   });
   document.querySelector("#import-settings").addEventListener("click", () => settingsImportFile.click());
   settingsImportFile.addEventListener("change", async () => {
@@ -2009,6 +2121,8 @@
       setStatusMessage(maintenanceStatus, `规则导入失败，当前规则未改变。 ${error instanceof Error ? error.message : "文件格式无效"}`, "error");
     }
   });
+  document.querySelector("#webdav-upload").addEventListener("click", webdavUpload);
+  document.querySelector("#webdav-download").addEventListener("click", webdavDownload);
   document.querySelector("#about-version").textContent = `版本 ${api.runtime?.getManifest?.().version || "0.1.0"} · Manifest V3`;
 
   wallpaperSources.replaceChildren(...sourceOptions.map(createSourceOption));

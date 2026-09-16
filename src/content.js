@@ -41,6 +41,11 @@
     topicDrawer: null,
     settingsDialog: null,
     settingsDialogTrigger: null,
+    filterBin: new Set(),
+    filterBinFrame: 0,
+    filterBinHost: null,
+    filterBinOpen: false,
+    filterSignature: "",
     toastTimer: 0
   };
 
@@ -357,6 +362,7 @@
     }
     applyColorMode();
     applyCustomCss(settings);
+    resetFilterOverrides(settings);
     syncManagedCardContent();
     syncCardMenus();
     syncFloatingActions();
@@ -1170,6 +1176,15 @@
     return [...new Set(tags)].slice(0, 4);
   }
 
+  function topicLevel(item) {
+    const token = [...item.classList].find((name) => /-lv[1-4]$/.test(name));
+    if (token) {
+      return Number(token.slice(-1));
+    }
+    const suffix = /,\s*Lv([1-4])$/.exec(categoryInfo(item).name);
+    return suffix ? Number(suffix[1]) : 0;
+  }
+
   function compactMeta(item) {
     const selectors = [
       ".topic-list-data.num.posts",
@@ -1231,6 +1246,8 @@
     card.dataset.filterTitle = topic.title;
     card.dataset.filterCategory = category.name;
     card.dataset.filterTags = topicTags(item, category.name).join(" ");
+    card.dataset.filterLevel = String(topicLevel(item));
+    card.dataset.filterActivity = "";
     card.dataset.filterAuthor = "";
     card.dataset.authorState = topic.id ? "loading" : "failed";
     card.dataset.excerptState = topic.id ? "loading" : "failed";
@@ -1461,7 +1478,8 @@
       copyCleanUrl: "复制干净 URL",
       copyTopicId: "复制主题 ID",
       openCategory: "打开分类",
-      openAuthor: "打开作者主页"
+      openAuthor: "打开作者主页",
+      ignoreAuthor: "在服务端屏蔽作者"
     }[action] || action;
   }
 
@@ -1530,8 +1548,49 @@
     return menu;
   }
 
+  async function ignoreAuthorOnServer(username) {
+    const token = document.querySelector('meta[name="csrf-token"]')?.content;
+    const userId = globalThis.Discourse?.User?.current()?.id;
+    if (!token || !userId) {
+      throw new Error("无法读取登录状态或 CSRF 令牌");
+    }
+    const params = new URLSearchParams();
+    params.set("notification_level", "ignore");
+    params.set("expiring_at", config.discourseIgnoreExpiringAt);
+    params.set("acting_user_id", String(userId));
+    const response = await fetch(`/u/${encodeURIComponent(username)}/notification_level.json`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-CSRF-Token": token
+      },
+      body: params.toString()
+    });
+    if (!response.ok) {
+      throw new Error(`服务端屏蔽失败（HTTP ${response.status}）`);
+    }
+  }
+
   async function executeCardAction(action, card, menu) {
     closeCardMenu(menu);
+    if (action === "ignoreAuthor") {
+      const author = card.dataset.filterAuthor;
+      if (!author) {
+        showActionStatus("作者尚未加载完成，暂时无法屏蔽");
+        return;
+      }
+      if (!globalThis.confirm(`确定在服务端屏蔽 @${author}？该操作会写入你的 LinuxDo 账号。`)) {
+        return;
+      }
+      try {
+        await ignoreAuthorOnServer(author);
+        showActionStatus(`已在服务端屏蔽 @${author}`, "success");
+      } catch (error) {
+        showActionStatus(error instanceof Error ? error.message : "服务端屏蔽失败");
+      }
+      return;
+    }
     const topicUrl = safeTopicUrl(card.dataset.topicHref);
     if (!topicUrl) {
       showActionStatus("主题链接不可用");
@@ -1813,6 +1872,7 @@
           markdown,
           contentState,
           author: cleanText(data?.details?.created_by?.username),
+          activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
           stats: topicStats(data),
           participants: topicParticipants(data)
         };
@@ -1858,13 +1918,10 @@
     return requestTopicMetadata(topicId);
   }
 
-  function requestAuthor(topicId) {
-    return requestTopicMetadata(topicId).then(({ author }) => {
-      if (!author) {
-        throw new Error("topic creator username unavailable");
-      }
-      return author;
-    });
+  function setTopicActivity(card, activityAt) {
+    const timestamp = activityAt ? Date.parse(activityAt) : Number.NaN;
+    card.dataset.filterActivity = Number.isFinite(timestamp) ? String(timestamp) : "";
+    applyCardFilter(card);
   }
 
   function setAuthor(card, author, stateName) {
@@ -1981,8 +2038,14 @@
     }
 
     const topicId = card.dataset.topicId;
-    requestAuthor(topicId)
-      .then((author) => setAuthor(card, author, "ready"))
+    requestTopicMetadata(topicId)
+      .then((metadata) => {
+        if (!metadata.author) {
+          throw new Error("topic creator username unavailable");
+        }
+        setAuthor(card, metadata.author, "ready");
+        setTopicActivity(card, metadata.activityAt);
+      })
       .catch((error) => {
         console.warn(`[betterLD] topic creator unavailable for topic ${topicId}`, error);
         setAuthor(card, config.authorPlaceholder, "failed");
@@ -2065,6 +2128,32 @@
     observeExcerpt(card);
   }
 
+  function resetFilterOverrides(settings) {
+    const signature = JSON.stringify([
+      settings.topicFilterEnabled,
+      settings.topicFilterMode,
+      settings.topicFilterMatchMode,
+      settings.topicFilterMaxAgeDays,
+      settings.topicFilterHideLv1,
+      settings.topicFilterHideLv2,
+      settings.topicFilterHideLv3,
+      settings.topicFilterBinEnabled,
+      settings.topicTitleRules,
+      settings.topicCategoryRules,
+      settings.topicTagRules,
+      settings.topicAuthorRules,
+      settings.topicWhitelistRules
+    ]);
+    if (signature === state.filterSignature) {
+      return;
+    }
+    // 规则集变化后，上一轮的「已还原」不再成立
+    state.filterSignature = signature;
+    document.querySelectorAll(".betterld-topic-card[data-filter-override]").forEach((card) => {
+      delete card.dataset.filterOverride;
+    });
+  }
+
   function syncManagedCardContent() {
     document.querySelectorAll('[data-betterld-grid="true"] .betterld-topic-card').forEach((card) => {
       applyCardFilter(card);
@@ -2108,10 +2197,23 @@
   }
 
   function topicFilterSettings() {
+    const levels = [];
+    if (state.currentSettings.topicFilterHideLv1 === true) {
+      levels.push(1);
+    }
+    if (state.currentSettings.topicFilterHideLv2 === true) {
+      levels.push(2);
+    }
+    if (state.currentSettings.topicFilterHideLv3 === true) {
+      levels.push(3);
+    }
     return {
       enabled: state.currentSettings.topicFilterEnabled === true,
       mode: state.currentSettings.topicFilterMode,
       matchMode: state.currentSettings.topicFilterMatchMode,
+      maxAgeDays: Number(state.currentSettings.topicFilterMaxAgeDays) || 0,
+      hideLevels: levels,
+      binEnabled: state.currentSettings.topicFilterBinEnabled !== false,
       titleRules: state.currentSettings.topicTitleRules || [],
       authorRules: state.currentSettings.topicAuthorRules || [],
       categoryRules: state.currentSettings.topicCategoryRules || [],
@@ -2120,33 +2222,239 @@
     };
   }
 
-  function filterMatchesWhitelist(settings, title, category, tags) {
+  function filterMatchesWhitelist(settings, title, category, tags, author) {
     return filterRuleMatches(title, settings.whitelistRules, settings.matchMode)
       || filterRuleMatches(category, settings.whitelistRules, settings.matchMode)
-      || filterRuleMatches(tags, settings.whitelistRules, settings.matchMode);
+      || filterRuleMatches(tags, settings.whitelistRules, settings.matchMode)
+      || filterRuleMatches(author, settings.whitelistRules, settings.matchMode);
+  }
+
+  function cardFilterVerdict(card, settings) {
+    const authorKnown = card.dataset.authorState !== "loading";
+    const titleMatch = filterRuleMatches(card.dataset.filterTitle, settings.titleRules, settings.matchMode);
+    const categoryMatch = filterRuleMatches(card.dataset.filterCategory, settings.categoryRules, settings.matchMode);
+    const tagMatch = filterRuleMatches(card.dataset.filterTags, settings.tagRules, settings.matchMode);
+    const authorMatch = authorKnown && filterRuleMatches(card.dataset.filterAuthor, settings.authorRules, settings.matchMode);
+    const domMatch = titleMatch || categoryMatch || tagMatch;
+    const levelMatch = settings.hideLevels.includes(Number(card.dataset.filterLevel || 0));
+    const activity = Number(card.dataset.filterActivity || 0);
+    const ageMatch = settings.maxAgeDays > 0 && activity > 0 && Date.now() - activity > settings.maxAgeDays * 86400000;
+    const whitelisted = filterMatchesWhitelist(
+      settings,
+      card.dataset.filterTitle,
+      card.dataset.filterCategory,
+      card.dataset.filterTags,
+      authorKnown ? card.dataset.filterAuthor : ""
+    );
+    const pending = (settings.authorRules.length > 0 && !authorKnown && !domMatch)
+      || (settings.maxAgeDays > 0 && activity === 0);
+    return { match: domMatch || authorMatch || levelMatch || ageMatch, pending, whitelisted };
   }
 
   function itemPassesDomFilter(item) {
     const settings = topicFilterSettings();
-    if (!settings.enabled || settings.mode === "dim") {
+    // 淡化与高亮模式不隐藏卡片；启用垃圾桶时保留卡片，否则命中项在列表里无法还原
+    if (!settings.enabled || settings.mode !== "hide" || settings.binEnabled) {
       return true;
     }
     const title = topicInfo(item)?.title;
     const category = categoryInfo(item).name;
     const tags = topicTags(item, category).join(" ");
-    if (filterMatchesWhitelist(settings, title, category, tags)) {
+    if (filterMatchesWhitelist(settings, title, category, tags, "")) {
       return true;
     }
     const titleMatch = filterRuleMatches(title, settings.titleRules, settings.matchMode);
     const categoryMatch = filterRuleMatches(category, settings.categoryRules, settings.matchMode);
     const tagMatch = filterRuleMatches(tags, settings.tagRules, settings.matchMode);
-    const hasDomRules = settings.titleRules.length > 0 || settings.categoryRules.length > 0 || settings.tagRules.length > 0;
-    if (!hasDomRules) {
+    if (!settings.titleRules.length && !settings.categoryRules.length && !settings.tagRules.length) {
       return true;
     }
-    return settings.mode === "include"
-      ? titleMatch || categoryMatch || tagMatch || settings.authorRules.length > 0
-      : !titleMatch && !categoryMatch && !tagMatch;
+    return !titleMatch && !categoryMatch && !tagMatch && !settings.hideLevels.length;
+  }
+
+  function ruleMatchRanges(value, rules, matchMode) {
+    const text = cleanText(value);
+    const ranges = [];
+    if (!text) {
+      return ranges;
+    }
+    rules.forEach((rule) => {
+      const keyword = cleanText(rule.keyword);
+      if (!keyword) {
+        return;
+      }
+      if (matchMode === "regex" || matchMode === "whole") {
+        const source = matchMode === "regex" ? keyword : `(?<![\\p{L}\\p{N}])${escapeRegExp(keyword)}(?![\\p{L}\\p{N}])`;
+        let pattern;
+        try {
+          pattern = new RegExp(source, "giu");
+        } catch (error) {
+          console.warn("[betterLD] 过滤规则不是合法正则，已忽略", keyword, error);
+          return;
+        }
+        for (const matched of text.matchAll(pattern)) {
+          if (matched[0]) {
+            ranges.push([matched.index, matched.index + matched[0].length]);
+          }
+        }
+        return;
+      }
+      const lower = text.toLocaleLowerCase();
+      const needle = keyword.toLocaleLowerCase();
+      let index = lower.indexOf(needle);
+      while (index >= 0) {
+        ranges.push([index, index + needle.length]);
+        index = lower.indexOf(needle, index + needle.length);
+      }
+    });
+    return ranges.sort((left, right) => left[0] - right[0]);
+  }
+
+  function mergeRanges(ranges) {
+    const merged = [];
+    ranges.forEach(([start, end]) => {
+      const last = merged[merged.length - 1];
+      if (last && start <= last[1]) {
+        last[1] = Math.max(last[1], end);
+        return;
+      }
+      merged.push([start, end]);
+    });
+    return merged;
+  }
+
+  function applyTitleHighlight(card, settings) {
+    const titleElement = card.querySelector(".betterld-topic-card__title");
+    if (!titleElement) {
+      return;
+    }
+    const text = card.dataset.filterTitle || "";
+    const ranges = settings ? mergeRanges(ruleMatchRanges(text, settings.titleRules, settings.matchMode)) : [];
+    if (!ranges.length) {
+      if (titleElement.dataset.betterldHighlight === "true") {
+        titleElement.textContent = text;
+        delete titleElement.dataset.betterldHighlight;
+      }
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    let cursor = 0;
+    ranges.forEach(([start, end]) => {
+      if (start > cursor) {
+        fragment.append(text.slice(cursor, start));
+      }
+      fragment.append(createElement("mark", "betterld-topic-card__hit", text.slice(start, end)));
+      cursor = end;
+    });
+    if (cursor < text.length) {
+      fragment.append(text.slice(cursor));
+    }
+    titleElement.replaceChildren(fragment);
+    titleElement.dataset.betterldHighlight = "true";
+  }
+
+  function applyChipHighlights(card, settings) {
+    card.querySelectorAll(".betterld-topic-card__tag").forEach((tag) => {
+      const name = cleanText(tag.textContent).replace(/^#/, "");
+      const hit = Boolean(settings) && filterRuleMatches(name, settings.tagRules, settings.matchMode);
+      tag.dataset.filterHit = hit ? "true" : "false";
+    });
+    const chip = card.querySelector(".betterld-topic-card__chip");
+    if (chip) {
+      const hit = Boolean(settings) && filterRuleMatches(chip.textContent, settings.categoryRules, settings.matchMode);
+      chip.dataset.filterHit = hit ? "true" : "false";
+    }
+  }
+
+  function updateFilterBin(card, hidden, settings) {
+    if (hidden && settings.enabled && settings.binEnabled) {
+      state.filterBin.add(card);
+    } else {
+      state.filterBin.delete(card);
+    }
+    scheduleFilterBinRender();
+  }
+
+  function scheduleFilterBinRender() {
+    if (state.filterBinFrame) {
+      return;
+    }
+    state.filterBinFrame = window.requestAnimationFrame(() => {
+      state.filterBinFrame = 0;
+      renderFilterBin();
+    });
+  }
+
+  function restoreFilteredCard(card) {
+    card.dataset.filterOverride = "visible";
+    applyCardFilter(card);
+    showActionStatus("已还原该主题", "success");
+  }
+
+  function ensureFilterBinHost() {
+    if (state.filterBinHost) {
+      return state.filterBinHost;
+    }
+    const host = createElement("div", "betterld-filter-bin");
+    host.dataset.betterldFilterBin = "true";
+    const trigger = createElement("button", "betterld-filter-bin__trigger");
+    trigger.type = "button";
+    trigger.setAttribute("aria-expanded", "false");
+    const label = createElement("span", "betterld-filter-bin__label", "已过滤");
+    const count = createElement("span", "betterld-filter-bin__count", "0");
+    trigger.append(label, count);
+    const panel = createElement("div", "betterld-filter-bin__panel");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "已过滤的主题");
+    const title = createElement("p", "betterld-filter-bin__title");
+    const list = createElement("ul", "betterld-filter-bin__list");
+    const restoreAll = createElement("button", "betterld-filter-bin__action", "全部还原");
+    restoreAll.type = "button";
+    restoreAll.addEventListener("click", () => {
+      [...state.filterBin].forEach((card) => {
+        card.dataset.filterOverride = "visible";
+        applyCardFilter(card);
+      });
+      showActionStatus("已还原本页全部过滤项", "success");
+    });
+    panel.append(title, list, restoreAll);
+    trigger.addEventListener("click", () => {
+      state.filterBinOpen = !state.filterBinOpen;
+      renderFilterBin();
+    });
+    host.append(trigger, panel);
+    document.body.append(host);
+    state.filterBinHost = host;
+    return host;
+  }
+
+  function renderFilterBin() {
+    [...state.filterBin].forEach((card) => {
+      if (!card.isConnected) {
+        state.filterBin.delete(card);
+      }
+    });
+    if (!state.filterBin.size) {
+      state.filterBinHost?.remove();
+      state.filterBinHost = null;
+      state.filterBinOpen = false;
+      return;
+    }
+    const host = ensureFilterBinHost();
+    const count = String(state.filterBin.size);
+    host.dataset.open = state.filterBinOpen ? "true" : "false";
+    host.querySelector(".betterld-filter-bin__count").textContent = count;
+    host.querySelector(".betterld-filter-bin__trigger").setAttribute("aria-expanded", String(state.filterBinOpen));
+    host.querySelector(".betterld-filter-bin__title").textContent = `本页已过滤 ${count} 个主题`;
+    host.querySelector(".betterld-filter-bin__list").replaceChildren(...[...state.filterBin].map((card) => {
+      const item = createElement("li", "betterld-filter-bin__item");
+      const text = createElement("span", "betterld-filter-bin__item-title", card.dataset.filterTitle || "未命名主题");
+      const button = createElement("button", "betterld-filter-bin__action", "还原");
+      button.type = "button";
+      button.addEventListener("click", () => restoreFilteredCard(card));
+      item.append(text, button);
+      return item;
+    }));
   }
 
   function applyCardFilter(card) {
@@ -2154,37 +2462,36 @@
     if (!settings.enabled) {
       card.hidden = false;
       card.dataset.filterState = "visible";
+      applyTitleHighlight(card, null);
+      applyChipHighlights(card, null);
+      updateFilterBin(card, false, settings);
       return true;
     }
-    const whitelisted = filterMatchesWhitelist(settings, card.dataset.filterTitle, card.dataset.filterCategory, card.dataset.filterTags);
-    const titleMatch = filterRuleMatches(card.dataset.filterTitle, settings.titleRules, settings.matchMode);
-    const categoryMatch = filterRuleMatches(card.dataset.filterCategory, settings.categoryRules, settings.matchMode);
-    const tagMatch = filterRuleMatches(card.dataset.filterTags, settings.tagRules, settings.matchMode);
-    const authorKnown = card.dataset.authorState !== "loading";
-    const authorMatch = authorKnown && filterRuleMatches(card.dataset.filterAuthor, settings.authorRules, settings.matchMode);
-    const domMatch = titleMatch || categoryMatch || tagMatch;
-    const hasAuthorRules = settings.authorRules.length > 0;
-    const match = domMatch || authorMatch;
-    const pendingAuthor = hasAuthorRules && !authorKnown && !domMatch;
-    const dimmed = settings.mode === "dim" && match;
-    const isIncludeMode = settings.mode === "include";
+    const verdict = cardFilterVerdict(card, settings);
+    const restored = card.dataset.filterOverride === "visible";
     let visible;
     let filterState;
-    if (whitelisted) {
+    if (restored || verdict.whitelisted) {
       visible = true;
       filterState = "visible";
-    } else if (isIncludeMode) {
-      visible = match;
+    } else if (settings.mode === "include") {
+      visible = verdict.match;
       filterState = visible ? "visible" : "hidden";
     } else if (settings.mode === "dim") {
       visible = true;
-      filterState = pendingAuthor ? "pending" : (dimmed ? "dimmed" : "visible");
+      filterState = verdict.pending ? "pending" : (verdict.match ? "dimmed" : "visible");
+    } else if (settings.mode === "highlight") {
+      visible = true;
+      filterState = verdict.pending ? "pending" : (verdict.match ? "highlight" : "visible");
     } else {
-      visible = !match && !pendingAuthor;
-      filterState = pendingAuthor ? "pending" : (visible ? "visible" : "hidden");
+      visible = !verdict.match && !verdict.pending;
+      filterState = verdict.pending ? "pending" : (visible ? "visible" : "hidden");
     }
     card.hidden = !visible;
     card.dataset.filterState = filterState;
+    applyTitleHighlight(card, filterState === "highlight" ? settings : null);
+    applyChipHighlights(card, filterState === "highlight" ? settings : null);
+    updateFilterBin(card, !visible, settings);
     if (visible) {
       observeExcerpt(card);
     }

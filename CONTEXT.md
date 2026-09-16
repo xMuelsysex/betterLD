@@ -95,5 +95,17 @@
 - **Rules/Invariants**：搜索只定位分类与设置项，不修改任何设置值；跨分类跳转后仍保留搜索关键字与结果上下文。
 
 ### Topic Filter
-- **Definition**：在 betterLD 卡片层按规则隐藏、淡化或只显示主题的能力，不改变 LinuxDo 原始查询与分页。
-- **Rules/Invariants**：规则分为标题、分类、标签、作者四轴，另有优先级最高的白名单；四轴共用一种匹配方式（包含关键词 / 完整词匹配 / 正则表达式）；命中行为为隐藏、淡化或只显示；规则组定义只在 `betterld.config.js` 的 `topicRuleGroups` 维护；正则模式下的非法表达式在保存时被拒绝；子分类页面行内可能不渲染标签，标签规则在那里天然不命中。
+- **Definition**：在 betterLD 卡片层按规则隐藏、淡化、高亮或只显示主题的能力，不改变 LinuxDo 原始查询与分页。
+- **Rules/Invariants**：规则分为标题、分类、标签、作者四轴，另有优先级最高的白名单；四轴共用一种匹配方式（包含关键词 / 完整词匹配 / 正则表达式）；命中行为为隐藏、淡化、高亮或只显示；另有按活动天数的旧帖规则与按分类等级（Lv1–Lv3）的等级规则；规则组定义只在 `betterld.config.js` 的 `topicRuleGroups` 维护；正则模式下的非法表达式在保存时被拒绝；主题活动时间取自 `/t/{id}.json`，不解析页面上本地化的相对时间；子分类页面行内可能不渲染标签，标签规则在那里天然不命中。
+
+### Filtered Topics Bin
+- **Definition**：右下角浮层，列出当前页面被过滤隐藏的主题，支持单条还原与全部还原。
+- **Rules/Invariants**：还原是页面级覆盖，不写入存储；规则集（行为、匹配方式、等级、天数、白名单与四轴规则）变化时覆盖自动失效，避免过滤器静默停摆；关闭垃圾桶后命中项在卡片构建阶段就不再生成。
+
+### Server-side Ignore
+- **Definition**：调用 Discourse 的 `PUT /u/{username}/notification_level.json` 在账号层面忽略某个用户。
+- **Rules/Invariants**：只作为卡片菜单里的显式动作提供，执行前必须确认；默认不在菜单中显示，不做自动或批量屏蔽；未拿到作者用户名时不发起请求。
+
+### WebDAV Rule Backup
+- **Definition**：把五组筛选规则上传到 WebDAV 地址，或从该地址下载并追加到现有规则。
+- **Rules/Invariants**：请求统一经后台 service worker 发出并按 origin 申请权限，不依赖页面 CORS；地址只接受 https，http 仅允许环回地址；WebDAV 密码只保存在本地，不进入浏览器同步投影与设置导出文件；下载采用追加 + 去重，不是覆盖。
