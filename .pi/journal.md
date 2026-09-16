@@ -1,5 +1,14 @@
 # betterLD 项目流水
 
+## 2026-09-15：集成服务端屏蔽、等级/旧帖过滤、高亮、垃圾桶与 WebDAV 规则备份
+
+- 服务端 ignore 的接口不从猜：拉社区已验证脚本源码确认是 `PUT /u/{username}/notification_level.json`（表单体 `notification_level=ignore` + `expiring_at` + `acting_user_id`，`X-CSRF-Token` 取自 `meta[name=csrf-token]`），过期时间作为参数放到 `betterld.config.js`。入口是卡片菜单里的显式动作，默认不显示、执行前确认，不做自动批量。
+- 旧帖天数过滤用 `/t/{id}.json` 的 `last_posted_at/bumped_at/created_at`（跟作者请求共用），不解析页面上本地化的相对时间；元数据未到位时按 pending 处理。等级取自分类 slug 的 `-lvN` 类名、回退到分类名后缀。命中行为新增 `highlight`：标题内命中词包 `<mark>`、标签/分类 chip 打 `data-filter-hit`。
+- 垃圾桶在右下角列出本页被隐藏的主题，可单条/全部还原；还原是页面级覆盖，并会在**规则集变化时自动清除**——否则点过一次「全部还原」之后过滤器会静默失效。关闭垃圾桶时命中项回到「构建阶段不生成卡片」的旧优化。
+- WebDAV 规则备份新增 `src/webdav.js`（地址白名单 + Basic + GET/PUT）+ 后台 `webdav` 消息 + `optional_host_permissions`，首次使用按 origin 申请权限；密码不进同步投影与导出文件，导出提示写明不含密码。远程规则 URL 本轮未做，留给主人决定取舍。
+- Orca 真实页面验证：等级过滤（Lv1 隐藏 8 / Lv2 隐藏 1，不符预期 0）、`/top?period=all` 旧帖 30 天隐藏 11（与预期完全一致）、高亮模式标题命中 1 张且只有它有 `<mark>`、垃圾桶 9→8→0 且计数同步、菜单出现服务端屏蔽项且作者未就绪与 404 两种错误提示正常、导出抓包确认密码未泄露。WebDAV 传输层在 Node 下对本机回环替身服务器跑通 PUT/GET/认证/错误分支。
+- 未覆盖：服务端屏蔽的 200 成功路径（会改动主人账号，未执行）、扩展后台 + 权限申请的真实链路（Orca 内置浏览器不能挂载未打包 MV3）、Firefox。`npm run check`（已含 background/webdav）、`git diff --check` 通过。详见 `.pi/tasks/2026-09-15-filter-integration-round2/task.md`。
+
 ## 2026-09-15：主题过滤升级（标签轴 / 匹配模式 / 白名单 / 淡化）
 
 - 先调研 GitHub 与 GreasyFork 上面向 linux.do 的插件与脚本（共 17 个过滤类项目）：社区既定基准是「标题 / 作者 / 分类 / **标签**」四轴，其中 9 个支持标签轴；另有整词与正则匹配、独立白名单、淡化中间态、追加式规则导入。betterLD 原先只有前三轴 + 纯子串匹配 + 隐藏/只显示两种行为。

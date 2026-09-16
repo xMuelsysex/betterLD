@@ -110,6 +110,10 @@
     "drawerCloseOnOverlay",
     "drawerCloseOnEscape",
     "topicFilterEnabled",
+    "topicFilterHideLv1",
+    "topicFilterHideLv2",
+    "topicFilterHideLv3",
+    "topicFilterBinEnabled",
     "searchHistoryEnabled",
     "searchRecommendationEnabled",
     "searchFocusDimming",
@@ -127,12 +131,15 @@
     "shadowHeight",
     "cardMinSize",
     "cardSideGutter",
-    "gridGap"
+    "gridGap",
+    "topicFilterMaxAgeDays"
   ];
-  const textKeys = ["fontFamily", "customCss"];
+  const textKeys = ["fontFamily", "customCss", "webdavUsername", "webdavPassword"];
   const textLimits = {
     fontFamily: limits.fontFamily?.maxLength,
-    customCss: limits.customCss?.maxLength
+    customCss: limits.customCss?.maxLength,
+    webdavUsername: limits.webdavUsername?.maxLength,
+    webdavPassword: limits.webdavPassword?.maxLength
   };
   const enumKeys = Object.keys(enums).filter((key) => key !== "wallpaperRemoteCacheDays");
 
@@ -178,6 +185,29 @@
   function enumValue(key, value) {
     const allowed = enums[key] || [];
     return allowed.includes(value) ? value : defaults[key];
+  }
+
+  function safeWebdavUrl(value) {
+    const input = text(value, "", limits.webdavUrl?.maxLength || 2048);
+    if (!input) {
+      return "";
+    }
+    try {
+      const url = new URL(input);
+      if (url.protocol === "https:") {
+        return url.href;
+      }
+      // http 只允许环回地址，避免凭据在公网明文传输
+      const loopback = url.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+      return loopback ? url.href : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function webdavUrlAllowed(value) {
+    const input = text(value);
+    return !input || Boolean(safeWebdavUrl(input));
   }
 
   function safeHttpsUrl(value) {
@@ -376,7 +406,7 @@
     }
     for (const key of rangedKeys) {
       result[key] = bounded(source[key], limits[key], defaults[key]);
-      if (key === "cardMinSize" || key === "cardSideGutter" || key === "gridGap" || key === "shadowHeight") {
+      if (key === "cardMinSize" || key === "cardSideGutter" || key === "gridGap" || key === "shadowHeight" || key === "topicFilterMaxAgeDays") {
         result[key] = Number(result[key].toFixed(key === "shadowHeight" ? 1 : 0));
       }
     }
@@ -401,6 +431,7 @@
     result.shortcuts = normalizeShortcuts(source.shortcuts);
     result.searchPageWallpaperId = text(source.searchPageWallpaperId, defaults.searchPageWallpaperId, 120);
     result.searchPageWallpaperUrl = safeHttpsUrl(source.searchPageWallpaperUrl);
+    result.webdavUrl = safeWebdavUrl(source.webdavUrl);
     result.searchHistory = normalizeSearchHistory(source.searchHistory);
 
     return result;
@@ -513,8 +544,11 @@
     }
     const settings = normalizeSettings({ ...normalizeSettings(current), ...value });
     const validation = validateSettings(settings);
+    const webdavErrors = text(value.webdavUrl) && !webdavUrlAllowed(value.webdavUrl)
+      ? ["WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址"]
+      : [];
     const ruleErrors = validateRuleArrays(value);
-    const errors = [...ruleErrors, ...validation.errors];
+    const errors = [...webdavErrors, ...ruleErrors, ...validation.errors];
     const rejectedKeys = [];
     if (!validation.valid) {
       rejectedKeys.push("customCss");
@@ -543,7 +577,8 @@
       "wallpaperLocalId",
       "wallpaperRandomDate",
       "wallpaperRandomUrl",
-      "searchHistory"
+      "searchHistory",
+      "webdavPassword"
     ]);
     const result = {};
     for (const [key, item] of Object.entries(settings)) {
@@ -575,6 +610,7 @@
     normalizeSettings,
     normalizeImportedSettings,
     normalizeRules,
+    webdavUrlAllowed,
     validateCustomCss,
     validateSettings,
     toSyncSettings,
