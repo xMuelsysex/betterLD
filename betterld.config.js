@@ -18,6 +18,7 @@ const wallpaperDefaults = Object.freeze({
 
 globalThis.BETTERLD_CONFIG = Object.freeze({
   homepagePath: "/",
+  userProfilePath: "/u/",
   routePollMs: 500,
   syncDebounceMs: 160,
   syncQuotaBytes: 102400,
