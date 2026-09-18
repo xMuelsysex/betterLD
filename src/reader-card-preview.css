@@ -1,0 +1,170 @@
+body.reader-card-preview {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  padding: 48px 32px 64px;
+  box-sizing: border-box;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 10% 0%, rgb(148 190 231 / 0.3), transparent 34rem),
+    radial-gradient(circle at 96% 18%, rgb(196 176 237 / 0.22), transparent 30rem),
+    #eef3f8;
+  color: #1c2733;
+}
+
+.reader-preview-page {
+  width: min(1480px, 100%);
+  margin: 0 auto;
+}
+
+.reader-preview-header {
+  max-width: 760px;
+  margin: 0 auto 32px;
+  text-align: center;
+}
+
+.reader-preview-eyebrow {
+  margin: 0 0 10px;
+  color: #3f6f9c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.reader-preview-header h1 {
+  margin: 0;
+  color: #1a2f43;
+  font-size: clamp(32px, 4vw, 52px);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.reader-preview-header p:last-child {
+  margin: 14px auto 0;
+  color: #5f7285;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.reader-preview-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.reader-preview-legend span,
+.reader-preview-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 1px solid rgb(63 111 156 / 0.18);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.58);
+  color: #5f7285;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+body.reader-card-preview .reader-preview-grid {
+  width: 100%;
+  max-width: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 326px), 1fr));
+  gap: 24px;
+  padding: 0;
+}
+
+body.reader-card-preview .betterld-topic-card--reading {
+  min-height: 230px;
+  /* 宽高比 1 / √2（0.7071 / 1）。 */
+  aspect-ratio: 0.7071 / 1;
+  background: rgb(255 255 255 / 0.84);
+  box-shadow: 0 18px 46px rgb(61 91 119 / 0.14);
+}
+
+.reader-preview-card[data-preview-state="loading"] .betterld-topic-card__excerpt,
+.reader-preview-card[data-preview-state="failed"] .betterld-topic-card__excerpt,
+.reader-preview-card[data-preview-state="empty"] .betterld-topic-card__excerpt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  color: #718396;
+  font-size: 14px;
+  text-align: center;
+}
+
+.reader-preview-card[data-preview-state="failed"] .betterld-topic-card__excerpt {
+  border-color: rgb(177 91 91 / 0.24);
+  background: rgb(177 91 91 / 0.06);
+  color: #a05252;
+}
+
+.reader-preview-card[data-preview-state="empty"] .betterld-topic-card__excerpt {
+  border-style: dashed;
+  background: rgb(63 111 156 / 0.04);
+}
+
+.reader-preview-card .betterld-topic-card__avatar {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(145deg, #91b9d6, #527697);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.reader-preview-card .betterld-topic-card__participant:nth-child(2) {
+  background: linear-gradient(145deg, #d9a5bb, #9d597b);
+}
+
+.reader-preview-card .betterld-topic-card__participant:nth-child(3) {
+  background: linear-gradient(145deg, #b8c99f, #66815d);
+}
+
+.reader-preview-card .betterld-topic-card__participant:nth-child(4) {
+  background: linear-gradient(145deg, #e4bd8f, #a56f39);
+}
+
+.reader-preview-state {
+  margin-left: auto;
+  border-color: transparent;
+  background: rgb(63 111 156 / 0.1);
+  color: #3f6f9c;
+}
+
+.reader-preview-card[data-preview-state="loading"] .reader-preview-state {
+  background: rgb(176 126 43 / 0.12);
+  color: #93691f;
+}
+
+.reader-preview-card[data-preview-state="failed"] .reader-preview-state {
+  background: rgb(177 91 91 / 0.1);
+  color: #a05252;
+}
+
+.reader-preview-card[data-preview-state="empty"] .reader-preview-state {
+  background: rgb(94 123 110 / 0.12);
+  color: #52725f;
+}
+
+.reader-preview-card .betterld-topic-card__reading-action {
+  background: #3f6f9c;
+}
+
+@media (max-width: 720px) {
+  body.reader-card-preview {
+    padding: 32px 16px 48px;
+  }
+
+  body.reader-card-preview .betterld-topic-card--reading {
+    height: 250px;
+    min-height: 250px;
+    aspect-ratio: auto;
+  }
+}

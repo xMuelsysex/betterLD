@@ -7,83 +7,321 @@
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
-    <main class="settings-shell">
-      <header class="settings-header">
-        <p class="eyebrow">betterLD</p>
-        <h1>首页视觉设置</h1>
-        <p>调整 LinuxDo 首页卡片的背景与层次效果。</p>
-      </header>
+    <div class="settings-window">
+      <aside class="settings-rail">
+        <ul id="settings-rail-list" class="settings-rail__list"></ul>
+      </aside>
 
-      <form id="settings-form" class="settings-card">
-        <fieldset class="wallpaper-fieldset">
-          <legend>背景图片</legend>
-          <p id="wallpaper-description" class="section-description">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
-          <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源" aria-describedby="wallpaper-description"></div>
+      <section class="settings-content">
+        <header class="settings-header">
+          <nav id="settings-breadcrumb" class="settings-breadcrumb" aria-label="设置位置"></nav>
+          <div id="settings-search" class="settings-search">
+            <span class="settings-search__icon" aria-hidden="true"></span>
+            <input
+              id="settings-search-input"
+              type="search"
+              placeholder="搜索设置"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls="settings-search-results"
+              aria-expanded="false"
+              autocomplete="off"
+            >
+          </div>
+          <button id="settings-close" class="settings-close" type="button" aria-label="关闭设置" title="关闭设置"></button>
+        </header>
 
-          <section id="wallpaper-random-panel" class="wallpaper-panel" hidden>
-            <h2>网站随机图片</h2>
-            <p>每天固定一张，进入下一天后自动更新。</p>
-            <div id="wallpaper-random-preview" class="wallpaper-random-preview"></div>
-          </section>
+        <div id="settings-scroll" class="settings-scroll">
+          <main class="settings-page">
+            <div class="settings-category-layout">
+              <nav id="settings-subnav" class="settings-subnav" aria-label="设置子分类"></nav>
 
-          <section id="wallpaper-built-in-panel" class="wallpaper-panel" hidden>
-            <h2>内置图片</h2>
-            <div id="wallpaper-catalog" class="wallpaper-catalog"></div>
-          </section>
+              <section class="settings-category-content">
+                <header id="settings-section-heading" class="settings-section-heading"></header>
 
-          <section id="wallpaper-url-panel" class="wallpaper-panel" hidden>
-            <label class="field field-url">
-              <span>图片 URL</span>
-              <input id="wallpaper" name="wallpaper" type="url" inputmode="url" placeholder="https://example.com/image.jpg" autocomplete="off" aria-describedby="wallpaper-url-help">
-              <small id="wallpaper-url-help">只接受 HTTPS 图片地址。</small>
-            </label>
-          </section>
+                <div id="settings-page-body" class="settings-page-body">
+                  <section class="settings-panel" data-panel="general" data-subpanel="theme" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="theme"></div>
+                    </div>
+                  </section>
 
-          <section id="wallpaper-local-panel" class="wallpaper-panel" hidden>
-            <h2>本地图片</h2>
-            <p>图片会压缩后保存在扩展本地，不会上传到 LinuxDo。</p>
-            <div class="local-wallpaper-actions">
-              <button id="choose-wallpaper-file" class="button button-tonal file-button" type="button">选择图片</button>
-              <input id="wallpaper-file" type="file" accept="image/*" aria-label="选择本地背景图片" hidden>
-              <button id="remove-local-wallpaper" class="button button-tonal" type="button" hidden>移除本地图片</button>
+                  <section class="settings-panel" data-panel="general" data-subpanel="surface" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="surface"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="shadowCurve">
+                      <p class="settings-group-card__title">阴影曲线</p>
+                      <p class="settings-group-card__desc">按高度位置调整 betterLD 自有卡片阴影的透明度。</p>
+                      <div class="settings-group-card__surface" data-shadow-curve-editor></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="general" data-subpanel="font" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="font"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="general" data-subpanel="behavior" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="behavior"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="pages" data-subpanel="card" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="card"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="gridColumns">
+                      <p class="settings-group-card__title">断点列数</p>
+                      <p class="settings-group-card__desc">固定网格模式与自动布局在断点不足时使用的列数。</p>
+                      <div class="settings-group-card__surface" data-grid-columns-editor></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="topicCardContextMenu">
+                      <p class="settings-group-card__title">卡片操作菜单</p>
+                      <p class="settings-group-card__desc">控制卡片菜单项的显隐与顺序。</p>
+                      <div class="settings-group-card__surface" data-card-menu-editor></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="pages" data-subpanel="filter" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="filter"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="rules">
+                      <p class="settings-group-card__title">筛选规则</p>
+                      <p class="settings-group-card__desc">五组规则共用上面的命中行为与匹配方式；白名单命中项永不被过滤。</p>
+                      <div class="settings-group-card__surface" data-rule-editors></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="pages" data-subpanel="search" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="search"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="components" data-subpanel="navigation" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="navigation"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="topicNavigation">
+                      <p class="settings-group-card__title">导航项</p>
+                      <p class="settings-group-card__desc">控制主题导航入口的显隐与顺序。</p>
+                      <div class="settings-group-card__surface" data-topic-navigation-editor></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="components" data-subpanel="shell" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="shell"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="components" data-subpanel="actionRail" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="actionRail"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="actionRailItems">
+                      <p class="settings-group-card__title">操作栏项目</p>
+                      <p class="settings-group-card__desc">控制浮动操作栏项目的显隐与顺序。</p>
+                      <div class="settings-group-card__surface" data-action-rail-editor></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="components" data-subpanel="interaction" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="interaction"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="appearance" data-subpanel="wallpaper" hidden>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">背景来源</p>
+                      <p class="settings-group-card__desc">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
+                      <div class="settings-group-card__surface">
+                        <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源" aria-describedby="wallpaper-description"></div>
+                        <p id="wallpaper-description" class="settings-inline-note">图片会压缩后保存在扩展本地，不会上传到 LinuxDo。</p>
+                      </div>
+                    </div>
+
+                    <div class="settings-group-card" id="wallpaper-random-panel" hidden>
+                      <p class="settings-group-card__title">网站随机图片</p>
+                      <p class="settings-group-card__desc">每天固定一张，进入下一天后自动更新。</p>
+                      <div class="settings-group-card__surface">
+                        <div id="wallpaper-random-preview" class="wallpaper-random-preview"></div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group-card" id="wallpaper-built-in-panel" hidden>
+                      <p class="settings-group-card__title">内置图片</p>
+                      <div class="settings-group-card__surface">
+                        <div id="wallpaper-catalog" class="wallpaper-catalog"></div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group-card" id="wallpaper-url-panel" hidden>
+                      <p class="settings-group-card__title">远程图片</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-field" data-field="wallpaperUrl"></div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group-card" id="wallpaper-local-panel" hidden>
+                      <p class="settings-group-card__title">本地图片</p>
+                      <div class="settings-group-card__surface">
+                        <div class="wallpaper-local-actions">
+                          <button id="choose-wallpaper-file" class="settings-button settings-button--tonal" type="button">选择图片</button>
+                          <input id="wallpaper-file" type="file" accept="image/*" aria-label="选择本地背景图片" hidden>
+                          <button id="remove-local-wallpaper" class="settings-button settings-button--tonal" type="button" hidden>移除本地图片</button>
+                        </div>
+                        <div id="wallpaper-local-preview" class="wallpaper-local-preview" hidden>
+                          <img id="wallpaper-local-image" alt="">
+                          <span id="wallpaper-local-name" title=""></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p id="wallpaper-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                  </section>
+
+                  <section class="settings-panel" data-panel="appearance" data-subpanel="effect" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="effect"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="appearance" data-subpanel="customCss" hidden>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">自定义 CSS</p>
+                      <p class="settings-group-card__desc">保存前会执行 CSSOM、选择器和属性白名单校验。</p>
+                      <div class="settings-group-card__surface" data-fields="customCss"></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="shortcuts" data-subpanel="shortcuts" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="shortcuts"></div>
+                    </div>
+                    <div class="settings-group-card" data-editor="shortcutKeys">
+                      <p class="settings-group-card__title">快捷键</p>
+                      <p class="settings-group-card__desc">留空表示不绑定按键。</p>
+                      <div class="settings-group-card__surface" data-shortcut-editor></div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="advanced" data-subpanel="maintenance" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="maintenance"></div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">同步</p>
+                      <p class="settings-group-card__desc">本地壁纸和搜索历史不会同步。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="sync-now" class="settings-button settings-button--tonal" type="button">立即同步</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">WebDAV 规则备份</p>
+                      <p class="settings-group-card__desc">上传与下载五组筛选规则；密码只保存在本地，不进入同步投影。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="webdav-upload" class="settings-button settings-button--tonal" type="button">上传规则</button>
+                          <button id="webdav-download" class="settings-button settings-button--tonal" type="button">下载并追加规则</button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="advanced" data-subpanel="data" hidden>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">设置文件</p>
+                      <p class="settings-group-card__desc">导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="export-settings" class="settings-button settings-button--tonal" type="button">导出设置</button>
+                          <button id="import-settings" class="settings-button settings-button--tonal" type="button">导入设置</button>
+                          <input id="settings-import-file" type="file" accept="application/json,.json" hidden>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">筛选规则文件</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="export-rules" class="settings-button settings-button--tonal" type="button">导出规则</button>
+                          <button id="import-rules" class="settings-button settings-button--tonal" type="button">导入规则</button>
+                          <input id="rules-import-file" type="file" accept="application/json,.json" hidden>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">搜索历史</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="clear-search-history" class="settings-button settings-button--tonal" type="button">清空搜索历史</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p id="maintenance-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                  </section>
+
+                  <section class="settings-panel" data-panel="advanced" data-subpanel="reset" hidden>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">恢复默认</p>
+                      <p class="settings-group-card__desc">恢复默认会立即覆盖当前全部设置，包含壁纸来源与卡片布局。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="reset" class="settings-button settings-button--tonal" type="button">恢复默认设置</button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="about" data-subpanel="about" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface">
+                        <div class="settings-about">
+                          <p id="about-version"></p>
+                          <p id="about-storage"></p>
+                          <p>Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。</p>
+                          <p>
+                            <a href="https://github.com/xMuelsysex/betterLD" target="_blank" rel="noreferrer">项目主页</a>
+                            ·
+                            <a href="https://github.com/xMuelsysex/betterLD/issues" target="_blank" rel="noreferrer">问题反馈</a>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">检查更新</p>
+                      <p class="settings-group-card__desc">比对 GitHub Releases 的最新标签与本地版本号，只做提示，不自动更新；不点击不会发起任何请求。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="check-update" class="settings-button settings-button--tonal" type="button">检查更新</button>
+                        </div>
+                        <p id="update-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </section>
             </div>
-            <div id="wallpaper-local-preview" class="local-wallpaper-preview" hidden>
-              <img id="wallpaper-local-image" alt="">
-              <span id="wallpaper-local-name" title=""></span>
-            </div>
-          </section>
-          <p id="wallpaper-status" class="inline-status" role="status" aria-live="polite"></p>
-        </fieldset>
-
-        <fieldset class="visual-fieldset">
-          <legend>层次效果</legend>
-          <label class="field">
-            <span class="range-label"><span>页面遮罩</span><output id="mask-opacity-value"></output></span>
-            <input id="mask-opacity" name="maskOpacity" type="range" aria-describedby="mask-opacity-help">
-            <small id="mask-opacity-help">范围 0–80%。</small>
-          </label>
-
-          <label class="field">
-            <span class="range-label"><span>背景模糊</span><output id="blur-value"></output></span>
-            <input id="blur" name="blurPx" type="range" aria-describedby="blur-help">
-            <small id="blur-help">范围 0–32px。</small>
-          </label>
-
-          <label class="field">
-            <span class="range-label"><span>卡片透明度</span><output id="card-opacity-value"></output></span>
-            <input id="card-opacity" name="cardOpacity" type="range" aria-describedby="card-opacity-help">
-            <small id="card-opacity-help">范围 55%–95%。</small>
-          </label>
-        </fieldset>
-
-        <div class="actions">
-          <button id="reset" class="button button-tonal" type="button">恢复默认</button>
-          <button class="button button-filled" type="submit">保存设置</button>
+          </main>
         </div>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
-      </form>
-    </main>
+
+        <div id="settings-search-results" class="settings-search-results" role="listbox" hidden></div>
+      </section>
+    </div>
+
+    <p id="settings-status" class="settings-toast" role="status" aria-live="polite" hidden></p>
+
     <script src="../betterld.config.js"></script>
+    <script src="settings.js"></script>
     <script src="options.js"></script>
   </body>
 </html>
