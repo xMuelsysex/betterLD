@@ -6,6 +6,12 @@ const wallpaperModes = Object.freeze({
   local: "local"
 });
 
+// 空值表示不写 order 参数，即 LinuxDo 默认的最后回复（bumped_at）倒序
+const topicSortOrders = Object.freeze({
+  activity: "",
+  created: "created"
+});
+
 const wallpaperDefaults = Object.freeze({
   wallpaper: "",
   wallpaperMode: wallpaperModes.none,
@@ -19,6 +25,8 @@ const wallpaperDefaults = Object.freeze({
 globalThis.BETTERLD_CONFIG = Object.freeze({
   homepagePath: "/",
   userProfilePath: "/u/",
+  topicSortOrderParam: "order",
+  topicSortOrders,
   routePollMs: 500,
   syncDebounceMs: 160,
   syncQuotaBytes: 102400,
@@ -27,6 +35,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   settingsSearchHighlightMs: 2400,
   fontRecommendedStack: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
   listControlsScrollThreshold: 8,
+  scrollTopThreshold: 16,
   excerptRootMargin: "240px 0px",
   excerptMaxCharacters: 2400,
   excerptLoadingLabel: "正在读取正文预览…",
@@ -38,6 +47,31 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestRetryDelayMs: 1500,
   topicRequestRecoveryCount: 1,
   topicRequestRecoveryDelayMs: 10000,
+  // 主题元数据请求统一走全局队列，避免列表页一次性并发几十个 /t/{id}.json 触发站点限速
+  topicRequestConcurrency: 2,
+  topicRequestMinGapMs: 320,
+  // 429/503 且响应没有 Retry-After 时的全局暂停时长
+  topicRequestPauseMs: 60000,
+  // 主题元数据在 sessionStorage 的跨导航缓存：有效期与条目上限
+  topicMetadataCacheTtlMs: 300000,
+  topicMetadataCacheMaxEntries: 120,
+  topicMetadataCachePrefix: "betterld.topic.",
+  undoRefreshStorageKey: "betterld.undo-refresh",
+  undoRefreshSnapshotMaxBytes: 700000,
+  undoRefreshSnapshotTtlMs: 600000,
+  // 刷新后把位置钉回页首的意图键与时间窗：话题页启动时会把自己滚回上次阅读位置
+  refreshScrollTopStorageKey: "betterld.refresh-scroll-top",
+  refreshScrollTopWindowMs: 2500,
+  searchLoadMoreTimeoutMs: 8000,
+  searchNoMoreLabels: ["没有找到更多结果", "没有更多结果", "No more results"],
+  searchHistoryPanelMaxItems: 8,
+  // 点了站点「查看 N 个新的或更新过的话题」后的这段时间内，列表重建时把视图带回页首
+  listRefreshScrollTopWindowMs: 10000,
+  // 已看标记只记在本机，不写服务端；超出上限时丢弃最早的记录
+  visitedTopicStorageKey: "betterld.visited-topics",
+  visitedTopicMaxEntries: 500,
+  // 只在「关于」页显式点击时请求一次，不做自动轮询
+  versionCheckUrl: "https://api.github.com/repos/xMuelsysex/betterLD/releases/latest",
   storageKey: "betterld.settings",
   syncMetadataKey: "betterld.sync-meta",
   wallpaperLocalStorageKey: "betterld.local-wallpaper",
@@ -181,7 +215,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     "openAuthor",
     "ignoreAuthor"
   ]),
-  actionRailItems: Object.freeze(["settings", "theme", "top", "refresh"]),
+  actionRailItems: Object.freeze(["settings", "theme", "layout"]),
+  // 返回顶部与刷新固定在操作栏尾部，它们的显隐分别只由对应的开关决定
+  actionRailTailOrder: 90,
   settingsEnums: Object.freeze({
     themeMode: Object.freeze(["auto", "system", "light", "dark", "scheduled"]),
     fontMode: Object.freeze(["default", "recommended", "custom"]),
@@ -189,6 +225,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     shadowMode: Object.freeze(["default", "none", "custom"]),
     gridMode: Object.freeze(["auto", "fixed"]),
     topicListLayoutMode: Object.freeze(["reading", "cards", "native"]),
+    topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),
     topicAuthorFontSize: Object.freeze(["small", "base", "large"]),
     topicMetaFontSize: Object.freeze(["small", "base", "large"]),
@@ -198,8 +235,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     actionRailPosition: Object.freeze(["left", "right", "bottom"]),
     actionRailVisibility: Object.freeze(["always", "auto", "hidden"]),
     topicCardOpenMode: Object.freeze(["currentTab", "newTab", "background", "drawer"]),
-    navigationOpenMode: Object.freeze(["currentTab", "newTab"]),
-    searchOpenMode: Object.freeze(["currentTab", "newTab"]),
+    navigationOpenMode: Object.freeze(["currentTab", "newTab", "background", "currentTabIfHomepage", "currentTabIfNotHomepage"]),
+    searchOpenMode: Object.freeze(["currentTab", "newTab", "background", "currentTabIfHomepage", "currentTabIfNotHomepage"]),
     notificationOpenMode: Object.freeze(["page", "newTab"]),
     topicFilterMode: Object.freeze(["hide", "dim", "highlight", "include"]),
     topicFilterMatchMode: Object.freeze(["contains", "whole", "regex"]),
@@ -256,8 +293,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "behavior",
           title: "页面行为",
-          description: "触屏目标、横向滚动与未管理页面的范围。",
-          keys: ["touchOptimization", "enableHorizontalNavigationScroll", "showHomeButtonInTouchMode", "applyToUnmanagedPages"]
+          description: "触屏目标与横向滚动的范围。",
+          keys: ["touchOptimization", "enableHorizontalNavigationScroll", "showHomeButtonInTouchMode"]
         }
       ]
     },
@@ -272,6 +309,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           description: "主题信息流的卡片形式、网格、内容显隐与字号。",
           keys: [
             "topicListLayoutMode",
+            "topicSortMode",
             "gridMode",
             "cardMinSize",
             "cardSideGutter",
@@ -280,9 +318,15 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
             "showTopicAuthor",
             "showTopicCategory",
             "showTopicExcerpt",
+            "showTopicTags",
             "showTopicMeta",
+            "showTopicActivityTime",
+            "showTopicReplies",
+            "showTopicLikes",
+            "showTopicViews",
             "showTopicUnreadState",
             "showTopicPinnedState",
+            "showTopicWatchedState",
             "topicTitleFontSize",
             "topicAuthorFontSize",
             "topicMetaFontSize"
@@ -301,6 +345,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           keys: [
             "searchMode",
             "searchHistoryEnabled",
+            "searchHistoryPanelEnabled",
             "searchRecommendationEnabled",
             "searchFocusDimming",
             "searchFocusBlur",
@@ -327,7 +372,18 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "shell",
           title: "Header 与 Sidebar",
           description: "覆盖已确认的原生壳层 surface，不重建原站导航内容。",
-          keys: ["headerVisible", "headerVisualMode", "autoHideHeader", "sidebarPosition", "autoHideSidebar", "showSettingsTrigger", "showThemeToggle"]
+          keys: [
+            "headerVisible",
+            "headerVisualMode",
+            "autoHideHeader",
+            "sidebarPosition",
+            "autoHideSidebar",
+            "showSettingsTrigger",
+            "showThemeToggle",
+            "siteLogoVisible",
+            "siteLogoOutline",
+            "siteLogoGlow"
+          ]
         },
         {
           id: "actionRail",
@@ -467,7 +523,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     customCssEnabled: false,
     customCss: "",
     wallpaperRemoteCacheDays: 0,
-    applyToUnmanagedPages: false,
     gridMode: "auto",
     cardMinSize: 280,
     cardSideGutter: 24,
@@ -484,10 +539,17 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicAuthor: true,
     showTopicCategory: true,
     showTopicExcerpt: true,
+    showTopicTags: true,
     showTopicMeta: true,
+    showTopicActivityTime: true,
+    showTopicReplies: true,
+    showTopicLikes: true,
+    showTopicViews: true,
     showTopicUnreadState: true,
     showTopicPinnedState: true,
+    showTopicWatchedState: true,
     topicListLayoutMode: "reading",
+    topicSortMode: "activity",
     topicCardContextMenuConfig: [
       { key: "openCurrentTab", visible: true, order: 0 },
       { key: "openNewTab", visible: true, order: 1 },
@@ -508,15 +570,17 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     autoHideSidebar: false,
     showSettingsTrigger: true,
     showThemeToggle: true,
+    siteLogoVisible: true,
+    siteLogoOutline: false,
+    siteLogoGlow: false,
     actionRailEnabled: false,
     actionRailPosition: "right",
     actionRailVisibility: "auto",
     actionRailGlow: true,
     actionRailItemsConfig: [
       { key: "settings", visible: true, order: 0 },
-      { key: "theme", visible: false, order: 1 },
-      { key: "top", visible: false, order: 2 },
-      { key: "refresh", visible: false, order: 3 }
+      { key: "layout", visible: true, order: 1 },
+      { key: "theme", visible: false, order: 2 }
     ],
     showBackToTopButton: false,
     showRefreshButton: false,
@@ -543,6 +607,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     topicWhitelistRules: [],
     searchMode: "native",
     searchHistoryEnabled: false,
+    searchHistoryPanelEnabled: false,
     searchRecommendationEnabled: false,
     searchFocusDimming: false,
     searchFocusBlur: false,

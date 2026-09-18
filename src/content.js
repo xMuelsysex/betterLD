@@ -8,6 +8,20 @@
   const normalizeSettings = settingsApi?.normalizeSettings;
   const markdownApi = globalThis.BETTERLD_MARKDOWN;
 
+  // 站点自己的前端请求带这两个指纹头；只带 Accept 时 Cloudflare 会对 *.json 返回 403 质询
+  const discourseAjaxHeaders = Object.freeze({
+    Accept: "application/json",
+    "X-Requested-With": "XMLHttpRequest",
+    "Discourse-Present": "true"
+  });
+
+  // 操作栏布局按钮的循环顺序与提示文案；取值本身以 config.settingsEnums.topicListLayoutMode 为准
+  const topicListLayoutLabels = Object.freeze({
+    reading: "阅读卡",
+    cards: "Material 3 卡片",
+    native: "原生主题列表"
+  });
+
   if (!config || !settingsApi || typeof normalizeSettings !== "function" || typeof markdownApi?.render !== "function" || !api?.storage?.local) {
     console.error("[betterLD] content script could not initialize: extension API is unavailable");
     return;
@@ -21,6 +35,7 @@
   const state = {
     currentHref: "",
     currentSettings: config.settingsDefaults,
+    settingsResolved: false,
     activeStorageArea: "local",
     syncTimer: 0,
     mutating: false,
@@ -28,8 +43,19 @@
     wallpaperState: "default",
     localWallpaper: null,
     remoteWallpaperCache: null,
+    topicSortRedirect: "",
     excerptCache: new Map(),
     excerptObserver: null,
+    cardObserver: null,
+    topicRequestQueue: [],
+    topicRequestActive: 0,
+    topicRequestLastStart: 0,
+    topicRequestPausedUntil: 0,
+    topicRequestPump: 0,
+    topicRequestRecoveryTimer: 0,
+    searchLoadMoreBusy: false,
+    undoRefreshSnapshot: null,
+    refreshScrollTopSince: 0,
     managedSources: new Map(),
     listControlsCollapsed: false,
     lastScrollY: 0,
@@ -46,11 +72,14 @@
     filterBinHost: null,
     filterBinOpen: false,
     filterSignature: "",
+    visitedTopics: new Set(),
+    searchHistoryPanel: null,
+    listRefreshAt: 0,
     toastTimer: 0
   };
 
   function storageGet(keys) {
-    const storageKeys = keys || [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey];
+    const storageKeys = keys || [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.visitedTopicStorageKey];
     if (firefoxApi) {
       return api.storage.local.get(storageKeys);
     }
@@ -192,16 +221,6 @@
     return currentPath() === "/search";
   }
 
-  function isUnmanagedShellPage() {
-    const path = currentPath();
-    return Boolean(state.currentSettings.applyToUnmanagedPages)
-      && !isTopicListPage()
-      && !isCategoriesPage()
-      && !isTagsPage()
-      && !isSearchPage()
-      && !/^\/(?:admin|session|u|messages|t(?:\/|$)|new(?:\/|$))/.test(path);
-  }
-
   function canCacheRemoteWallpaper(settings, url) {
     return Number(settings.wallpaperRemoteCacheDays) > 0 && /^https:/i.test(url);
   }
@@ -301,6 +320,9 @@
     const wallpaperRequest = ++state.wallpaperRequest;
 
     state.currentSettings = settings;
+    if (!options.provisional) {
+      state.settingsResolved = true;
+    }
     const materialSupported = Boolean(
       globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
       || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
@@ -314,9 +336,15 @@
     root.dataset.betterldShowTopicAuthor = String(settings.showTopicAuthor);
     root.dataset.betterldShowTopicCategory = String(settings.showTopicCategory);
     root.dataset.betterldShowTopicExcerpt = String(settings.showTopicExcerpt);
+    root.dataset.betterldShowTopicTags = String(settings.showTopicTags);
     root.dataset.betterldShowTopicMeta = String(settings.showTopicMeta);
+    root.dataset.betterldShowTopicActivityTime = String(settings.showTopicActivityTime);
+    root.dataset.betterldShowTopicReplies = String(settings.showTopicReplies);
+    root.dataset.betterldShowTopicLikes = String(settings.showTopicLikes);
+    root.dataset.betterldShowTopicViews = String(settings.showTopicViews);
     root.dataset.betterldShowTopicUnreadState = String(settings.showTopicUnreadState);
     root.dataset.betterldShowTopicPinnedState = String(settings.showTopicPinnedState);
+    root.dataset.betterldShowTopicWatchedState = String(settings.showTopicWatchedState);
     root.dataset.betterldTopicTitleSize = settings.topicTitleFontSize;
     root.dataset.betterldTopicAuthorSize = settings.topicAuthorFontSize;
     root.dataset.betterldTopicMetaSize = settings.topicMetaFontSize;
@@ -370,7 +398,6 @@
     syncConfiguredLinkModes();
     applyChromeSettings();
     applySearchSettings();
-    document.body?.classList.toggle("betterld-unmanaged-page", isUnmanagedShellPage());
 
     const wallpaperUrl = resolveWallpaper(settings);
     if (!wallpaperUrl) {
@@ -547,11 +574,71 @@
     return currentPath() === "/categories";
   }
 
+  // 热门与最高有各自的排序语义，不接管
+  function hasOwnTopicRanking() {
+    const path = currentPath();
+    return /^\/(?:hot|top)(?:\/|$)/.test(path) || /^\/l\/(?:hot|top)(?:\/|$)/.test(path);
+  }
+
+  // 个人空间的话题列表不在 betterLD 管理的页面集合里，排序靠 Discourse 的 order 参数生效
+  function isUserSpaceTopicListPage() {
+    return /^\/u\/[^/]+\/activity\/topics$/.test(currentPath());
+  }
+
+  function isSortableTopicListPage() {
+    return isUserSpaceTopicListPage() || (isTopicListPage() && !hasOwnTopicRanking());
+  }
+
+  function topicIdFromPath() {
+    return location.pathname.match(/^\/t\/[^/]+\/(\d+)(?:\/|$)/)?.[1] || "";
+  }
+
+  // 已看记录只写本机存储，用于卡片上的「已看」标记，不碰服务端的已读状态
+  function recordVisitedTopic() {
+    const id = topicIdFromPath();
+    if (!id || state.visitedTopics.has(id)) {
+      return;
+    }
+    state.visitedTopics.add(id);
+    const ids = [...state.visitedTopics].slice(-config.visitedTopicMaxEntries);
+    state.visitedTopics = new Set(ids);
+    storageSet({ [config.visitedTopicStorageKey]: ids }).catch((error) => {
+      console.error("[betterLD] visited topic save failed", error);
+    });
+  }
+
+  // 只由 checkRoute 的轮询调用：启动时会先拿默认设置跑一遍，那时不能动 URL
+  function applyTopicSort() {
+    const path = currentPath();
+    if (!state.settingsResolved || !isSortableTopicListPage() || state.topicSortRedirect === path || state.settingsDialog?.dialog?.open) {
+      return;
+    }
+    const orderParam = config.topicSortOrderParam;
+    const orderValue = config.topicSortOrders[state.currentSettings.topicSortMode] || "";
+    const managedValues = Object.values(config.topicSortOrders).filter(Boolean);
+    const url = new URL(location.href);
+    const currentValue = url.searchParams.get(orderParam);
+    if (orderValue) {
+      if (currentValue) {
+        return;
+      }
+      url.searchParams.set(orderParam, orderValue);
+    } else {
+      if (!managedValues.includes(currentValue)) {
+        return;
+      }
+      url.searchParams.delete(orderParam);
+    }
+    state.topicSortRedirect = path;
+    location.replace(url.href);
+  }
+
   function isTagsPage() {
     return currentPath() === "/tags";
   }
 
-  const listControlsSelector = "body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls";
+  // 首页也是主题列表（/ 上是未读列表），导航底板同样要随滚动收起，因此把 betterld-home 一并纳入
+  const listControlsSelector = "body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls";
 
   function pageScrollTop() {
     return Math.max(
@@ -592,7 +679,7 @@
     }
 
     state.lastScrollY = scrollTop;
-    if (scrollTop <= 16) {
+    if (scrollTop <= config.scrollTopThreshold) {
       state.scrollDirection = 0;
       state.scrollDistance = 0;
       if (state.listControlsCollapsed) {
@@ -635,6 +722,7 @@
     const sidebarHidden = settings.autoHideSidebar && !narrow && hidden;
     document.documentElement.dataset.betterldHeaderState = headerHidden ? "hidden" : "visible";
     document.documentElement.dataset.betterldSidebarState = sidebarHidden ? "hidden" : "visible";
+    document.documentElement.dataset.betterldScrollTop = pageScrollTop() <= config.scrollTopThreshold ? "true" : "false";
     const rail = document.querySelector("[data-betterld-action-rail]");
     if (rail) {
       rail.dataset.scrollState = hidden ? "hidden" : "visible";
@@ -651,11 +739,26 @@
     root.dataset.betterldHeaderVisual = settings.headerVisualMode;
     root.dataset.betterldSidebarPosition = settings.sidebarPosition;
     root.dataset.betterldSidebarAutoHide = String(settings.autoHideSidebar);
+    root.dataset.betterldSidebarCover = String(settings.sidebarCoverBlurEnabled);
     root.dataset.betterldNavigationSticky = String(settings.topicNavigationSticky);
     root.dataset.betterldNavigationScroll = String(settings.enableHorizontalNavigationScroll);
+    root.dataset.betterldSiteLogoVisible = String(settings.siteLogoVisible);
+    root.dataset.betterldSiteLogoOutline = String(settings.siteLogoOutline);
+    root.dataset.betterldSiteLogoGlow = String(settings.siteLogoGlow);
     root.dataset.betterldTouchMode = String(touchMode);
     syncChromeScrollState();
     syncTouchHomeButton();
+  }
+
+  // 页面内改动设置的统一出口：规范化后立即写入存储，由 storage.onChanged 驱动运行时应用
+  function persistSettings(patch, statusMessage = "") {
+    state.currentSettings = normalizeSettings({ ...state.currentSettings, ...patch });
+    if (statusMessage) {
+      showActionStatus(statusMessage, "success");
+    }
+    return storageSet({ [config.storageKey]: state.currentSettings }).catch((error) => {
+      console.error("[betterLD] settings save failed", error);
+    });
   }
 
   function recordSearchTerm(value) {
@@ -668,10 +771,236 @@
     const history = [term, ...(state.currentSettings.searchHistory || [])]
       .filter((item, index, values) => values.findIndex((candidate) => candidate.toLocaleLowerCase() === item.toLocaleLowerCase()) === index)
       .slice(0, maxItems);
-    state.currentSettings = normalizeSettings({ ...state.currentSettings, searchHistory: history });
-    storageSet({ [config.storageKey]: state.currentSettings }).catch((error) => {
-      console.error("[betterLD] search history save failed", error);
+    persistSettings({ searchHistory: history });
+  }
+
+  function searchInputs() {
+    return [...document.querySelectorAll('form[action*="/search"] input[name="q"], input.search-query, input.search-term__input, input[name="q"]')]
+      .filter((input) => input instanceof HTMLInputElement);
+  }
+
+  function recommendedSearchTerm(settings) {
+    if (!settings.searchHistoryEnabled) {
+      return "";
+    }
+    const history = Array.isArray(settings.searchHistory) ? settings.searchHistory : [];
+    return cleanText(history[0]);
+  }
+
+  // 推荐词来自本机保存的搜索历史（不请求站点接口）；空白回车会直接搜索该推荐词
+  function syncSearchRecommendation(settings) {
+    const term = settings.searchRecommendationEnabled ? recommendedSearchTerm(settings) : "";
+    searchInputs().forEach((input) => {
+      if (!term) {
+        if (input.dataset.betterldSearchRecommendation) {
+          input.placeholder = input.dataset.betterldPlaceholder || "";
+          delete input.dataset.betterldSearchRecommendation;
+        }
+        return;
+      }
+      if (input.dataset.betterldPlaceholder === undefined) {
+        input.dataset.betterldPlaceholder = input.placeholder || "";
+      }
+      input.placeholder = term;
+      input.dataset.betterldSearchRecommendation = term;
+      if (input.dataset.betterldSearchRecommendationHandler) {
+        return;
+      }
+      input.dataset.betterldSearchRecommendationHandler = "true";
+      // 捕获阶段先补上推荐词，站点自己的回车处理随后就能搜到它
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || input.value.trim()) {
+          return;
+        }
+        const current = input.dataset.betterldSearchRecommendation;
+        if (current) {
+          input.value = current;
+        }
+      }, { capture: true });
     });
+  }
+
+  // 搜索历史浮层：只在输入框聚焦时出现，点击回填并提交、单条删除、清空全部
+  function searchHistoryEntries() {
+    const settings = state.currentSettings;
+    if (!settings.searchHistoryEnabled || !settings.searchHistoryPanelEnabled) {
+      return [];
+    }
+    return (settings.searchHistory || []).slice(0, config.searchHistoryPanelMaxItems);
+  }
+
+  function closeSearchHistoryPanel() {
+    state.searchHistoryPanel?.remove();
+    state.searchHistoryPanel = null;
+  }
+
+  function renderSearchHistoryPanel(input) {
+    const entries = searchHistoryEntries();
+    if (!document.body || !entries.length) {
+      closeSearchHistoryPanel();
+      return;
+    }
+    const reused = state.searchHistoryPanel;
+    const panel = reused || createElement("div", "betterld-search-history");
+    if (!reused) {
+      panel.dataset.betterldSearchHistory = "true";
+      panel.setAttribute("role", "listbox");
+      panel.setAttribute("aria-label", "搜索历史");
+      // 面板内的点击不能让输入框失焦，否则 blur 处理器会把面板先关掉
+      panel.addEventListener("mousedown", (event) => event.preventDefault());
+    }
+    const list = createElement("div", "betterld-search-history__list");
+    entries.forEach((term) => {
+      const row = createElement("div", "betterld-search-history__row");
+      const use = createElement("button", "betterld-search-history__term", term);
+      use.type = "button";
+      use.setAttribute("role", "option");
+      use.addEventListener("click", () => {
+        input.value = term;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        closeSearchHistoryPanel();
+        input.form?.requestSubmit?.();
+      });
+      const remove = createElement("button", "betterld-search-history__remove", "×");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `删除搜索历史：${term}`);
+      remove.addEventListener("click", () => {
+        persistSettings({ searchHistory: (state.currentSettings.searchHistory || []).filter((item) => item !== term) });
+        renderSearchHistoryPanel(input);
+      });
+      row.append(use, remove);
+      list.append(row);
+    });
+    const clear = createElement("button", "betterld-search-history__clear", "清空历史");
+    clear.type = "button";
+    clear.addEventListener("click", () => {
+      if (!globalThis.confirm("清空搜索历史会删除全部已保存的搜索词，是否继续？")) {
+        return;
+      }
+      persistSettings({ searchHistory: [] });
+      closeSearchHistoryPanel();
+    });
+    panel.replaceChildren(list, clear);
+    if (!panel.isConnected) {
+      document.body.append(panel);
+    }
+    state.searchHistoryPanel = panel;
+    const rect = input.getBoundingClientRect();
+    const width = Math.max(Math.round(rect.width), 240);
+    const left = Math.max(8, Math.min(Math.round(rect.left), window.innerWidth - width - 8));
+    panel.style.width = `${width}px`;
+    panel.style.left = `${left}px`;
+    // 先定宽再量高，否则换行后的真实高度会算错，面板会溢出视口底部
+    const height = panel.getBoundingClientRect().height;
+    const below = rect.bottom + 6;
+    panel.style.top = `${Math.round(below + height <= window.innerHeight - 8 ? below : Math.max(8, rect.top - height - 6))}px`;
+  }
+
+  function syncSearchHistoryPanel(settings) {
+    if (!settings.searchHistoryEnabled || !settings.searchHistoryPanelEnabled) {
+      closeSearchHistoryPanel();
+    }
+    searchInputs().forEach((input) => {
+      if (input.dataset.betterldSearchHistoryHandler) {
+        return;
+      }
+      input.dataset.betterldSearchHistoryHandler = "true";
+      input.addEventListener("focus", () => renderSearchHistoryPanel(input));
+      input.addEventListener("blur", () => window.setTimeout(() => {
+        if (!state.searchHistoryPanel?.contains(document.activeElement)) {
+          closeSearchHistoryPanel();
+        }
+      }, 0));
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeSearchHistoryPanel();
+        }
+      });
+    });
+  }
+
+  function hideSearchSentinel(sentinel) {
+    sentinel.style.setProperty("position", "absolute", "important");
+    sentinel.style.setProperty("left", "-10000px", "important");
+    sentinel.style.setProperty("top", "0", "important");
+  }
+
+  function showSearchSentinel(sentinel) {
+    sentinel.style.removeProperty("position");
+    sentinel.style.removeProperty("left");
+    sentinel.style.removeProperty("top");
+  }
+
+  // 翻页模式：隐藏站点的自动加载触点，改用 betterLD 自己的「加载更多结果」按钮；
+  // 点击时把触点恢复到视图内并补发一次 scroll，让站点自己的加载器接住这次请求。
+  function searchResultsExhausted() {
+    const text = document.querySelector(".loading-container")?.textContent.trim();
+    return Boolean(text) && config.searchNoMoreLabels.some((label) => text.includes(label));
+  }
+
+  function searchLoadMoreButton() {
+    return document.querySelector("[data-betterld-search-more]");
+  }
+
+  function syncSearchLoadMoreButton(button) {
+    const exhausted = searchResultsExhausted();
+    button.disabled = exhausted;
+    button.textContent = exhausted ? "没有更多结果" : "加载更多结果";
+  }
+
+  function syncSearchLoadMore(settings, searchPage) {
+    const existing = searchLoadMoreButton();
+    const sentinel = document.querySelector(".load-more-sentinel");
+    const manual = searchPage && settings.searchResultsPaginationMode === "pagination" && sentinel?.parentElement;
+    if (!manual) {
+      existing?.remove();
+      if (sentinel?.style.position) {
+        showSearchSentinel(sentinel);
+      }
+      return;
+    }
+    if (state.searchLoadMoreBusy) {
+      return;
+    }
+    if (!sentinel.style.position) {
+      hideSearchSentinel(sentinel);
+    }
+    if (existing?.isConnected) {
+      syncSearchLoadMoreButton(existing);
+      return;
+    }
+    const button = createElement("button", "betterld-search-more");
+    button.type = "button";
+    button.dataset.betterldSearchMore = "true";
+    button.addEventListener("click", () => {
+      const entries = sentinel.parentElement?.querySelector(".fps-result-entries");
+      const before = entries ? entries.childElementCount : 0;
+      button.disabled = true;
+      state.searchLoadMoreBusy = true;
+      showSearchSentinel(sentinel);
+      sentinel.scrollIntoView({ block: "end", behavior: "auto" });
+      // 站点的加载器挂在 scroll 上，补发一次让它在已经在底部时也能触发
+      window.dispatchEvent(new Event("scroll"));
+      document.dispatchEvent(new Event("scroll"));
+      const observer = new MutationObserver(() => {
+        if ((entries?.childElementCount || 0) > before) {
+          finish();
+        }
+      });
+      const timer = window.setTimeout(finish, config.searchLoadMoreTimeoutMs);
+      function finish() {
+        observer.disconnect();
+        window.clearTimeout(timer);
+        state.searchLoadMoreBusy = false;
+        hideSearchSentinel(sentinel);
+        syncSearchLoadMoreButton(button);
+      }
+      if (entries) {
+        observer.observe(entries, { childList: true });
+      }
+    });
+    syncSearchLoadMoreButton(button);
+    sentinel.parentElement.append(button);
   }
 
   function applySearchSettings() {
@@ -683,12 +1012,14 @@
     root.dataset.betterldSearchFocusDimming = String(settings.searchFocusDimming);
     root.dataset.betterldSearchFocusBlur = String(settings.searchFocusBlur);
     root.dataset.betterldSearchPagination = settings.searchResultsPaginationMode;
+    syncSearchRecommendation(settings);
+    syncSearchHistoryPanel(settings);
+    syncSearchLoadMore(settings, searchPage);
     if (!searchPage) {
       delete root.dataset.betterldSearchFocused;
       return;
     }
-    const inputs = [...document.querySelectorAll('form[action*="/search"] input[name="q"], input.search-query, input[name="q"]')]
-      .filter((input) => input instanceof HTMLInputElement);
+    const inputs = searchInputs();
     inputs.forEach((input) => {
       if (input.dataset.betterldSearchHandler) {
         return;
@@ -1037,9 +1368,26 @@
     }
   }
 
+  // 页面内切换卡片布局：取值顺序以 config.settingsEnums.topicListLayoutMode 为准
+  function cycleTopicListLayout() {
+    const order = config.settingsEnums.topicListLayoutMode;
+    const current = state.currentSettings.topicListLayoutMode;
+    const next = order[(order.indexOf(current) + 1) % order.length];
+    persistSettings({ topicListLayoutMode: next }, `卡片样式：${topicListLayoutLabels[next] || next}`);
+    syncFloatingActions();
+  }
+
   function createActionButton(key) {
-    const labels = { settings: "设置", theme: "主题", top: "返回顶部", refresh: "刷新" };
-    const icons = { settings: "⚙", theme: "☼", top: "↑", refresh: "↻" };
+    const layoutLabel = topicListLayoutLabels[state.currentSettings.topicListLayoutMode] || "";
+    const labels = {
+      settings: "设置",
+      theme: "主题",
+      layout: layoutLabel ? `切换卡片样式（当前：${layoutLabel}）` : "切换卡片样式",
+      top: "返回顶部",
+      refresh: "刷新",
+      undoRefresh: "撤销刷新"
+    };
+    const icons = { settings: "⚙", theme: "☼", layout: "⊞", top: "↑", refresh: "↻", undoRefresh: "↶" };
     const button = createElement("button", "betterld-action-rail__button");
     button.type = "button";
     button.dataset.betterldAction = key;
@@ -1049,6 +1397,8 @@
     button.addEventListener("click", () => {
       if (key === "settings") {
         openSettingsPage();
+      } else if (key === "layout") {
+        cycleTopicListLayout();
       } else if (key === "theme") {
         const nativeToggle = document.querySelector("[data-theme-toggle], #toggle-dark-mode, .toggle-dark-mode");
         if (nativeToggle) {
@@ -1059,10 +1409,147 @@
       } else if (key === "top") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (key === "refresh") {
-        location.reload();
+        refreshWithUndoSnapshot();
+      } else if (key === "undoRefresh") {
+        if (restoreUndoRefreshSnapshot()) {
+          state.undoRefreshSnapshot = null;
+          syncFloatingActions();
+          showActionStatus("已恢复刷新前的列表");
+        }
       }
     });
     return button;
+  }
+
+  // 合并后的「返回顶部或刷新」：两项各自是否可用决定图标与点击行为，未到顶部显示向上箭头，已在顶部显示刷新图标
+  function createMergedNavigationButton(showTop, showRefresh) {
+    const button = createElement("button", "betterld-action-rail__button");
+    button.type = "button";
+    button.dataset.betterldAction = "topOrRefresh";
+    button.setAttribute("aria-label", "返回顶部或刷新");
+    button.title = "返回顶部或刷新";
+    if (showTop) {
+      button.append(createElement("span", "betterld-action-rail__icon", "↑"));
+    }
+    if (showRefresh) {
+      button.append(createElement("span", "betterld-action-rail__icon", "↻"));
+    }
+    button.addEventListener("click", () => {
+      if (showTop && pageScrollTop() > config.scrollTopThreshold) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (showRefresh) {
+        refreshWithUndoSnapshot();
+      }
+    });
+    return button;
+  }
+
+  function snapshotHref() {
+    return `${location.origin}${location.pathname}${location.search}`;
+  }
+
+  function readUndoRefreshSnapshot() {
+    try {
+      const stored = sessionStorage.getItem(config.undoRefreshStorageKey);
+      if (!stored) {
+        return null;
+      }
+      const entry = JSON.parse(stored);
+      if (!entry?.html || entry.url !== snapshotHref() || Date.now() - Number(entry.at || 0) > config.undoRefreshSnapshotTtlMs) {
+        return null;
+      }
+      return entry;
+    } catch (error) {
+      console.warn("[betterLD] undo refresh snapshot read failed", error);
+      return null;
+    }
+  }
+
+  function captureUndoRefreshSnapshot() {
+    const grid = document.querySelector('[data-betterld-grid="true"]');
+    if (!state.currentSettings.enableUndoRefresh || !grid?.childElementCount) {
+      return;
+    }
+    const html = grid.outerHTML;
+    if (html.length > config.undoRefreshSnapshotMaxBytes) {
+      console.warn("[betterLD] undo refresh snapshot skipped: the card grid is too large");
+      return;
+    }
+    try {
+      sessionStorage.setItem(config.undoRefreshStorageKey, JSON.stringify({
+        url: snapshotHref(),
+        at: Date.now(),
+        scrollY: pageScrollTop(),
+        html
+      }));
+    } catch (error) {
+      console.warn("[betterLD] undo refresh snapshot write failed", error);
+    }
+  }
+
+  function refreshWithUndoSnapshot() {
+    captureUndoRefreshSnapshot();
+    markRefreshScrollTop();
+    location.reload();
+  }
+
+  function markRefreshScrollTop() {
+    try {
+      sessionStorage.setItem(config.refreshScrollTopStorageKey, String(Date.now()));
+    } catch (error) {
+      console.warn("[betterLD] refresh scroll intent write failed", error);
+    }
+  }
+
+  function clearRefreshScrollTop() {
+    try {
+      sessionStorage.removeItem(config.refreshScrollTopStorageKey);
+    } catch (error) {
+      console.warn("[betterLD] refresh scroll intent clear failed", error);
+    }
+  }
+
+  // 刷新后回到页首：站点启动时会把话题页滚回上次阅读位置，浏览器也可能恢复滚动位置。
+  // 意图在刷新前写入，由刷新后的页面接管；接管后的时间窗内把位置钉在顶部（已在顶部时不动作）。
+  function enforceRefreshScrollTop() {
+    if (!state.refreshScrollTopSince) {
+      let pending = 0;
+      try {
+        pending = Number(sessionStorage.getItem(config.refreshScrollTopStorageKey)) || 0;
+      } catch (error) {
+        return;
+      }
+      if (!pending) {
+        return;
+      }
+      clearRefreshScrollTop();
+      state.refreshScrollTopSince = Date.now();
+    }
+    if (Date.now() - state.refreshScrollTopSince > config.refreshScrollTopWindowMs) {
+      return;
+    }
+    if (pageScrollTop() > config.scrollTopThreshold) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }
+
+  function restoreUndoRefreshSnapshot() {
+    const snapshot = readUndoRefreshSnapshot();
+    const grid = document.querySelector('[data-betterld-grid="true"]');
+    if (!snapshot || !grid) {
+      return false;
+    }    const holder = document.createElement("template");
+    holder.innerHTML = snapshot.html.trim();
+    const restored = holder.content.firstElementChild;
+    if (!restored?.children.length) {
+      return false;
+    }
+    // 只替换网格内容，保留当前网格元素本身，避免 managedSources 里留下失效引用
+    grid.replaceChildren(...restored.children);
+    clearRefreshScrollTop();
+    window.scrollTo({ top: Number(snapshot.scrollY) || 0, behavior: "auto" });
+    sessionStorage.removeItem(config.undoRefreshStorageKey);
+    return true;
   }
 
   function syncFloatingActions() {
@@ -1070,7 +1557,13 @@
       return;
     }
     const settings = state.currentSettings;
-    const needsRail = settings.actionRailEnabled || settings.showBackToTopButton || settings.showRefreshButton;
+    const href = snapshotHref();
+    if (!settings.enableUndoRefresh) {
+      state.undoRefreshSnapshot = null;
+    } else if (state.undoRefreshSnapshot?.url !== href) {
+      state.undoRefreshSnapshot = readUndoRefreshSnapshot();
+    }
+    const needsRail = settings.actionRailEnabled || settings.showBackToTopButton || settings.showRefreshButton || Boolean(state.undoRefreshSnapshot);
     let rail = document.querySelector("[data-betterld-action-rail]");
     if (!needsRail) {
       rail?.remove();
@@ -1091,14 +1584,37 @@
     rail.dataset.glow = String(settings.actionRailGlow);
     rail.replaceChildren();
     const configured = Array.isArray(settings.actionRailItemsConfig) ? settings.actionRailItemsConfig : [];
+    const mergedNavigationActions = !settings.separateNavigationActions;
+    // 返回顶部与刷新只由各自的开关决定，不再叠一层「操作栏项目里是否可见」，否则开关打开也看不到按钮
+    const mergedTop = settings.showBackToTopButton;
+    const mergedRefresh = settings.showRefreshButton;
     configured.forEach((entry) => {
-      if (!entry.visible || (entry.key === "settings" && !settings.showSettingsTrigger) || (entry.key === "theme" && !settings.showThemeToggle) || (entry.key === "top" && !settings.showBackToTopButton) || (entry.key === "refresh" && !settings.showRefreshButton)) {
+      if (!entry.visible || (entry.key === "settings" && !settings.showSettingsTrigger) || (entry.key === "theme" && !settings.showThemeToggle)) {
         return;
       }
       const button = createActionButton(entry.key);
       button.style.order = String(entry.order);
       rail.append(button);
     });
+    if (mergedNavigationActions && (mergedTop || mergedRefresh)) {
+      const merged = createMergedNavigationButton(mergedTop, mergedRefresh);
+      merged.style.order = String(config.actionRailTailOrder);
+      rail.append(merged);
+    } else {
+      if (mergedTop) {
+        const button = createActionButton("top");
+        button.style.order = String(config.actionRailTailOrder);
+        rail.append(button);
+      }
+      if (mergedRefresh) {
+        const button = createActionButton("refresh");
+        button.style.order = String(config.actionRailTailOrder + 1);
+        rail.append(button);
+      }
+    }
+    if (state.undoRefreshSnapshot) {
+      rail.append(createActionButton("undoRefresh"));
+    }
     if (!rail.childElementCount) {
       rail.remove();
       ensureSettingsTrigger();
@@ -1185,30 +1701,22 @@
     return suffix ? Number(suffix[1]) : 0;
   }
 
-  function compactMeta(item) {
-    const selectors = [
-      ".topic-list-data.num.posts",
-      ".topic-list-data.posts",
-      ".topic-list-data.activity",
-      ".num.posts",
-      ".posts",
-      ".activity",
-      ".last-posted-at",
-      ".relative-date"
+  // 元信息拆成「回复数」与「活动时间」两段，以便单独显隐；分隔符由 CSS 负责
+  function compactMetaParts(item) {
+    const groups = [
+      { kind: "replies", selectors: [".topic-list-data.num.posts", ".topic-list-data.posts", ".num.posts", ".posts"] },
+      { kind: "activity", selectors: [".topic-list-data.activity", ".activity", ".last-posted-at", ".relative-date"] }
     ];
-    const values = [];
-
-    for (const selector of selectors) {
-      const value = cleanText(item.querySelector(selector)?.textContent);
-      if (value && !values.includes(value)) {
-        values.push(value);
+    const parts = [];
+    groups.forEach((group) => {
+      const text = group.selectors
+        .map((selector) => cleanText(item.querySelector(selector)?.textContent))
+        .find((value) => value && !parts.some((part) => part.text === value));
+      if (text) {
+        parts.push({ kind: group.kind, text });
       }
-      if (values.length === 2) {
-        break;
-      }
-    }
-
-    return values.join(" · ") || " ";
+    });
+    return parts;
   }
 
   function createCard(item) {
@@ -1235,7 +1743,17 @@
     });
     applyAuthorIdentity(authorElement, author);
     const chip = createElement("span", "betterld-topic-card__chip", category.name);
-    const meta = createElement("span", "betterld-topic-card__meta", compactMeta(item));
+    const meta = createElement("span", "betterld-topic-card__meta");
+    compactMetaParts(item).forEach((part, index) => {
+      if (index) {
+        const separator = createElement("span", "betterld-topic-card__meta-separator", " · ");
+        separator.setAttribute("aria-hidden", "true");
+        meta.append(separator);
+      }
+      const element = createElement("span", "betterld-topic-card__meta-part", part.text);
+      element.dataset.betterldMetaPart = part.kind;
+      meta.append(element);
+    });
 
     if (isReadingCard) {
       title.href = topic.href;
@@ -1271,6 +1789,12 @@
       card.classList.add("is-pinned");
       const badge = createElement("span", "betterld-topic-card__badge", "置顶");
       badge.dataset.betterldBadge = "pinned";
+      badges.append(badge);
+    }
+    // 已看标记只来自本机浏览记录，不读服务端的已读状态
+    if (topic.id && state.visitedTopics.has(topic.id)) {
+      const badge = createElement("span", "betterld-topic-card__badge", "已看");
+      badge.dataset.betterldBadge = "watched";
       badges.append(badge);
     }
     if (category.color) {
@@ -1474,12 +1998,13 @@
     });
   }
 
-  async function openTopicBackground(url) {
-    const safeUrl = safeTopicUrl(url);
+  // 后台标签页打开：只接受同站链接，实际创建标签页由后台 service worker 完成
+  async function openBackgroundLink(url) {
+    const safeUrl = safeSiteUrl(url);
     if (!safeUrl) {
-      throw new Error("后台打开目标不是有效的 LinuxDo 主题链接");
+      throw new Error("后台打开目标不是有效的 LinuxDo 链接");
     }
-    const response = await sendRuntimeMessage({ type: "open-topic", url: safeUrl, active: false });
+    const response = await sendRuntimeMessage({ type: "open-link", url: safeUrl, active: false });
     if (!response?.ok) {
       throw new Error(response?.error || "后台标签页打开失败");
     }
@@ -1586,6 +2111,7 @@
       method: "PUT",
       credentials: "same-origin",
       headers: {
+        ...discourseAjaxHeaders,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-CSRF-Token": token
       },
@@ -1633,7 +2159,7 @@
         return;
       }
       if (action === "openBackground") {
-        await openTopicBackground(topicUrl);
+        await openBackgroundLink(topicUrl);
         showActionStatus("已在后台打开主题", "success");
         return;
       }
@@ -1700,7 +2226,7 @@
       return;
     }
     if (mode === "background") {
-      openTopicBackground(topicUrl)
+      openBackgroundLink(topicUrl)
         .then(() => showActionStatus("已在后台打开主题", "success"))
         .catch((error) => showActionStatus(error instanceof Error ? error.message : "后台标签页打开失败"));
       return;
@@ -1867,49 +2393,177 @@
       .slice(0, 4);
   }
 
+  // 单次请求：重试交给卡片层（带延迟）、限速退避交给全局队列，不再在这里自旋
   async function fetchTopicMetadata(topicId) {
     const endpoint = new URL(`/t/${topicId}.json`, location.origin);
     endpoint.searchParams.set("include_raw", "1");
-    let lastError;
+    const response = await fetch(endpoint.href, {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: discourseAjaxHeaders
+    });
 
-    for (let attempt = 0; attempt <= config.topicRequestRetryCount; attempt += 1) {
-      try {
-        const response = await fetch(endpoint.href, {
-          credentials: "same-origin",
-          cache: "no-store",
-          headers: { Accept: "application/json" }
-        });
-
-        if (!response.ok) {
-          throw new Error(`topic request failed with ${response.status}`);
-        }
-
-        const data = await response.json();
-        const post = data?.post_stream?.posts?.[0];
-        const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
-        const cooked = String(post?.cooked || "").trim();
-        const text = plainText(cooked || raw);
-        const markdown = raw || text;
-        const contentState = markdown ? "ready" : "empty";
-        return {
-          text: contentState === "ready" ? text || markdown : config.excerptEmptyLabel,
-          markdown,
-          contentState,
-          author: cleanText(data?.details?.created_by?.username),
-          activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
-          stats: topicStats(data),
-          participants: topicParticipants(data)
-        };
-      } catch (error) {
-        lastError = error;
-        if (attempt >= config.topicRequestRetryCount) {
-          throw error;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, config.topicRequestRetryDelayMs * (attempt + 1)));
-      }
+    if (isRateLimitResponse(response)) {
+      const error = rateLimitedError(response);
+      pauseTopicRequests(error.retryAfterMs);
+      throw error;
+    }
+    if (!response.ok) {
+      throw new Error(`topic request failed with ${response.status}`);
     }
 
-    throw lastError;
+    const data = await response.json();
+    const post = data?.post_stream?.posts?.[0];
+    const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
+    const cooked = String(post?.cooked || "").trim();
+    const text = plainText(cooked || raw);
+    const markdown = raw || text;
+    const contentState = markdown ? "ready" : "empty";
+    return {
+      text: contentState === "ready" ? text || markdown : config.excerptEmptyLabel,
+      markdown,
+      contentState,
+      author: cleanText(data?.details?.created_by?.username),
+      activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
+      stats: topicStats(data),
+      participants: topicParticipants(data)
+    };
+  }
+
+  function rateLimitedError(response) {    const error = new Error(`topic request rate limited with ${response.status}`);
+    error.rateLimited = true;
+    error.retryAfterMs = retryAfterMs(response);
+    return error;
+  }
+
+  function retryAfterMs(response) {
+    const header = Number(response.headers.get("Retry-After"));
+    return Number.isFinite(header) && header > 0 ? header * 1000 : config.topicRequestPauseMs;
+  }
+
+  // 429/503 是站点限速；403 带 cf-mitigated: challenge 是 Cloudflare 质询，两者都按暂停处理
+  function isRateLimitResponse(response) {
+    return response.status === 429
+      || response.status === 503
+      || (response.status === 403 && response.headers.get("cf-mitigated") === "challenge");
+  }
+
+  function pauseTopicRequests(waitMs) {
+    const until = Date.now() + waitMs;
+    if (until <= state.topicRequestPausedUntil) {
+      return;
+    }
+    state.topicRequestPausedUntil = until;
+    console.warn(`[betterLD] topic requests paused for ${waitMs}ms after a rate limit response`);
+    window.clearTimeout(state.topicRequestPump);
+    state.topicRequestPump = 0;
+    // 暂停期间不再把已排队的请求发出去，只保留一次补扫，避免限速后成倍放大请求
+    state.topicRequestQueue.splice(0).forEach((entry) => entry.reject(entry.error));
+    scheduleRateLimitRecovery(waitMs);
+  }
+
+  function scheduleRateLimitRecovery(waitMs) {
+    window.clearTimeout(state.topicRequestRecoveryTimer);
+    state.topicRequestRecoveryTimer = window.setTimeout(() => {
+      state.topicRequestRecoveryTimer = 0;
+      reloadFailedCards();
+    }, waitMs + config.topicRequestRetryDelayMs);
+  }
+
+  function reloadFailedCards() {
+    document.querySelectorAll(".betterld-topic-card").forEach((card) => {
+      const topicId = card.dataset.topicId;
+      if (!topicId || !card.isConnected) {
+        return;
+      }
+      if (card.dataset.authorState === "failed") {
+        card.dataset.authorRetryCount = "0";
+        card.dataset.authorState = "loading";
+        setAuthor(card, config.authorLoadingLabel, "loading");
+      }
+      if (card.dataset.excerptState === "failed") {
+        card.dataset.excerptRetryCount = "0";
+        card.dataset.excerptState = "loading";
+        card.setAttribute("aria-busy", "true");
+        setExcerpt(card, config.excerptLoadingLabel, "loading");
+      }
+      state.excerptCache.delete(topicId);
+      observeCard(card);
+    });
+  }
+
+  function pumpTopicRequests() {
+    if (state.topicRequestPump) {
+      return;
+    }
+    while (state.topicRequestActive < config.topicRequestConcurrency && state.topicRequestQueue.length) {
+      const now = Date.now();
+      const wait = Math.max(state.topicRequestLastStart + config.topicRequestMinGapMs - now, state.topicRequestPausedUntil - now);
+      if (wait > 0) {
+        state.topicRequestPump = window.setTimeout(() => {
+          state.topicRequestPump = 0;
+          pumpTopicRequests();
+        }, wait);
+        return;
+      }
+      const entry = state.topicRequestQueue.shift();
+      state.topicRequestLastStart = now;
+      state.topicRequestActive += 1;
+      entry.run()
+        .then(entry.resolve, entry.reject)
+        .finally(() => {
+          state.topicRequestActive -= 1;
+          pumpTopicRequests();
+        });
+    }
+  }
+
+  function enqueueTopicRequest(run, placeholder) {
+    return new Promise((resolve, reject) => {
+      state.topicRequestQueue.push({ run, resolve, reject, error: placeholder });
+      pumpTopicRequests();
+    });
+  }
+
+  function pruneTopicMetadataCache() {
+    const prefix = config.topicMetadataCachePrefix;
+    const keys = [];
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(prefix)) {
+        keys.push(key);
+      }
+    }
+    while (keys.length > config.topicMetadataCacheMaxEntries) {
+      sessionStorage.removeItem(keys.shift());
+    }
+  }
+
+  function readTopicMetadataCache(topicId) {
+    try {
+      const stored = sessionStorage.getItem(config.topicMetadataCachePrefix + topicId);
+      if (!stored) {
+        return null;
+      }
+      const entry = JSON.parse(stored);
+      if (!entry || Date.now() - Number(entry.at || 0) > config.topicMetadataCacheTtlMs) {
+        sessionStorage.removeItem(config.topicMetadataCachePrefix + topicId);
+        return null;
+      }
+      return entry.metadata || null;
+    } catch (error) {
+      console.warn("[betterLD] topic metadata cache read failed", error);
+      return null;
+    }
+  }
+
+  function writeTopicMetadataCache(topicId, metadata) {
+    try {
+      sessionStorage.setItem(config.topicMetadataCachePrefix + topicId, JSON.stringify({ at: Date.now(), metadata }));
+      pruneTopicMetadataCache();
+    } catch (error) {
+      console.warn("[betterLD] topic metadata cache write failed", error);
+    }
   }
 
   function requestTopicMetadata(topicId) {
@@ -1917,20 +2571,29 @@
     if (cached?.state === "ready") {
       return Promise.resolve(cached);
     }
-    if (cached?.state === "failed") {
-      state.excerptCache.delete(topicId);
-    }
     if (cached?.state === "pending") {
       return cached.promise;
     }
+    if (cached) {
+      state.excerptCache.delete(topicId);
+    }
 
-    const promise = fetchTopicMetadata(topicId)
+    const restored = readTopicMetadataCache(topicId);
+    if (restored) {
+      state.excerptCache.set(topicId, { state: "ready", ...restored });
+      return Promise.resolve(state.excerptCache.get(topicId));
+    }
+
+    const rateLimited = new Error(`topic request skipped for ${topicId} after a rate limit response`);
+    rateLimited.rateLimited = true;
+    const promise = enqueueTopicRequest(() => fetchTopicMetadata(topicId), rateLimited)
       .then((metadata) => {
+        writeTopicMetadataCache(topicId, metadata);
         state.excerptCache.set(topicId, { state: "ready", ...metadata });
         return metadata;
       })
       .catch((error) => {
-        state.excerptCache.set(topicId, { state: "failed", error });
+        state.excerptCache.set(topicId, { state: error.rateLimited ? "rate-limited" : "failed", error });
         throw error;
       });
 
@@ -1969,11 +2632,12 @@
     if (!container) {
       return;
     }
-    const icons = { comment: "▢", heart: "♡", views: "◉" };
     container.replaceChildren(...(Array.isArray(stats) ? stats : []).map((stat) => {
       const item = createElement("span", "betterld-topic-card__reading-stat");
-      const icon = createElement("span", "betterld-topic-card__reading-stat-icon", icons[stat.icon] || "•");
+      const icon = createElement("span", "betterld-topic-card__reading-stat-icon");
       const value = createElement("span", "betterld-topic-card__reading-stat-value", String(stat.value));
+      item.dataset.betterldStat = stat.key;
+      icon.dataset.betterldStatIcon = stat.icon;
       icon.setAttribute("aria-hidden", "true");
       item.setAttribute("aria-label", `${stat.label} ${stat.value}`);
       item.append(icon, value);
@@ -2073,6 +2737,9 @@
       .catch((error) => {
         console.warn(`[betterLD] topic creator unavailable for topic ${topicId}`, error);
         setAuthor(card, config.authorPlaceholder, "failed");
+        if (error.rateLimited) {
+          return;
+        }
         const retryCount = Number(card.dataset.authorRetryCount || 0);
         if (!card.isConnected) {
           return;
@@ -2108,6 +2775,9 @@
       .catch((error) => {
         console.warn(`[betterLD] topic excerpt unavailable for topic ${topicId}`, error);
         setExcerpt(card, config.excerptPlaceholder, "failed");
+        if (error.rateLimited) {
+          return;
+        }
         const retryCount = Number(card.dataset.excerptRetryCount || 0);
         if (!card.isConnected) {
           return;
@@ -2143,13 +2813,35 @@
     loadExcerpt(card);
   }
 
+  function needsAllTopicActivity() {
+    return state.currentSettings.topicFilterEnabled && Number(state.currentSettings.topicFilterMaxAgeDays) > 0;
+  }
+
+  function loadCardMetadata(card) {
+    loadAuthor(card);
+    observeExcerpt(card);
+  }
+
+  function ensureAuthorMetadata(card) {
+    if (needsAllTopicActivity() || !state.cardObserver) {
+      loadAuthor(card);
+      return;
+    }
+    state.cardObserver.observe(card);
+  }
+
   function observeCard(card) {
     applyCardFilter(card);
     if (!card.dataset.topicId) {
       return;
     }
-    loadAuthor(card);
-    observeExcerpt(card);
+    // 只有「按活动天数过滤」才需要整列表的活动时间；其余情况按视口加载，
+    // 避免一屏之外的几十个主题在页面加载时同时请求 /t/{id}.json。
+    if (needsAllTopicActivity() || !state.cardObserver) {
+      loadCardMetadata(card);
+      return;
+    }
+    state.cardObserver.observe(card);
   }
 
   function resetFilterOverrides(settings) {
@@ -2182,7 +2874,7 @@
     document.querySelectorAll('[data-betterld-grid="true"] .betterld-topic-card').forEach((card) => {
       applyCardFilter(card);
       if (card.dataset.authorState === "loading") {
-        loadAuthor(card);
+        ensureAuthorMetadata(card);
       }
       observeExcerpt(card);
       card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || card.dataset.excerptState === "loading"));
@@ -2584,12 +3276,19 @@
 
   function itemSignature(item) {
     const topic = topicInfo(item);
+    // 站点重渲染过程中会出现没有主题链接的行（也没有任何主题信息）；不能让它把整份签名算崩，
+    // 否则 syncHomepage 每次抛错，列表再也不重建（表现为刷新后看不到新帖，直到重载页面）
+    if (!topic) {
+      return "";
+    }
     const avatar = item.querySelector(".topic-avatar img, .posters img.avatar, .avatar img, img.avatar");
     return JSON.stringify({
       topic,
       author: authorName(item),
       category: categoryInfo(item),
-      meta: compactMeta(item),
+      meta: compactMetaParts(item).map((part) => `${part.kind}:${part.text}`).join(" · "),
+      // 已看标记参与签名：浏览记录是异步读出来的，集合变化后必须重建卡片才会出现标记
+      watched: state.visitedTopics.has(topic.id),
       avatar: avatar?.currentSrc || avatar?.src || "",
       className: item.className
     });
@@ -2600,10 +3299,13 @@
   }
 
   function unobserveGrid(grid) {
-    if (!state.excerptObserver) {
+    const observers = [state.excerptObserver, state.cardObserver].filter(Boolean);
+    if (!observers.length) {
       return;
     }
-    grid.querySelectorAll(".betterld-topic-card").forEach((card) => state.excerptObserver.unobserve(card));
+    grid.querySelectorAll(".betterld-topic-card").forEach((card) => {
+      observers.forEach((observer) => observer.unobserve(card));
+    });
   }
 
   function removeGridElement(grid) {
@@ -2664,6 +3366,7 @@
       if (path === "/" || path.startsWith("/latest")) return "latest";
       if (path.startsWith("/new")) return "new";
       if (path.startsWith("/unread")) return "unread";
+      if (path.startsWith("/unseen")) return "unseen";
       if (path.startsWith("/hot")) return "hot";
       if (path.startsWith("/top")) return "top";
       if (path.startsWith("/posted")) return "posted";
@@ -2676,15 +3379,51 @@
     return "";
   }
 
-  function handleNavigationClick(event) {
-    if ((event.button !== undefined && event.button !== 0) || state.currentSettings.navigationOpenMode === "currentTab" || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+  // 打开方式的细分取值：background 用后台标签页，两个条件取值只在跳离首页时开新标签页
+  function linkOpenBehavior(mode) {
+    if (mode === "background" || mode === "newTab") {
+      return mode;
+    }
+    if (mode === "currentTabIfHomepage") {
+      return isHomepage() ? "currentTab" : "newTab";
+    }
+    if (mode === "currentTabIfNotHomepage") {
+      return isHomepage() ? "newTab" : "currentTab";
+    }
+    return "currentTab";
+  }
+
+  function openConfiguredLink(event, mode) {
+    // 修饰键点击保持浏览器原生行为（新标签页 / 新窗口 / 下载）
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    const behavior = linkOpenBehavior(mode);
+    if (behavior === "currentTab") {
+      return;
+    }
+    const target = safeSiteUrl(event.currentTarget.href);
+    if (!target) {
       return;
     }
     event.preventDefault();
-    const opened = globalThis.open(event.currentTarget.href, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      showActionStatus("导航链接打开被浏览器阻止");
+    if (behavior === "background") {
+      openBackgroundLink(target)
+        .then(() => showActionStatus("已在后台标签页打开", "success"))
+        .catch((error) => showActionStatus(error instanceof Error ? error.message : "后台标签页打开失败"));
+      return;
     }
+    const opened = globalThis.open(target, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      showActionStatus("新标签页打开被浏览器阻止");
+    }
+  }
+
+  function handleNavigationClick(event) {
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+    openConfiguredLink(event, state.currentSettings.navigationOpenMode);
   }
 
   function syncNavigationSettings() {
@@ -2733,20 +3472,7 @@
     if (event.button !== undefined && event.button !== 0) {
       return;
     }
-    const link = event.currentTarget;
-    const mode = link.dataset.betterldLinkOpenMode;
-    if (mode !== "newTab" || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-    const target = safeSiteUrl(link.href);
-    if (!target) {
-      return;
-    }
-    event.preventDefault();
-    const opened = globalThis.open(target, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      showActionStatus("新标签页打开被浏览器阻止");
-    }
+    openConfiguredLink(event, event.currentTarget.dataset.betterldLinkOpenMode);
   }
 
   function syncConfiguredLinkModes() {
@@ -2801,6 +3527,9 @@
       return;
     }
 
+    // 站点把新帖插到列表最前面时，浏览器滚动锚定会把人钉在旧内容上（阅读卡很高，感觉就是被推到最下面），
+    // 所以顶部主题发生变化时把视图带回页首；列表尾部追加（滚动加载更多）不会改变顶部，不受影响
+    const previousTopId = currentGrid?.querySelector(".betterld-topic-card")?.dataset.topicId || "";
     const sourceBody = !isHomepage() ? container.querySelector(".topic-list-body") : null;
     const originallyHidden = container.dataset.betterldSource === "true"
       ? container.dataset.betterldWasHidden === "true"
@@ -2848,6 +3577,14 @@
     }
     container.after(grid);
     state.managedSources.set(container, grid);
+    const refreshPending = state.listRefreshAt && Date.now() - state.listRefreshAt <= config.listRefreshScrollTopWindowMs;
+    if (refreshPending) {
+      state.listRefreshAt = 0;
+    }
+    const nextTopId = grid.querySelector(".betterld-topic-card")?.dataset.topicId || "";
+    if (refreshPending || (previousTopId && nextTopId && previousTopId !== nextTopId)) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
   }
 
   function syncHomepage() {
@@ -2910,6 +3647,8 @@
     const categoriesPage = isCategoriesPage();
     const tagsPage = isTagsPage();
     const directoryPage = categoriesPage || tagsPage;
+    // 壳层视觉（壁纸、遮罩、Header/Sidebar）在所有页面生效，不随页面类型收窄
+    document.body?.classList.add("betterld-shell");
     document.documentElement.classList.toggle("betterld-home", home);
     document.body?.classList.toggle("betterld-home", home);
     document.documentElement.classList.toggle("betterld-topic-page", topicListPage && !home);
@@ -2920,7 +3659,6 @@
     document.body?.classList.toggle("betterld-tags-page", tagsPage);
     document.documentElement.classList.toggle("betterld-search-page", isSearchPage());
     document.body?.classList.toggle("betterld-search-page", isSearchPage());
-    document.body?.classList.toggle("betterld-unmanaged-page", isUnmanagedShellPage());
     applyColorMode();
     syncNavigationState();
     applyChromeSettings();
@@ -2941,8 +3679,14 @@
     }
   }
 
+  // 必须在 href 变化判断之前：设置窗口关闭后 URL 没变，但排序要立刻落下去
   function checkRoute() {
     checkDailyWallpaper();
+    recordVisitedTopic();
+    applyTopicSort();
+    enforceRefreshScrollTop();
+    // 站点结果异步渲染，触点与结果列表出现得比注入晚，因此每次轮询重试一次状态同步
+    syncSearchLoadMore(state.currentSettings, isSearchPage());
     if (location.href === state.currentHref) {
       return;
     }
@@ -2953,6 +3697,16 @@
   document.addEventListener("click", (event) => {
     if (!event.target.closest(".betterld-topic-card__menu")) {
       closeCardMenus();
+    }
+    // 站点的「查看 N 个新的或更新过的话题」就是列表刷新，记下意图，重建后回到页首
+    if (event.target.closest?.(".show-more.has-topics")) {
+      state.listRefreshAt = Date.now();
+    }
+    // 用 composedPath 而不是 closest：面板里的按钮点完就会被重渲染换掉，
+    // 换掉之后节点已经脱离文档，closest 找不到面板，会把刚重绘的面板误关掉
+    const insideSearchHistory = event.composedPath().some((node) => node instanceof Element && node.hasAttribute("data-betterld-search-history"));
+    if (!insideSearchHistory && !searchInputs().includes(event.target)) {
+      closeSearchHistoryPanel();
     }
   });
   document.addEventListener("keydown", (event) => {
@@ -2995,7 +3749,18 @@
     }, { rootMargin: config.excerptRootMargin })
     : null;
 
-  applyVisualSettings(config.settingsDefaults);
+  state.cardObserver = "IntersectionObserver" in globalThis
+    ? new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          state.cardObserver.unobserve(entry.target);
+          loadCardMetadata(entry.target);
+        }
+      });
+    }, { rootMargin: config.excerptRootMargin })
+    : null;
+
+  applyVisualSettings(config.settingsDefaults, { provisional: true });
   storageGet()
     .then(async (stored) => {
       state.localWallpaper = isStoredLocalWallpaper(stored[config.wallpaperLocalStorageKey])
@@ -3005,8 +3770,10 @@
         && typeof stored[config.wallpaperRemoteCacheKey] === "object"
         ? stored[config.wallpaperRemoteCacheKey]
         : null;
+      state.visitedTopics = new Set(Array.isArray(stored[config.visitedTopicStorageKey]) ? stored[config.visitedTopicStorageKey] : []);
       const activeSettings = await getActiveSettings(stored[config.storageKey]);
       applyVisualSettings(activeSettings);
+      scheduleSync();
     })
     .catch((error) => {
       state.activeStorageArea = "local";
@@ -3036,6 +3803,10 @@
       if (state.currentSettings.wallpaperMode === config.wallpaperModes.local) {
         applyVisualSettings(state.currentSettings);
       }
+    }
+    if (changes[config.visitedTopicStorageKey]) {
+      state.visitedTopics = new Set(Array.isArray(changes[config.visitedTopicStorageKey].newValue) ? changes[config.visitedTopicStorageKey].newValue : []);
+      scheduleSync();
     }
     if (changes[config.storageKey]) {
       const localSettings = normalizeSettings(changes[config.storageKey].newValue);
@@ -3076,6 +3847,8 @@
   coarsePointerMedia?.addEventListener?.("change", applyChromeSettings);
 
   window.addEventListener("scroll", updateListControlsScrollState, { passive: true });
+  window.addEventListener("scroll", closeSearchHistoryPanel, { passive: true });
+  window.addEventListener("resize", closeSearchHistoryPanel);
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
   state.currentHref = location.href;
