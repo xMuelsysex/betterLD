@@ -1,5 +1,7 @@
 (() => {
-  importScripts("webdav.js");
+  if (typeof importScripts === "function" && !globalThis.BETTERLD_WEBDAV) {
+    importScripts("webdav.js");
+  }
 
   const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch);
   const api = globalThis.browser || globalThis.chrome;

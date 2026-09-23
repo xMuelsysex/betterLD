@@ -1,3 +1,4 @@
 .playwright-mcp/
 .workflow/
 node_modules/
+dist/

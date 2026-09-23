@@ -1040,7 +1040,7 @@
     { key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "自动模式会随滚动半隐藏。", dependsOn: ["actionRailEnabled", true] },
     { key: "actionRailGlow", type: "toggle", label: "操作栏发光", help: "仅作用于 betterLD 操作栏。", dependsOn: ["actionRailEnabled", true] },
     { key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "使用 window.scrollTo，不改变路由。" },
-    { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "使用原生 location.reload()。" },
+    { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "合并站点「查看 N 个新的或更新的话题」，不重载页面。" },
     { key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "避免与原站按钮重复。" },
     { key: "enableUndoRefresh", type: "toggle", label: "启用刷新撤销", help: "需要刷新前状态恢复链路支持。" },
 

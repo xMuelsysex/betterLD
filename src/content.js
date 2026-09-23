@@ -29,6 +29,17 @@
     localWallpaper: null,
     remoteWallpaperCache: null,
     excerptCache: new Map(),
+    metadataQueue: [],
+    metadataRunning: false,
+    excerptStorageChain: Promise.resolve(),
+    metadataNextAt: 0,
+    metadataCooldownUntil: 0,
+    topicListMetadata: new Map(),
+    topicListUnavailable: new Set(),
+    topicListNextPage: new Map(),
+    preloadedTopicListSeeded: false,
+    topicListSync: null,
+    topicListSyncAgain: false,
     excerptObserver: null,
     managedSources: new Map(),
     listControlsCollapsed: false,
@@ -49,8 +60,8 @@
     toastTimer: 0
   };
 
-  function storageGet(keys) {
-    const storageKeys = keys || [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey];
+  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey]) {
+    const storageKeys = keys;
     if (firefoxApi) {
       return api.storage.local.get(storageKeys);
     }
@@ -533,9 +544,14 @@
     return currentPath() === config.homepagePath;
   }
 
+  function userTopicsUsername() {
+    return currentPath().match(/^\/u\/([^/]+)\/activity\/topics$/)?.[1] || "";
+  }
+
   function isTopicListPage() {
     const path = currentPath();
     return isHomepage()
+      || Boolean(userTopicsUsername())
       || /^\/(?:latest|new|unread|unseen|hot|top|read|posted|bookmarks)(?:\/|$)/.test(path)
       || /^\/my\/[^/]+(?:\/|$)/.test(path)
       || /^\/l\/(?:latest|new|unread|unseen|hot|top|read)(?:\/|$)/.test(path)
@@ -743,7 +759,7 @@
     }
     event.preventDefault();
     if (action === "refreshTopics") {
-      location.reload();
+      refreshTopicsList();
     } else if (action === "openSettings") {
       openSettingsPage();
     } else if (action === "toggleListControls") {
@@ -1059,7 +1075,7 @@
       } else if (key === "top") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (key === "refresh") {
-        location.reload();
+        refreshTopicsList();
       }
     });
     return button;
@@ -1365,10 +1381,12 @@
 
   function applyAuthorIdentity(authorElement, name) {
     const href = userProfileHref(name);
-    authorElement.textContent = name;
-    if (href) {
+    if (authorElement.textContent !== name) {
+      authorElement.textContent = name;
+    }
+    if (href && authorElement.getAttribute("href") !== href) {
       authorElement.href = href;
-    } else {
+    } else if (!href && authorElement.hasAttribute("href")) {
       authorElement.removeAttribute("href");
     }
   }
@@ -1800,8 +1818,8 @@
           drawer.excerpt.textContent = metadata.text;
           drawer.status.textContent = "";
           setExcerpt(card, metadata.text, metadata.contentState, metadata.markdown);
-          setReadingStats(card, metadata.stats);
-          setReadingParticipants(card, metadata.participants);
+          if (metadata.stats) setReadingStats(card, metadata.stats);
+          if (metadata.participants) setReadingParticipants(card, metadata.participants);
         })
         .catch((error) => {
           if (drawerRequest !== state.drawerRequest) {
@@ -1867,49 +1885,106 @@
       .slice(0, 4);
   }
 
+  // 等上一请求完成再放行，确保挑战/限流响应先更新冷却时间，并给原站分页留出请求余量。
+  function scheduleMetadataRequest(task, isNeeded, isPriority) {
+    return new Promise((resolve, reject) => {
+      state.metadataQueue.push({ task, isNeeded, isPriority, resolve, reject });
+      drainMetadataQueue();
+    });
+  }
+
+  async function drainMetadataQueue() {
+    if (state.metadataRunning) {
+      return;
+    }
+    state.metadataRunning = true;
+    try {
+      while (state.metadataQueue.length) {
+        let wait;
+        while ((wait = Math.max(state.metadataNextAt, state.metadataCooldownUntil) - Date.now()) > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, wait));
+        }
+        // 到真正发请求时再按当前关注位置排序，悬停不会绕过限速或冷却。
+        const priorityIndex = state.metadataQueue.findIndex((entry) => entry.isPriority());
+        const [entry] = state.metadataQueue.splice(priorityIndex < 0 ? 0 : priorityIndex, 1);
+        if (!entry.isNeeded()) {
+          entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
+          continue;
+        }
+        state.metadataNextAt = Date.now() + config.topicRequestMinIntervalMs;
+        try {
+          entry.resolve(await entry.task());
+        } catch (error) {
+          entry.reject(error);
+        }
+      }
+    } finally {
+      state.metadataRunning = false;
+    }
+  }
+
+  // 站点前面的 Cloudflare 会对不像站点自身 ajax 的 JSON 请求直接返回挑战页，
+  // 一旦被打上挑战状态，站点自己的分页请求也会一起被挡、底部加载 spinner 永不结束。
+  // 所以这里带上 Discourse ajax 同款的 X-Requested-With，并在被挑战时长时间停发。
+  function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false) {
+    return scheduleMetadataRequest(async () => {
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+      if (response.headers.get("cf-mitigated") === "challenge") {
+        state.metadataCooldownUntil = Date.now() + config.topicChallengeCooldownMs;
+        throw new Error("topic request blocked by the site challenge; cooling down");
+      }
+      if (response.status === 429) {
+        const retryAfter = Number(response.headers.get("Retry-After"));
+        state.metadataCooldownUntil = Date.now()
+          + (retryAfter > 0 ? retryAfter * 1000 : config.topicRequestCooldownMs);
+        throw new Error("topic request rate limited; cooling down");
+      }
+      if (!response.ok) {
+        throw new Error(`topic request failed with ${response.status}`);
+      }
+      return response.json();
+    }, isNeeded, isPriority);
+  }
+
   async function fetchTopicMetadata(topicId) {
     const endpoint = new URL(`/t/${topicId}.json`, location.origin);
     endpoint.searchParams.set("include_raw", "1");
-    let lastError;
-
-    for (let attempt = 0; attempt <= config.topicRequestRetryCount; attempt += 1) {
-      try {
-        const response = await fetch(endpoint.href, {
-          credentials: "same-origin",
-          cache: "no-store",
-          headers: { Accept: "application/json" }
-        });
-
-        if (!response.ok) {
-          throw new Error(`topic request failed with ${response.status}`);
-        }
-
-        const data = await response.json();
-        const post = data?.post_stream?.posts?.[0];
-        const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
-        const cooked = String(post?.cooked || "").trim();
-        const text = plainText(cooked || raw);
-        const markdown = raw || text;
-        const contentState = markdown ? "ready" : "empty";
-        return {
-          text: contentState === "ready" ? text || markdown : config.excerptEmptyLabel,
-          markdown,
-          contentState,
-          author: cleanText(data?.details?.created_by?.username),
-          activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
-          stats: topicStats(data),
-          participants: topicParticipants(data)
-        };
-      } catch (error) {
-        lastError = error;
-        if (attempt >= config.topicRequestRetryCount) {
-          throw error;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, config.topicRequestRetryDelayMs * (attempt + 1)));
+    const data = await requestTopicResponse(endpoint.href, () => managedCards().some((card) => {
+      if (card.dataset.topicId !== topicId) {
+        return false;
       }
+      const rect = card.getBoundingClientRect();
+      return card.dataset.authorState === "loading"
+        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card)
+        || (!card.hidden && rect.bottom > 0 && rect.top < window.innerHeight);
+    }), () => managedCards().some((card) => card.dataset.topicId === topicId
+      && (card.matches(":hover, :focus-within")
+        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card))));
+    const post = data?.post_stream?.posts?.find((entry) => entry.post_number === 1);
+    if (!post) {
+      throw new Error("topic opening post unavailable");
     }
-
-    throw lastError;
+    const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
+    const cooked = String(post?.cooked || "").trim();
+    const text = plainText(cooked || raw);
+    const markdown = raw || text;
+    const contentState = markdown ? "ready" : "empty";
+    return {
+      text: contentState === "ready" ? text || markdown : config.excerptEmptyLabel,
+      markdown,
+      contentState,
+      author: cleanText(data?.details?.created_by?.username),
+      activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
+      stats: topicStats(data),
+      participants: topicParticipants(data)
+    };
   }
 
   function requestTopicMetadata(topicId) {
@@ -1918,7 +1993,7 @@
       return Promise.resolve(cached);
     }
     if (cached?.state === "failed") {
-      state.excerptCache.delete(topicId);
+      return Promise.reject(cached.error);
     }
     if (cached?.state === "pending") {
       return cached.promise;
@@ -1930,7 +2005,11 @@
         return metadata;
       })
       .catch((error) => {
-        state.excerptCache.set(topicId, { state: "failed", error });
+        if (error.name === "AbortError") {
+          state.excerptCache.delete(topicId);
+        } else {
+          state.excerptCache.set(topicId, { state: "failed", error });
+        }
         throw error;
       });
 
@@ -1938,8 +2017,198 @@
     return promise;
   }
 
-  function requestExcerpt(topicId) {
-    return requestTopicMetadata(topicId);
+  async function requestExcerpt(topicId) {
+    const key = `${config.excerptStoragePrefix}${location.hostname}.${topicId}`;
+    try {
+      const stored = (await storageGet([key]))[key];
+      if (stored && Date.now() - stored.savedAt < config.excerptCacheTtlMs
+        && typeof stored.markdown === "string" && typeof stored.text === "string"
+        && ["ready", "empty"].includes(stored.contentState)) {
+        return stored;
+      }
+    } catch (error) {
+      console.error("[betterLD] excerpt cache read failed", error);
+    }
+    const metadata = await requestTopicMetadata(topicId);
+    // 只持久化正文，缓存命中不能替代作者、活动时间或互动元数据。
+    const { text, markdown, contentState } = metadata;
+    state.excerptStorageChain = state.excerptStorageChain.then(async () => {
+      await storageSet({ [key]: { text, markdown, contentState, savedAt: Date.now() } });
+      const stored = await storageGet(null);
+      const entries = Object.entries(stored)
+        .filter(([name]) => name.startsWith(config.excerptStoragePrefix))
+        .sort((a, b) => b[1].savedAt - a[1].savedAt);
+      const expired = entries.filter(([, value], index) => index >= config.excerptCacheMaxEntries
+        || Date.now() - value.savedAt >= config.excerptCacheTtlMs).map(([name]) => name);
+      if (expired.length) {
+        await storageRemove(expired);
+      }
+    }).catch((error) => console.error("[betterLD] excerpt cache write failed", error));
+    return metadata;
+  }
+
+  // 逐主题请求 /t/{id}.json 一屏就是几十个请求，会触发站点防护并连带把站点自己的分页请求挡成 429，
+  // 所以作者与活动时间统一取列表接口（或首屏服务端预载）里的同一份主题数据，
+  // /t/{id}.json 只留给视口内卡片的正文预览。
+  function topicListRouteKey() {
+    return `${currentPath()}${location.search}`;
+  }
+
+  function topicListMetadataPath() {
+    const username = userTopicsUsername();
+    if (username) {
+      return `/topics/created-by/${username}`;
+    }
+    if (!isHomepage()) {
+      return currentPath();
+    }
+    const active = document.querySelector("#navigation-bar a.active[href]");
+    if (!active) {
+      return "";
+    }
+    try {
+      return new URL(active.href, location.href).pathname.replace(/\/+$/, "");
+    } catch {
+      return "";
+    }
+  }
+
+  // Discourse 的列表主题把创建者排在 posters[0]（TopicPostersSummary 只把最新发帖人挪到末尾），
+  // users 数组给出该 user_id 的 username，与 /t/{id}.json 的 details.created_by.username 同源。
+  function topicListEntries(payload) {
+    const usernames = new Map(
+      (Array.isArray(payload?.users) ? payload.users : []).map((user) => [user.id, cleanText(user.username)])
+    );
+    return (Array.isArray(payload?.topic_list?.topics) ? payload.topic_list.topics : []).map((topic) => ({
+      id: String(topic.id),
+      author: usernames.get(topic.posters?.[0]?.user_id) || "",
+      activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at)
+    }));
+  }
+
+  async function requestTopicListPage(page, routeKey, path, search) {
+    if (!path) {
+      return [];
+    }
+    const url = new URL(`${path}.json`, location.origin);
+    url.search = search;
+    url.searchParams.set("page", String(page));
+    return topicListEntries(await requestTopicResponse(url.href, () => topicListRouteKey() === routeKey));
+  }
+
+  function seedPreloadedTopicList() {
+    if (state.preloadedTopicListSeeded) {
+      return;
+    }
+    const node = document.getElementById("data-preloaded");
+    if (!node?.textContent) {
+      return;
+    }
+    state.preloadedTopicListSeeded = true;
+    let entries;
+    try {
+      const preloaded = JSON.parse(node.textContent);
+      if (!preloaded.topic_list) {
+        return;
+      }
+      entries = topicListEntries(JSON.parse(preloaded.topic_list));
+    } catch (error) {
+      console.warn("[betterLD] 预载主题列表解析失败", error);
+      return;
+    }
+    if (!entries.length) {
+      return;
+    }
+    entries.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
+    // 服务端渲染进页面的就是该路由列表的第 1 页
+    state.topicListNextPage.set(topicListRouteKey(), { firstId: entries[0].id, page: 0 });
+  }
+
+  function managedCards() {
+    return [...document.querySelectorAll('[data-betterld-grid="true"] > .betterld-topic-card')];
+  }
+
+  function applyTopicListMetadata(card) {
+    const metadata = state.topicListMetadata.get(card.dataset.topicId);
+    if (!metadata?.author) {
+      return false;
+    }
+    setAuthor(card, metadata.author, "ready");
+    setTopicActivity(card, metadata.activityAt);
+    return true;
+  }
+
+  function applyTopicListMetadataToAll() {
+    managedCards().forEach(applyTopicListMetadata);
+  }
+
+  function uncoveredTopicCards() {
+    return managedCards().filter((card) => card.dataset.topicId && card.dataset.authorState === "loading");
+  }
+
+  function syncTopicListMetadata() {
+    if (state.topicListSync) {
+      state.topicListSyncAgain = true;
+      return;
+    }
+    state.topicListSync = Promise.resolve()
+      .then(async () => {
+        if (!isTopicListPage() || !["cards", "reading"].includes(state.currentSettings.topicListLayoutMode)) {
+          return;
+        }
+        // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次
+        seedPreloadedTopicList();
+        applyTopicListMetadataToAll();
+        const routeKey = topicListRouteKey();
+        const path = topicListMetadataPath();
+        const search = location.search;
+        if (!state.topicListUnavailable.has(routeKey)) {
+          // 列表首题未变说明还是同一次分页，接着上次的页码往下翻；首题变了（客户端路由回来）就从第 1 页重查
+          const firstId = managedCards()[0]?.dataset.topicId || "";
+          const tracked = state.topicListNextPage.get(routeKey);
+          let page = tracked && tracked.firstId === firstId ? tracked.page + 1 : 0;
+          while (topicListRouteKey() === routeKey && uncoveredTopicCards().length) {
+            let entries;
+            try {
+              entries = await requestTopicListPage(page, routeKey, path, search);
+            } catch (error) {
+              if (error.name === "AbortError") {
+                return;
+              }
+              state.topicListUnavailable.add(routeKey);
+              console.warn("[betterLD] 主题列表元数据请求失败", error);
+              break;
+            }
+            if (topicListRouteKey() !== routeKey) {
+              return;
+            }
+            const cardIds = new Set(managedCards().map((card) => card.dataset.topicId));
+            const matched = entries.filter((entry) => cardIds.has(entry.id));
+            if (!matched.length) {
+              state.topicListUnavailable.add(routeKey);
+              break;
+            }
+            matched.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
+            state.topicListNextPage.set(routeKey, { firstId, page });
+            applyTopicListMetadataToAll();
+            page += 1;
+          }
+        }
+        // 列表接口覆盖不到的主题（非标准列表路由、创建者缺失等）退回逐主题请求
+        if (topicListRouteKey() === routeKey) {
+          uncoveredTopicCards().forEach(loadAuthor);
+        }
+      })
+      .catch((error) => {
+        console.warn("[betterLD] 主题列表元数据同步失败", error);
+      })
+      .finally(() => {
+        state.topicListSync = null;
+        if (state.topicListSyncAgain) {
+          state.topicListSyncAgain = false;
+          syncTopicListMetadata();
+        }
+      });
   }
 
   function setTopicActivity(card, activityAt) {
@@ -2040,11 +2309,9 @@
       }
       state.excerptCache.delete(card.dataset.topicId);
       if (authorFailed) {
-        card.dataset.authorRetryCount = "0";
         setAuthor(card, config.authorLoadingLabel, "loading");
       }
       if (excerptFailed) {
-        card.dataset.excerptRetryCount = "0";
         setExcerpt(card, config.excerptLoadingLabel, "loading");
       }
       if (authorFailed) {
@@ -2071,25 +2338,12 @@
         setTopicActivity(card, metadata.activityAt);
       })
       .catch((error) => {
+        if (error.name === "AbortError") {
+          return;
+        }
         console.warn(`[betterLD] topic creator unavailable for topic ${topicId}`, error);
         setAuthor(card, config.authorPlaceholder, "failed");
-        const retryCount = Number(card.dataset.authorRetryCount || 0);
-        if (!card.isConnected) {
-          return;
-        }
-        if (retryCount >= config.topicRequestRetryCount) {
-          scheduleTopicMetadataRecovery(card);
-          return;
-        }
-        card.dataset.authorRetryCount = String(retryCount + 1);
-        window.setTimeout(() => {
-          if (!card.isConnected || card.dataset.authorState === "ready") {
-            return;
-          }
-          card.dataset.authorState = "loading";
-          setAuthor(card, config.authorLoadingLabel, "loading");
-          loadAuthor(card);
-        }, config.topicRequestRetryDelayMs * (retryCount + 1));
+        scheduleTopicMetadataRecovery(card);
       });
   }
 
@@ -2102,30 +2356,43 @@
     requestExcerpt(topicId)
       .then((metadata) => {
         setExcerpt(card, metadata.text, metadata.contentState, metadata.markdown);
-        setReadingStats(card, metadata.stats);
-        setReadingParticipants(card, metadata.participants);
+        if (metadata.stats) setReadingStats(card, metadata.stats);
+        if (metadata.participants) setReadingParticipants(card, metadata.participants);
       })
       .catch((error) => {
+        if (error.name === "AbortError") {
+          if (card.isConnected) {
+            observeExcerpt(card);
+          }
+          return;
+        }
         console.warn(`[betterLD] topic excerpt unavailable for topic ${topicId}`, error);
         setExcerpt(card, config.excerptPlaceholder, "failed");
-        const retryCount = Number(card.dataset.excerptRetryCount || 0);
-        if (!card.isConnected) {
-          return;
-        }
-        if (retryCount >= config.topicRequestRetryCount) {
-          scheduleTopicMetadataRecovery(card);
-          return;
-        }
-        card.dataset.excerptRetryCount = String(retryCount + 1);
-        window.setTimeout(() => {
-          if (!card.isConnected || card.dataset.excerptState === "ready") {
-            return;
-          }
-          card.dataset.excerptState = "loading";
-          card.setAttribute("aria-busy", "true");
-          loadExcerpt(card);
-        }, config.topicRequestRetryDelayMs * (retryCount + 1));
+        scheduleTopicMetadataRecovery(card);
       });
+  }
+
+  // 快速滚动时卡片只是一闪而过，给它们请求正文预览既拖慢真正在看的那几张，
+  // 又会把一屏几十个请求打给站点（站点防护会连带把站点自己的分页请求挡成 429），
+  // 所以等卡片在视口里停住一小会儿再请求。
+  function scheduleExcerpt(card) {
+    if (card.dataset.betterldExcerptTimer || card.dataset.excerptState !== "loading") {
+      return;
+    }
+    card.dataset.betterldExcerptTimer = String(window.setTimeout(() => {
+      delete card.dataset.betterldExcerptTimer;
+      loadExcerpt(card);
+      state.excerptObserver?.unobserve(card);
+    }, config.excerptDwellMs));
+  }
+
+  function cancelExcerpt(card) {
+    const timer = Number(card.dataset.betterldExcerptTimer);
+    if (!timer) {
+      return;
+    }
+    window.clearTimeout(timer);
+    delete card.dataset.betterldExcerptTimer;
   }
 
   function observeExcerpt(card) {
@@ -2148,7 +2415,7 @@
     if (!card.dataset.topicId) {
       return;
     }
-    loadAuthor(card);
+    applyTopicListMetadata(card);
     observeExcerpt(card);
   }
 
@@ -2181,13 +2448,12 @@
   function syncManagedCardContent() {
     document.querySelectorAll('[data-betterld-grid="true"] .betterld-topic-card').forEach((card) => {
       applyCardFilter(card);
-      if (card.dataset.authorState === "loading") {
-        loadAuthor(card);
-      }
+      applyTopicListMetadata(card);
       observeExcerpt(card);
       card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || card.dataset.excerptState === "loading"));
     });
     document.querySelectorAll('[data-betterld-grid="true"]').forEach(syncFilterEmptyState);
+    syncTopicListMetadata();
   }
 
   function escapeRegExp(value) {
@@ -2582,28 +2848,11 @@
     return [...groups.entries()];
   }
 
-  function itemSignature(item) {
-    const topic = topicInfo(item);
-    const avatar = item.querySelector(".topic-avatar img, .posters img.avatar, .avatar img, img.avatar");
-    return JSON.stringify({
-      topic,
-      author: authorName(item),
-      category: categoryInfo(item),
-      meta: compactMeta(item),
-      avatar: avatar?.currentSrc || avatar?.src || "",
-      className: item.className
-    });
-  }
-
-  function signature(items) {
-    return items.map(itemSignature).join("\n");
-  }
-
   function unobserveGrid(grid) {
-    if (!state.excerptObserver) {
-      return;
-    }
-    grid.querySelectorAll(".betterld-topic-card").forEach((card) => state.excerptObserver.unobserve(card));
+    grid.querySelectorAll(".betterld-topic-card").forEach((card) => {
+      cancelExcerpt(card);
+      state.excerptObserver?.unobserve(card);
+    });
   }
 
   function removeGridElement(grid) {
@@ -2649,7 +2898,6 @@
     container.hidden = originallyHidden;
     delete container.dataset.betterldSource;
     delete container.dataset.betterldWasHidden;
-    delete container.dataset.betterldSignature;
   }
 
   function restoreAll() {
@@ -2792,15 +3040,86 @@
     syncConfiguredLinkModes();
   }
 
-  function rebuildContainer(container, items) {
-    const currentSignature = signature(items);
-    const currentGrid = managedGrid(container);
-    if (container.dataset.betterldSignature === currentSignature
-      && currentGrid?.isConnected
-      && currentGrid.dataset.betterldCardStyle === state.currentSettings.topicListLayoutMode) {
+  function refreshTopicsList() {
+    state.topicListUnavailable.delete(topicListRouteKey());
+    state.topicListNextPage.delete(topicListRouteKey());
+    let retrying = false;
+    managedCards().forEach((card) => {
+      const authorFailed = card.dataset.authorState === "failed";
+      const excerptFailed = card.dataset.excerptState === "failed";
+      if (!authorFailed && !excerptFailed) {
+        return;
+      }
+      retrying = true;
+      state.excerptCache.delete(card.dataset.topicId);
+      card.dataset.topicRecoveryCount = "0";
+      if (authorFailed) {
+        setAuthor(card, config.authorLoadingLabel, "loading");
+      }
+      if (excerptFailed) {
+        setExcerpt(card, config.excerptLoadingLabel, "loading");
+        observeExcerpt(card);
+      }
+    });
+    syncTopicListMetadata();
+    const notice = document.querySelector(".show-more.has-topics > a.alert.clickable");
+    if (!notice) {
+      showActionStatus(retrying ? "正在重新读取预览与作者信息" : "已是最新主题", "success");
       return;
     }
+    if (notice.classList.contains("loading")) {
+      return;
+    }
+    notice.click();
+  }
 
+  function cardSyncKey(item) {
+    const topic = topicInfo(item);
+    if (!topic) {
+      return "";
+    }
+    return topic.id ? `topic:${topic.id}` : `href:${topic.href}`;
+  }
+
+  function syncCards(grid, items) {
+    const known = new Map([...grid.children].map((child) => [child.dataset.betterldCardKey, child]));
+    let anchor = null;
+    for (const item of items) {
+      const key = cardSyncKey(item);
+      if (!key) {
+        continue;
+      }
+      let card = known.get(key);
+      if (!card) {
+        if (!itemPassesDomFilter(item)) {
+          continue;
+        }
+        card = createCard(item);
+        if (!card) {
+          continue;
+        }
+        card.dataset.betterldCardKey = key;
+        known.set(key, card);
+        observeCard(card);
+      }
+      const reference = anchor ? anchor.nextElementSibling : grid.firstElementChild;
+      if (card !== reference) {
+        grid.insertBefore(card, reference);
+      }
+      anchor = card;
+    }
+  }
+
+  function syncContainer(container, items) {
+    const grid = managedGrid(container);
+    if (grid?.isConnected && grid.dataset.betterldCardStyle === state.currentSettings.topicListLayoutMode) {
+      syncCards(grid, items);
+      return;
+    }
+    buildContainer(container, items);
+  }
+
+  function buildContainer(container, items) {
     const sourceBody = !isHomepage() ? container.querySelector(".topic-list-body") : null;
     const originallyHidden = container.dataset.betterldSource === "true"
       ? container.dataset.betterldWasHidden === "true"
@@ -2817,17 +3136,7 @@
     grid.dataset.betterldCardStyle = state.currentSettings.topicListLayoutMode;
     grid.setAttribute("aria-label", "LinuxDo 主题");
 
-    for (const item of items) {
-      if (!itemPassesDomFilter(item)) {
-        continue;
-      }
-      const card = createCard(item);
-      if (!card) {
-        continue;
-      }
-      grid.append(card);
-      observeCard(card);
-    }
+    syncCards(grid, items);
 
     if (!grid.childElementCount && state.currentSettings.topicFilterEnabled && items.length) {
       grid.dataset.betterldFilterEmpty = "true";
@@ -2839,7 +3148,6 @@
 
     container.dataset.betterldSource = "true";
     container.dataset.betterldWasHidden = String(originallyHidden);
-    container.dataset.betterldSignature = currentSignature;
     container.hidden = sourceBody ? originallyHidden : true;
     if (sourceBody) {
       sourceBody.dataset.betterldSourceBody = "true";
@@ -2881,12 +3189,13 @@
     state.mutating = true;
     try {
       for (const [container, items] of groups) {
-        rebuildContainer(container, items);
+        syncContainer(container, items);
       }
     } finally {
       state.mutating = false;
     }
     applyListControlsScrollState();
+    syncTopicListMetadata();
   }
 
   function scheduleSync() {
@@ -2988,14 +3297,16 @@
     ? new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          loadExcerpt(entry.target);
-          state.excerptObserver.unobserve(entry.target);
+          scheduleExcerpt(entry.target);
+        } else {
+          cancelExcerpt(entry.target);
         }
       });
     }, { rootMargin: config.excerptRootMargin })
     : null;
 
   applyVisualSettings(config.settingsDefaults);
+  seedPreloadedTopicList();
   storageGet()
     .then(async (stored) => {
       state.localWallpaper = isStoredLocalWallpaper(stored[config.wallpaperLocalStorageKey])
@@ -3052,8 +3363,12 @@
     }
   });
 
-  const domObserver = new MutationObserver(() => {
-    if (!state.mutating) {
+  const domObserver = new MutationObserver((records) => {
+    // 只镜像原站变化；卡片内部的作者、预览与筛选结果不能再次驱动源列表同步。
+    if (records.some(({ target }) => {
+      const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
+      return !element?.closest('[data-betterld-grid="true"]');
+    })) {
       scheduleSync();
     }
   });
