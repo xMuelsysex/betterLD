@@ -28,6 +28,7 @@
     wallpaperState: "default",
     localWallpaper: null,
     remoteWallpaperCache: null,
+    wallpaperThemeColor: "",
     excerptCache: new Map(),
     metadataQueue: [],
     metadataRunning: false,
@@ -223,16 +224,18 @@
     return canCacheRemoteWallpaper(settings, url)
       && cache?.url === url
       && cache.ok === true
+      && typeof cache.themeColor === "string"
+      && (!cache.themeColor || Boolean(hexToRgb(cache.themeColor)))
       && Number.isFinite(Number(cache.checkedAt))
       && Date.now() - Number(cache.checkedAt) >= 0
       && Date.now() - Number(cache.checkedAt) <= days * 86400000;
   }
 
-  function recordRemoteWallpaperCache(settings, url, ok) {
+  function recordRemoteWallpaperCache(settings, url, ok, themeColor = "") {
     if (!canCacheRemoteWallpaper(settings, url)) {
       return;
     }
-    const cache = { url, checkedAt: Date.now(), ok: Boolean(ok) };
+    const cache = { url, checkedAt: Date.now(), ok: Boolean(ok), themeColor: hexToRgb(themeColor) ? themeColor : "" };
     state.remoteWallpaperCache = cache;
     storageSet({ [config.wallpaperRemoteCacheKey]: cache }).catch((error) => {
       console.error("[betterLD] remote wallpaper cache save failed", error);
@@ -312,6 +315,7 @@
     const wallpaperRequest = ++state.wallpaperRequest;
 
     state.currentSettings = settings;
+    state.wallpaperThemeColor = "";
     const materialSupported = Boolean(
       globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
       || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
@@ -391,6 +395,8 @@
     }
 
     if (remoteWallpaperCacheIsFresh(settings, wallpaperUrl)) {
+      state.wallpaperThemeColor = state.remoteWallpaperCache.themeColor;
+      applyColorMode();
       root.style.setProperty("--betterld-wallpaper-image", `url(${JSON.stringify(wallpaperUrl)})`);
       setWallpaperState(root, "ready");
       return;
@@ -398,8 +404,6 @@
 
     setWallpaperState(root, "loading");
 
-    const image = new Image();
-    image.decoding = "async";
     const fallback = () => {
       if (wallpaperRequest !== state.wallpaperRequest) {
         return;
@@ -409,27 +413,47 @@
       setWallpaperState(root, "fallback");
       console.warn("[betterLD] wallpaper could not be decoded; using the safe gradient", wallpaperUrl);
     };
-    const ready = () => {
+    const ready = (image) => {
       if (wallpaperRequest !== state.wallpaperRequest) {
         return;
       }
+      state.wallpaperThemeColor = sampleWallpaperColor(image);
+      applyColorMode();
       root.style.setProperty("--betterld-wallpaper-image", `url(${JSON.stringify(wallpaperUrl)})`);
-      recordRemoteWallpaperCache(settings, wallpaperUrl, true);
+      recordRemoteWallpaperCache(settings, wallpaperUrl, true, state.wallpaperThemeColor);
       setWallpaperState(root, "ready");
     };
-    image.onload = () => {
-      if (typeof image.decode !== "function") {
-        ready();
-        return;
+    const loadWallpaper = (allowCrossOrigin = true) => {
+      const image = new Image();
+      image.decoding = "async";
+      if (allowCrossOrigin) {
+        image.crossOrigin = "anonymous";
       }
-      try {
-        Promise.resolve(image.decode()).then(ready).catch(fallback);
-      } catch {
+      image.onload = () => {
+        const decoded = () => ready(image);
+        if (typeof image.decode !== "function") {
+          decoded();
+          return;
+        }
+        try {
+          Promise.resolve(image.decode()).then(decoded).catch(fallback);
+        } catch {
+          fallback();
+        }
+      };
+      image.onerror = () => {
+        if (wallpaperRequest !== state.wallpaperRequest) {
+          return;
+        }
+        if (allowCrossOrigin) {
+          loadWallpaper(false);
+          return;
+        }
         fallback();
-      }
+      };
+      image.src = wallpaperUrl;
     };
-    image.onerror = fallback;
-    image.src = wallpaperUrl;
+    loadWallpaper();
   }
 
   function themeFromValue(value) {
@@ -460,6 +484,73 @@
     return [0, 2, 4].map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16)).join(" ");
   }
 
+  function sampleWallpaperColor(image) {
+    const size = config.wallpaperThemeSampleSize;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) {
+      return "";
+    }
+    try {
+      context.drawImage(image, 0, 0, size, size);
+      const pixels = context.getImageData(0, 0, size, size).data;
+      const channels = [0, 0, 0];
+      let weight = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const alpha = pixels[index + 3] / 255;
+        if (alpha < 0.5) {
+          continue;
+        }
+        channels[0] += pixels[index] * alpha;
+        channels[1] += pixels[index + 1] * alpha;
+        channels[2] += pixels[index + 2] * alpha;
+        weight += alpha;
+      }
+      return weight
+        ? `#${channels.map((channel) => Math.round(channel / weight).toString(16).padStart(2, "0")).join("")}`
+        : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function wallpaperPrimaryColor(value, mode) {
+    const channels = hexToRgb(value).split(" ").map((channel) => Number(channel) / 255);
+    if (channels.length !== 3 || channels.some((channel) => !Number.isFinite(channel))) {
+      return "";
+    }
+    const [red, green, blue] = channels;
+    const maximum = Math.max(red, green, blue);
+    const minimum = Math.min(red, green, blue);
+    const chroma = maximum - minimum;
+    const lightness = (maximum + minimum) / 2;
+    const saturation = chroma ? chroma / (1 - Math.abs(2 * lightness - 1)) : 0;
+    if (saturation < 0.12) {
+      return "";
+    }
+    let hue = 0;
+    if (chroma) {
+      if (maximum === red) hue = 60 * (((green - blue) / chroma) % 6);
+      else if (maximum === green) hue = 60 * ((blue - red) / chroma + 2);
+      else hue = 60 * ((red - green) / chroma + 4);
+    }
+    hue = (hue + 360) % 360;
+    const targetSaturation = Math.max(0.38, Math.min(saturation, 0.72));
+    const targetLightness = mode === "dark" ? 0.7 : 0.42;
+    const targetChroma = (1 - Math.abs(2 * targetLightness - 1)) * targetSaturation;
+    const secondary = targetChroma * (1 - Math.abs((hue / 60) % 2 - 1));
+    const offset = targetLightness - targetChroma / 2;
+    const rgb = hue < 60 ? [targetChroma, secondary, 0]
+      : hue < 120 ? [secondary, targetChroma, 0]
+        : hue < 180 ? [0, targetChroma, secondary]
+          : hue < 240 ? [0, secondary, targetChroma]
+            : hue < 300 ? [secondary, 0, targetChroma]
+              : [targetChroma, 0, secondary];
+    return `#${rgb.map((channel) => Math.round((channel + offset) * 255).toString(16).padStart(2, "0")).join("")}`;
+  }
+
   function contrastColor(value) {
     const rgb = hexToRgb(value).split(" ").map(Number);
     if (rgb.length !== 3 || rgb.some((part) => !Number.isFinite(part))) {
@@ -485,7 +576,7 @@
 
   function applyThemeTokens(settings) {
     const root = document.documentElement;
-    const primary = settings.themeColor;
+    const primary = wallpaperPrimaryColor(state.wallpaperThemeColor, root.dataset.betterldMode) || settings.themeColor;
     const background = settings.darkModeBaseColor;
     const primaryRgb = hexToRgb(primary);
     const backgroundRgb = hexToRgb(background);
@@ -1515,7 +1606,7 @@
       openCurrentTab: "当前页打开",
       openNewTab: "新标签页打开",
       openBackground: "后台打开",
-      openDrawer: "打开摘要抽屉",
+      openDrawer: "打开原网页预览",
       copyTopicUrl: "复制主题 URL",
       copyCleanUrl: "复制干净 URL",
       copyTopicId: "复制主题 ID",
@@ -1737,8 +1828,11 @@
     dialog.dataset.betterldTopicDrawer = "true";
     const header = createElement("div", "betterld-topic-drawer__header");
     const title = createElement("h2", "betterld-topic-drawer__title");
+    title.id = "betterld-topic-drawer-title";
+    dialog.setAttribute("aria-labelledby", title.id);
     const close = createElement("button", "betterld-topic-drawer__close", "关闭");
     close.type = "button";
+    close.setAttribute("aria-label", "关闭主题预览");
     close.addEventListener("click", () => closeTopicDrawer());
     header.append(title, close);
     const details = createElement("div", "betterld-topic-drawer__details");
@@ -1746,12 +1840,23 @@
     const author = createElement("span", "betterld-topic-drawer__author");
     const meta = createElement("span", "betterld-topic-drawer__meta");
     details.append(category, author, meta);
-    const excerpt = createElement("p", "betterld-topic-drawer__excerpt");
     const status = createElement("p", "betterld-topic-drawer__status");
     status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    const frame = document.createElement("iframe");
+    frame.className = "betterld-topic-drawer__frame";
+    frame.title = "主题原始页面预览";
+    frame.loading = "eager";
+    frame.setAttribute("sandbox", "allow-same-origin allow-scripts allow-popups allow-forms allow-modals");
+    frame.setAttribute("allow", "fullscreen");
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
-    dialog.append(header, details, excerpt, status, openLink);
+    dialog.append(header, details, status, frame, openLink);
+    frame.addEventListener("load", () => {
+      if (dialog.open && frame.src !== "about:blank" && frame.dataset.request === String(state.drawerRequest)) {
+        status.textContent = "";
+      }
+    });
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog && state.currentSettings.drawerCloseOnOverlay) {
         closeTopicDrawer();
@@ -1764,6 +1869,8 @@
       }
     });
     dialog.addEventListener("close", () => {
+      frame.src = "about:blank";
+      status.textContent = "";
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
       if (trigger?.isConnected) {
@@ -1771,7 +1878,7 @@
       }
     });
     document.body.append(dialog);
-    state.topicDrawer = { dialog, title, category, author, meta, excerpt, status, openLink, close };
+    state.topicDrawer = { dialog, title, category, author, meta, status, frame, openLink, close };
     return state.topicDrawer;
   }
 
@@ -1785,6 +1892,8 @@
       drawer.dialog.close();
     } else {
       drawer.dialog.removeAttribute("open");
+      drawer.frame.src = "about:blank";
+      drawer.status.textContent = "";
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
       trigger?.focus();
@@ -1794,41 +1903,22 @@
   function openTopicDrawer(card) {
     const drawer = ensureTopicDrawer();
     if (!drawer) {
-      showActionStatus("摘要抽屉不可用");
+      showActionStatus("主题预览不可用");
       return;
     }
     closeCardMenus();
+    const topicUrl = safeTopicUrl(card.dataset.topicHref);
     const drawerRequest = ++state.drawerRequest;
     state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
     drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "主题预览";
     drawer.category.textContent = card.querySelector(".betterld-topic-card__chip")?.textContent || "未分类";
     drawer.author.textContent = card.querySelector(".betterld-topic-card__author")?.textContent || config.authorPlaceholder;
     drawer.meta.textContent = card.querySelector(".betterld-topic-card__meta")?.textContent || "";
-    drawer.openLink.href = safeTopicUrl(card.dataset.topicHref) || "#";
-    drawer.excerpt.textContent = card.querySelector(".betterld-topic-card__excerpt")?.textContent || config.excerptPlaceholder;
-    drawer.status.textContent = "";
-    const showExcerpt = card.dataset.excerptState === "ready";
-    if (!showExcerpt && card.dataset.topicId) {
-      drawer.status.textContent = config.excerptLoadingLabel;
-      requestExcerpt(card.dataset.topicId)
-        .then((metadata) => {
-          if (drawerRequest !== state.drawerRequest) {
-            return;
-          }
-          drawer.excerpt.textContent = metadata.text;
-          drawer.status.textContent = "";
-          setExcerpt(card, metadata.text, metadata.contentState, metadata.markdown);
-          if (metadata.stats) setReadingStats(card, metadata.stats);
-          if (metadata.participants) setReadingParticipants(card, metadata.participants);
-        })
-        .catch((error) => {
-          if (drawerRequest !== state.drawerRequest) {
-            return;
-          }
-          drawer.status.textContent = error instanceof Error ? error.message : config.excerptPlaceholder;
-          drawer.excerpt.textContent = config.excerptPlaceholder;
-        });
-    }
+    drawer.openLink.href = topicUrl || "#";
+    drawer.openLink.hidden = !topicUrl;
+    drawer.frame.title = `${drawer.title.textContent}：原始主题页面`;
+    drawer.frame.dataset.request = String(drawerRequest);
+    drawer.status.textContent = topicUrl ? "正在加载原始主题页面…" : "主题链接不可用";
     if (typeof drawer.dialog.showModal === "function") {
       if (!drawer.dialog.open) {
         drawer.dialog.showModal();
@@ -1836,7 +1926,8 @@
     } else {
       drawer.dialog.setAttribute("open", "");
     }
-    window.requestAnimationFrame(() => drawer.close.focus());
+    drawer.frame.src = topicUrl || "about:blank";
+    window.requestAnimationFrame(() => drawer.frame.focus());
   }
 
   function plainText(markup) {

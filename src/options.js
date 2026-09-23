@@ -767,7 +767,7 @@
     sidebarPosition: { original: "保留原位", right: "移动到右侧" },
     actionRailPosition: { left: "左侧", right: "右侧", bottom: "底部" },
     actionRailVisibility: { always: "始终显示", auto: "滚动时半隐藏", hidden: "默认隐藏" },
-    topicCardOpenMode: { currentTab: "当前标签页", newTab: "新标签页", background: "后台标签页", drawer: "摘要抽屉" },
+    topicCardOpenMode: { currentTab: "当前标签页", newTab: "新标签页", background: "后台标签页", drawer: "原网页预览" },
     navigationOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     searchOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
@@ -796,7 +796,7 @@
     sidebarPosition: { original: "Original", right: "Right" },
     actionRailPosition: { left: "Left", right: "Right", bottom: "Bottom" },
     actionRailVisibility: { always: "Always", auto: "Partly hidden while scrolling", hidden: "Hidden by default" },
-    topicCardOpenMode: { currentTab: "Current tab", newTab: "New tab", background: "Background tab", drawer: "Summary drawer" },
+    topicCardOpenMode: { currentTab: "Current tab", newTab: "New tab", background: "Background tab", drawer: "Original page preview" },
     navigationOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     searchOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
@@ -987,7 +987,7 @@
     { key: "themeMode", type: "select", label: "主题模式", help: "自动模式优先读取 LinuxDo 的主题状态。" },
     { key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "按时间切换时使用。", dependsOn: ["themeMode", "scheduled"] },
     { key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "支持跨午夜时间段。", dependsOn: ["themeMode", "scheduled"] },
-    { key: "themeColor", type: "color", label: "主题色", help: "只作用于 betterLD 自有控件和卡片。" },
+    { key: "themeColor", type: "color", label: "主题色", help: "只作用于 betterLD 自有控件和卡片；启用壁纸时按壁纸取样调整，取色失败则使用此颜色。" },
     { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
     { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
     { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "减少动效时会自动使用静态指示器。" },
@@ -1006,7 +1006,7 @@
     { key: "maskOpacity", type: "range", label: "页面遮罩", unit: "%", help: "范围 0–80%。" },
     { key: "blurPx", type: "range", label: "背景模糊", unit: "px", help: "范围 0–32px。" },
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
-    { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
+    { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "缓存 URL、探测时间、状态和取样主题色，不保存图片正文。" },
     { key: "applyToUnmanagedPages", type: "toggle", label: "对未管理页面应用壳层视觉", help: "只扩展背景、Header 和 Sidebar，不注入主题卡片。" },
 
     { key: "gridMode", type: "select", label: "网格模式", help: "自适应模式保留可用宽度和窄屏单列边界。" },
@@ -1063,7 +1063,7 @@
     { key: "searchPageWallpaperId", type: "text", label: "搜索页内置壁纸 ID", help: "仅在搜索页壁纸选择内置图片时生效。", dependsOn: ["searchPageWallpaperMode", "builtin"] },
     { key: "searchPageWallpaperUrl", type: "url", label: "搜索页远程壁纸 URL", help: "只接受 HTTPS 地址。", wide: true, dependsOn: ["searchPageWallpaperMode", "url"] },
 
-    { key: "topicCardOpenMode", type: "select", label: "主题卡片打开方式", help: "默认保持当前标签页行为。" },
+    { key: "topicCardOpenMode", type: "select", label: "主题卡片打开方式", help: "默认保持当前标签页；原网页预览会在小窗中显示完整主题。" },
     { key: "navigationOpenMode", type: "select", label: "导航链接打开方式", help: "保留 modifier-click 和键盘行为。" },
     { key: "searchOpenMode", type: "select", label: "搜索链接打开方式", help: "只作用于 betterLD 接管的搜索链接。" },
     { key: "notificationOpenMode", type: "select", label: "通知链接打开方式", help: "不修改原站通知内容。" },
@@ -1082,7 +1082,7 @@
   const labelMap = {
     latest: "最新", new: "新主题", unread: "未读", hot: "热门", top: "热门排行", posted: "我发布的", read: "已读", bookmarks: "书签", categories: "分类",
     settings: "设置", theme: "主题", refresh: "刷新",
-    openCurrentTab: "当前标签页打开", openNewTab: "新标签页打开", openBackground: "后台标签页打开", openDrawer: "打开摘要抽屉",
+    openCurrentTab: "当前标签页打开", openNewTab: "新标签页打开", openBackground: "后台标签页打开", openDrawer: "打开原网页预览",
     copyTopicUrl: "复制主题 URL", copyCleanUrl: "复制干净 URL", copyTopicId: "复制主题 ID", openCategory: "打开分类", openAuthor: "打开作者主页"
   };
 

@@ -47,6 +47,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   syncMetadataKey: "betterld.sync-meta",
   wallpaperLocalStorageKey: "betterld.local-wallpaper",
   wallpaperRemoteCacheKey: "betterld.remote-wallpaper-cache",
+  wallpaperThemeSampleSize: 24,
   wallpaperRandomSeedPattern: "https://picsum.photos/seed/{date}/2560/1440/?nature",
   wallpaperUpload: Object.freeze({
     maxWidth: 2560,
