@@ -483,10 +483,11 @@ function buildInjection(port) {
     throw new Error("preview storage could not be read");
   }
 
-  const data = {
-    [settingsKey]: persisted[settingsKey] || config.settingsDefaults,
-    [localKey]: persisted[localKey] || null
-  };
+  // 预览要忠实映射 storage.local：任意键都要能跨刷新保留，否则新增的本地键会被静默丢掉
+  const data = { ...persisted, [localKey]: persisted[localKey] || null };
+  if (!data[settingsKey]) {
+    data[settingsKey] = config.settingsDefaults;
+  }
   const listeners = [];
   const persist = () => {
     try {
@@ -684,22 +685,32 @@ async function shutdown(exitCode) {
 }
 
 async function main() {
-  if (process.argv.includes("--help")) {
-    console.log("Usage: npm run preview:orca [https://linux.do/path]");
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help")) {
+    console.log("Usage: npm run preview:orca [https://linux.do/path] [--page <tab-id>]");
     return;
   }
 
   await runOrca(["status"]);
-  const url = targetUrl(process.argv[2] || DEFAULT_URL);
+  const pageFlag = argv.indexOf("--page");
+  const reusePageId = pageFlag === -1 ? "" : argv[pageFlag + 1];
+  const urlArg = argv.find((arg, index) => (pageFlag === -1 || index !== pageFlag + 1) && !arg.startsWith("--"));
   await startPreviewServer();
 
-  const tabPayload = await runOrca(["tab", "create", "--url", url]);
-  pageId = tabPayload.result?.browserPageId;
-  if (!pageId) {
-    throw new Error("Orca did not return a browser page id");
+  if (reusePageId) {
+    // 已有 linux.do 标签页通常已经通过 Cloudflare 质询，复用它避免新建标签页被挑战。
+    pageId = reusePageId;
+    console.log(`[betterLD preview] reusing ${pageId}`);
+  } else {
+    const url = targetUrl(urlArg || DEFAULT_URL);
+    const tabPayload = await runOrca(["tab", "create", "--url", url]);
+    pageId = tabPayload.result?.browserPageId;
+    if (!pageId) {
+      throw new Error("Orca did not return a browser page id");
+    }
+    console.log(`[betterLD preview] opened ${url}`);
   }
 
-  console.log(`[betterLD preview] opened ${url}`);
   console.log(`[betterLD preview] page ${pageId}; refresh recovery is active`);
   monitorTimer = setInterval(() => {
     void monitorPage();

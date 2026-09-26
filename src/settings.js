@@ -87,14 +87,19 @@
     "sidebarCoverBlurEnabled",
     "removeChinesePunctuationIndent",
     "customCssEnabled",
-    "applyToUnmanagedPages",
     "showTopicAvatar",
     "showTopicAuthor",
     "showTopicCategory",
     "showTopicExcerpt",
+    "showTopicTags",
     "showTopicMeta",
+    "showTopicActivityTime",
+    "showTopicReplies",
+    "showTopicLikes",
+    "showTopicViews",
     "showTopicUnreadState",
     "showTopicPinnedState",
+    "showTopicWatchedState",
     "topicNavigationSticky",
     "showTopicNavigationCounts",
     "headerVisible",
@@ -102,6 +107,9 @@
     "autoHideSidebar",
     "showSettingsTrigger",
     "showThemeToggle",
+    "siteLogoVisible",
+    "siteLogoOutline",
+    "siteLogoGlow",
     "actionRailEnabled",
     "actionRailGlow",
     "showBackToTopButton",
@@ -116,6 +124,7 @@
     "topicFilterHideLv3",
     "topicFilterBinEnabled",
     "searchHistoryEnabled",
+    "searchHistoryPanelEnabled",
     "searchRecommendationEnabled",
     "searchFocusDimming",
     "searchFocusBlur",
@@ -298,7 +307,16 @@
         order: Number.isFinite(Number(item.order)) ? Number(item.order) : index
       }))
       .sort((left, right) => left.order - right.order);
-    return result.length ? result : clone(fallback);
+    if (!result.length) {
+      return clone(fallback);
+    }
+    // 新增的配置项按默认值补齐：否则已经保存过这份配置的用户永远看不到后来加的入口
+    for (const item of clone(fallback)) {
+      if (!seen.has(item.key)) {
+        result.push(item);
+      }
+    }
+    return result.sort((left, right) => left.order - right.order);
   }
 
   function normalizeNavigationConfig(value) {

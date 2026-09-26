@@ -40,6 +40,7 @@
   const settingsScroll = document.querySelector("#settings-scroll");
   const settingsClose = document.querySelector("#settings-close");
   const settingsPageBody = document.querySelector("#settings-page-body");
+  const settingsWindow = document.querySelector(".settings-window");
   const wallpaperSources = document.querySelector("#wallpaper-sources");
   const wallpaperRandomPanel = document.querySelector("#wallpaper-random-panel");
   const wallpaperRandomPreview = document.querySelector("#wallpaper-random-preview");
@@ -759,6 +760,7 @@
     shadowMode: { default: "默认阴影", none: "关闭阴影", custom: "自定义阴影" },
     gridMode: { auto: "自适应列数", fixed: "固定断点列数" },
     topicListLayoutMode: { reading: "阅读卡", cards: "Material 3 卡片", native: "原生主题列表" },
+    topicSortMode: { activity: "最新回复", created: "发布时间" },
     topicTitleFontSize: { responsive: "响应式", small: "小", base: "标准", large: "大" },
     topicAuthorFontSize: { small: "小", base: "标准", large: "大" },
     topicMetaFontSize: { small: "小", base: "标准", large: "大" },
@@ -788,6 +790,7 @@
     shadowMode: { default: "Default shadow", none: "No shadow", custom: "Custom shadow" },
     gridMode: { auto: "Responsive columns", fixed: "Fixed breakpoint columns" },
     topicListLayoutMode: { reading: "Reading cards", cards: "Material 3 cards", native: "Native topic list" },
+    topicSortMode: { activity: "Latest reply", created: "Publish time" },
     topicTitleFontSize: { responsive: "Responsive", small: "Small", base: "Base", large: "Large" },
     topicAuthorFontSize: { small: "Small", base: "Base", large: "Large" },
     topicMetaFontSize: { small: "Small", base: "Base", large: "Large" },
@@ -854,6 +857,8 @@
     "导出筛选规则": "Export filter rules",
     "导入筛选规则": "Import filter rules",
     "清空搜索历史": "Clear search history",
+    "检查更新": "Check for updates",
+    "比对 GitHub Releases 的最新标签与本地版本号，只做提示，不自动更新；不点击不会发起任何请求。": "Compares the latest GitHub Releases tag with the local version. It only reports, never auto-updates, and sends no request unless you click.",
     "立即同步": "Sync now",
     "Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。": "Manifest V3 · Chrome / Firefox desktop · Processes only the topic and settings data required by betterLD.",
     "项目主页": "Project home",
@@ -991,9 +996,9 @@
     { key: "wallpaperThemeColor", type: "toggle", label: "从壁纸提取主题色", help: "随背景图片调整网站和 betterLD 的强调色，并适配明暗模式。" },
     { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
     { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
-    { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "减少动效时会自动使用静态指示器。" },
+    { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "在设置页的分段控件上使用滑动液态指示器；关闭后为静态选中态，减少动效时同样使用静态。" },
     { key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
-    { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "只影响 betterLD 侧栏覆盖层。" },
+    { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "开启时侧栏容器用壁纸高斯模糊封面（半透明 + 背景模糊）；关闭后改用不透明表面。" },
     { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、菜单、导航和 Header 的独立模糊强度。" },
     { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
     { key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "控制卡片阴影的整体高度。" },
@@ -1008,7 +1013,6 @@
     { key: "blurPx", type: "range", label: "背景模糊", unit: "px", help: "范围 0–32px。" },
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
     { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
-    { key: "applyToUnmanagedPages", type: "toggle", label: "对未管理页面应用壳层视觉", help: "只扩展背景、Header 和 Sidebar，不注入主题卡片。" },
 
     { key: "gridMode", type: "select", label: "网格模式", help: "自适应模式保留可用宽度和窄屏单列边界。" },
     { key: "cardMinSize", type: "range", label: "卡片最小宽度", unit: "px", help: "自适应网格的最小轨道宽度。" },
@@ -1018,10 +1022,17 @@
     { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "不会改变作者 JSON 请求和权威来源。" },
     { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },
     { key: "showTopicExcerpt", type: "toggle", label: "显示正文摘要", help: "关闭后停止仅摘要观察请求。" },
-    { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "控制回复数和活动时间。" },
+    { key: "showTopicTags", type: "toggle", label: "显示卡片标签", help: "只影响 betterLD 阅读卡上的标签，不改变主题与站点标签。" },
+    { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "回复数、点赞数、浏览数与活动时间的总开关；关闭后不再为阅读卡请求元数据。" },
+    { key: "showTopicActivityTime", type: "toggle", label: "显示活动时间", help: "关闭后元信息只保留回复数，不减少请求。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicReplies", type: "toggle", label: "显示回复数", help: "同时作用于卡片元信息与阅读卡统计。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicLikes", type: "toggle", label: "显示点赞数", help: "只影响阅读卡统计。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicViews", type: "toggle", label: "显示浏览数", help: "只影响阅读卡统计。", dependsOn: ["showTopicMeta", true] },
     { key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "不改变原站未读语义。" },
     { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
+    { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看记录只保存在本机浏览记录里，不写服务端已读状态。" },
     { key: "topicListLayoutMode", type: "select", label: "主题卡片样式", help: "阅读卡适配核心 Markdown；原生模式恢复原始列表、分页和控制项。" },
+    { key: "topicSortMode", type: "select", label: "话题排序方式", help: "最新回复按 LinuxDo 默认的最后活动时间倒序；发布时间按主题创建时间倒序（Discourse 的 created）。切换后会重新加载当前列表，热门与最高保留各自排序。" },
     { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题。" },
     { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者。" },
     { key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "只调整 betterLD 卡片元信息。" },
@@ -1036,6 +1047,9 @@
     { key: "autoHideSidebar", type: "toggle", label: "自动隐藏 Sidebar", help: "仅宽屏启用，并保留悬停和键盘热区。" },
     { key: "showSettingsTrigger", type: "toggle", label: "显示设置入口", help: "在当前页面打开设置窗口，缺少资源 API 时回退扩展设置页。" },
     { key: "showThemeToggle", type: "toggle", label: "显示主题切换入口", help: "保留原站主题切换语义。" },
+    { key: "siteLogoVisible", type: "toggle", label: "显示站点 Logo", help: "只隐藏原站 Header 里的 Logo，不动其余 Header 内容。" },
+    { key: "siteLogoOutline", type: "toggle", label: "Logo 描边", help: "按 betterLD 主题色给 Logo 加一圈 1px 描边。" },
+    { key: "siteLogoGlow", type: "toggle", label: "Logo 发光", help: "按 betterLD 主题色加发光，可与描边同时开启。" },
     { key: "actionRailEnabled", type: "toggle", label: "启用浮动操作栏", help: "只创建一个 betterLD 操作组。" },
     { key: "actionRailPosition", type: "select", label: "操作栏位置", help: "仅启用操作栏时生效。", dependsOn: ["actionRailEnabled", true] },
     { key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "自动模式会随滚动半隐藏。", dependsOn: ["actionRailEnabled", true] },
@@ -1054,12 +1068,13 @@
     { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后命中项不再生成卡片。", dependsOn: ["topicFilterEnabled", true] },
 
-    { key: "searchMode", type: "select", label: "搜索结果模式", help: "当前 /search 仍以原生结果为默认。" },
+    { key: "searchMode", type: "select", label: "搜索结果模式", help: "卡片模式把搜索结果排成 betterLD 卡片网格，只重排站点已返回的结果（不额外请求）；原生模式保持站点结果页。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
-    { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "需确认 LinuxDo 搜索建议来源后生效。" },
+    { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
+    { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
     { key: "searchFocusDimming", type: "toggle", label: "搜索聚焦遮罩", help: "只遮罩 betterLD 自有背景。" },
     { key: "searchFocusBlur", type: "toggle", label: "搜索聚焦模糊", help: "独立于全局壁纸模糊，可能影响性能。" },
-    { key: "searchResultsPaginationMode", type: "select", label: "搜索结果分页", help: "真实分页机制确认后生效。" },
+    { key: "searchResultsPaginationMode", type: "select", label: "搜索结果分页", help: "滚动加载沿用站点自动加载更多；翻页模式禁用站点自动加载，改用「加载更多结果」按钮。" },
     { key: "searchPageWallpaperMode", type: "select", label: "搜索页壁纸", help: "默认继承全局壁纸。" },
     { key: "searchPageWallpaperId", type: "text", label: "搜索页内置壁纸 ID", help: "仅在搜索页壁纸选择内置图片时生效。", dependsOn: ["searchPageWallpaperMode", "builtin"] },
     { key: "searchPageWallpaperUrl", type: "url", label: "搜索页远程壁纸 URL", help: "只接受 HTTPS 地址。", wide: true, dependsOn: ["searchPageWallpaperMode", "url"] },
@@ -1089,6 +1104,7 @@
 
   const controlMap = new Map();
   const maintenanceStatus = document.querySelector("#maintenance-status");
+  const updateStatus = document.querySelector("#update-status");
   const clearSearchHistory = document.querySelector("#clear-search-history");
   const syncNow = document.querySelector("#sync-now");
   const aboutStorage = document.querySelector("#about-storage");
@@ -1166,6 +1182,11 @@
         next.click();
       });
       group.prepend(input);
+      // 液态指示器：滑动到当前选中项；关闭设置项时由 CSS 隐藏并回到静态选中态
+      const indicator = document.createElement("span");
+      indicator.className = "settings-segmented__indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      group.prepend(indicator);
       return { input, control: group };
     }
 
@@ -1554,6 +1575,28 @@
     });
   }
 
+  function syncSegmentIndicator(group) {
+    const indicator = group.querySelector(".settings-segmented__indicator");
+    const active = group.querySelector(".settings-segmented__item.is-active");
+    if (!indicator || !active) {
+      return;
+    }
+    indicator.style.width = `${active.offsetWidth}px`;
+    indicator.style.height = `${active.offsetHeight}px`;
+    indicator.style.transform = `translate(${active.offsetLeft}px, ${active.offsetTop}px)`;
+  }
+
+  const segmentObserver = typeof ResizeObserver === "function"
+    ? new ResizeObserver((entries) => entries.forEach((entry) => syncSegmentIndicator(entry.target)))
+    : null;
+
+  function syncSegmentIndicators() {
+    document.querySelectorAll(".settings-segmented").forEach((group) => {
+      segmentObserver?.observe(group);
+      syncSegmentIndicator(group);
+    });
+  }
+
   function writeAdvancedSettings(settings) {
     fieldDefinitions.forEach((definition) => {
       const input = controlMap.get(definition.key);
@@ -1608,6 +1651,10 @@
         button.tabIndex = active ? 0 : -1;
       });
     });
+    if (settingsWindow) {
+      settingsWindow.dataset.betterldLiquid = String(settings.liquidSegmentIndicatorEnabled === true);
+    }
+    syncSegmentIndicators();
     updateDependencies();
   }
 
@@ -1732,7 +1779,7 @@
   function sendRuntimeMessage(message) {
     const sendMessage = api.runtime?.sendMessage;
     if (typeof sendMessage !== "function") {
-      return Promise.reject(new Error("后台消息 API 不可用，请在扩展页面中使用 WebDAV"));
+      return Promise.reject(new Error("后台消息 API 不可用，请在扩展设置页或工具栏弹窗中重试"));
     }
     return new Promise((resolve, reject) => {
       const onResponse = (response) => {
@@ -1818,6 +1865,41 @@
       setStatusMessage(maintenanceStatus, `已从 WebDAV 追加规则（${counts}）。`, "success");
     } catch (error) {
       setStatusMessage(maintenanceStatus, `WebDAV 下载失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
+  }
+
+  // 只比数字段：v0.1.0 与 0.1.0 等价，缺的段按 0 处理
+  function compareVersions(left, right) {
+    const parts = (value) => String(value).split(".").map((item) => Number.parseInt(item, 10) || 0);
+    const leftParts = parts(left);
+    const rightParts = parts(right);
+    const length = Math.max(leftParts.length, rightParts.length);
+    for (let index = 0; index < length; index += 1) {
+      const difference = (leftParts[index] || 0) - (rightParts[index] || 0);
+      if (difference) {
+        return difference;
+      }
+    }
+    return 0;
+  }
+
+  // 只在主人点击时请求一次 GitHub Releases，不做自动轮询、不自动更新
+  async function checkForUpdates() {
+    setStatusMessage(updateStatus, "正在检查更新…");
+    try {
+      const response = await sendRuntimeMessage({ type: "check-update" });
+      if (!response?.ok) {
+        throw new Error(response?.error || "版本接口请求失败");
+      }
+      const current = String(api.runtime?.getManifest?.().version || "").replace(/^v/i, "");
+      const latest = String(response.latestTag || "").replace(/^v/i, "");
+      setStatusMessage(
+        updateStatus,
+        compareVersions(latest, current) > 0 ? `发现新版本 ${latest}（当前 ${current}）` : `已是最新版本 ${current}`,
+        "success"
+      );
+    } catch (error) {
+      setStatusMessage(updateStatus, `检查更新失败：${error instanceof Error ? error.message : "无法访问版本接口"}`, "error");
     }
   }
 
@@ -1932,6 +2014,7 @@
     });
     settingsScroll.scrollTop = 0;
     updateDependencies();
+    syncSegmentIndicators();
   }
 
   function searchEntries() {
@@ -2075,6 +2158,9 @@
     }
     window.close();
   });
+
+  window.addEventListener("resize", syncSegmentIndicators, { passive: true });
+  document.querySelector("#check-update").addEventListener("click", checkForUpdates);
 
   document.querySelector("#export-settings").addEventListener("click", () => {
     const exported = Object.fromEntries(Object.entries(state.settings).filter(([key]) => key !== "webdavPassword"));

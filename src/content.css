@@ -21,6 +21,10 @@
   --betterld-radius-md: 16px;
   --betterld-radius-lg: 20px;
   --betterld-radius-xl: 24px;
+  /* 话题页 Header 标题块比站点默认（--d-max-width，1320px）横向多出的宽度 */
+  --betterld-title-block-extra-width: 240px;
+  /* 侧栏亚克力封面相对侧栏列左右内缩的距离（对齐侧栏内容列） */
+  --betterld-sidebar-cover-inset: 9px;
   --betterld-motion-fast: 120ms ease-out;
   --betterld-motion-standard: 160ms cubic-bezier(.2, 0, 0, 1);
   --betterld-motion-slow: 180ms ease-out;
@@ -104,7 +108,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   background: transparent !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+body.betterld-shell .sidebar-wrapper {
   position: sticky !important;
   top: var(--header-offset, 52px) !important;
   align-self: start;
@@ -115,19 +119,42 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
 
 html[data-betterld-wallpaper-state] body .sidebar-container {
   box-sizing: border-box;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24) !important;
-  border-radius: 24px !important;
-  background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
-  box-shadow: 0 8px 24px rgb(19 16 29 / 0.14);
-  backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-content {
+body.betterld-shell .sidebar-container::before {
+  content: "";
+  position: absolute;
+  inset: 0 var(--betterld-sidebar-cover-inset);
+  z-index: -1;
+  box-sizing: border-box;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: 24px;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.78);
+  box-shadow: 0 8px 24px rgb(19 16 29 / 0.14);
+  -webkit-backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+  pointer-events: none;
+}
+
+/* 关闭「侧栏封面高斯模糊」后改用不透明表面，不再让壁纸透过并被模糊 */
+html[data-betterld-sidebar-cover="false"] body.betterld-shell .sidebar-container::before {
+  background: rgb(var(--betterld-surface-container-high-rgb) / 0.98);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--betterld-shadow-level-2);
+}
+
+body.betterld-shell .sidebar-section-content {
   gap: 4px !important;
   padding: 0 !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-wrapper {
+body.betterld-shell .sidebar-section-header-wrapper {
   min-height: 36px !important;
   margin: 8px 0 4px !important;
   padding: 0 8px !important;
@@ -138,11 +165,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   letter-spacing: 0.02em;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-wrapper:hover {
+body.betterld-shell .sidebar-section-header-wrapper:hover {
   background: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header {
+body.betterld-shell .sidebar-section-header {
   flex: 1 1 auto;
   align-items: center;
   min-width: 0;
@@ -158,12 +185,12 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   line-height: 1.25;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header:focus-visible {
+body.betterld-shell .sidebar-section-header:focus-visible {
   outline: 3px solid var(--betterld-primary);
   outline-offset: -3px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-caret {
+body.betterld-shell .sidebar-section-header-caret {
   width: 20px;
   height: 20px;
   display: grid;
@@ -171,19 +198,19 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   flex: 0 0 20px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-caret .d-icon {
+body.betterld-shell .sidebar-section-header-caret .d-icon {
   width: 16px;
   height: 16px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-text {
+body.betterld-shell .sidebar-section-header-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button {
+body.betterld-shell .sidebar-section-header-button {
   width: 32px !important;
   height: 32px !important;
   flex: 0 0 32px;
@@ -198,17 +225,17 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   transition: background 160ms ease, color 160ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button:hover {
+body.betterld-shell .sidebar-section-header-button:hover {
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-header-button:focus-visible {
+body.betterld-shell .sidebar-section-header-button:focus-visible {
   outline: 3px solid var(--betterld-primary);
   outline-offset: -3px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-wrapper {
+body.betterld-shell .sidebar-section-link-wrapper {
   min-height: 40px !important;
   margin: 0 !important;
 }
@@ -249,7 +276,7 @@ html[data-betterld-wallpaper-state] body .sidebar-section-link[aria-current="pag
   box-shadow: 0 2px 6px rgb(19 16 29 / 0.08);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix {
+body.betterld-shell .sidebar-section-link-prefix {
   width: 24px !important;
   height: 24px !important;
   display: grid;
@@ -257,12 +284,12 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   flex: 0 0 24px !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix .d-icon {
+body.betterld-shell .sidebar-section-link-prefix .d-icon {
   width: 20px;
   height: 20px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-prefix img {
+body.betterld-shell .sidebar-section-link-prefix img {
   width: 24px;
   height: 24px;
   display: block;
@@ -270,7 +297,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   object-fit: cover;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-text {
+body.betterld-shell .sidebar-section-link-content-text {
   min-width: 0;
   overflow: hidden;
   font-size: 14px !important;
@@ -280,8 +307,8 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   white-space: nowrap;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-suffix,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-badge {
+body.betterld-shell .sidebar-section-link-suffix,
+body.betterld-shell .sidebar-section-link-content-badge {
   min-width: 20px;
   min-height: 20px;
   display: grid;
@@ -290,13 +317,13 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   margin-left: auto;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-suffix .d-icon,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-content-badge .d-icon {
+body.betterld-shell .sidebar-section-link-suffix .d-icon,
+body.betterld-shell .sidebar-section-link-content-badge .d-icon {
   width: 16px;
   height: 16px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link-hover {
+body.betterld-shell .sidebar-section-link-hover {
   visibility: hidden;
   display: flex;
   align-items: center;
@@ -305,13 +332,13 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   transition: opacity 160ms ease, visibility 160ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:hover .sidebar-section-link-hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-link:focus-within .sidebar-section-link-hover {
+body.betterld-shell .sidebar-section-link:hover .sidebar-section-link-hover,
+body.betterld-shell .sidebar-section-link:focus-within .sidebar-section-link-hover {
   visibility: visible;
   opacity: 1;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button {
+body.betterld-shell .sidebar-section-hover-button {
   width: 32px !important;
   height: 32px !important;
   display: grid !important;
@@ -325,11 +352,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   transition: background 160ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button:hover {
+body.betterld-shell .sidebar-section-hover-button:hover {
   background: color-mix(in srgb, var(--betterld-primary) 16%, transparent) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-section-hover-button:focus-visible {
+body.betterld-shell .sidebar-section-hover-button:focus-visible {
   outline: 3px solid var(--betterld-primary);
   outline-offset: -3px;
 }
@@ -342,29 +369,29 @@ html[data-betterld-wallpaper-state] body .sidebar-footer-wrapper {
   backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-container {
+body.betterld-shell .sidebar-footer-container {
   padding: 8px !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions {
+body.betterld-shell .sidebar-footer-actions {
   align-items: center;
   gap: 4px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle__wrapper {
+body.betterld-shell .sidebar-theme-toggle__wrapper {
   min-width: 0;
   flex: 1 1 auto;
   margin: 0 !important;
   padding: 0 !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header {
+body.betterld-shell .sidebar-theme-toggle-dropdown,
+body.betterld-shell .sidebar-theme-toggle-dropdown > .select-kit-header {
   min-width: 0;
   width: 100%;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header {
+body.betterld-shell .sidebar-theme-toggle-dropdown > .select-kit-header {
   min-height: 32px;
   box-sizing: border-box;
   padding: 0 8px !important;
@@ -375,15 +402,15 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown[open] > .select-kit-header,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-theme-toggle-dropdown > .select-kit-header:focus-visible {
+body.betterld-shell .sidebar-theme-toggle-dropdown > .select-kit-header:hover,
+body.betterld-shell .sidebar-theme-toggle-dropdown[open] > .select-kit-header,
+body.betterld-shell .sidebar-theme-toggle-dropdown > .select-kit-header:focus-visible {
   border-color: color-mix(in srgb, var(--betterld-primary) 36%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 12%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button {
+body.betterld-shell .sidebar-footer-actions-button {
   width: 32px !important;
   height: 32px !important;
   display: grid !important;
@@ -398,13 +425,13 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
   transition: background 160ms ease, color 160ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:focus-visible {
+body.betterld-shell .sidebar-footer-actions-button:hover,
+body.betterld-shell .sidebar-footer-actions-button:focus-visible {
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-footer-actions-button:focus-visible {
+body.betterld-shell .sidebar-footer-actions-button:focus-visible {
   outline: 3px solid var(--betterld-primary);
   outline-offset: -3px;
 }
@@ -426,17 +453,17 @@ html[data-betterld-wallpaper-state] body #global-notice-alert-global-notice {
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice .text {
+body.betterld-shell #global-notice-alert-global-notice .text {
   display: block;
   flex: 1 1 auto;
   min-width: 0;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice strong {
+body.betterld-shell #global-notice-alert-global-notice strong {
   font-weight: 720;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice a {
+body.betterld-shell #global-notice-alert-global-notice a {
   display: inline-block;
   margin-left: 4px;
   border-radius: var(--betterld-radius-sm);
@@ -445,20 +472,20 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global
   text-decoration: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice a:hover {
+body.betterld-shell #global-notice-alert-global-notice a:hover {
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice a:focus-visible {
+body.betterld-shell #global-notice-alert-global-notice a:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: var(--betterld-focus-offset);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .navigation-container {
+body.betterld-shell .navigation-container {
   align-items: flex-start;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) {
   min-width: 0;
   max-width: 100%;
   height: 48px;
@@ -478,18 +505,18 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #naviga
   scrollbar-width: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills::-webkit-scrollbar {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav)::-webkit-scrollbar {
   display: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li {
   display: flex;
   flex: 0 0 auto;
   height: 40px;
   margin: 0 !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a {
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -507,25 +534,25 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #naviga
   transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li:not(.active) > a:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:not(.active):hover {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover {
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li.active > a,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a.active {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li.active > a,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a.active {
   background: var(--betterld-primary) !important;
   box-shadow: var(--betterld-shadow-active);
   color: var(--betterld-on-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:focus-visible {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: -3px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics {
+body.betterld-shell .show-more.has-topics {
   position: static !important;
   inset: auto !important;
   z-index: auto;
@@ -536,7 +563,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-m
   margin: 0 0 16px !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable {
   position: static;
   z-index: auto;
   display: flex !important;
@@ -564,27 +591,27 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-m
   transition: background var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), border-color var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:hover {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:hover {
   border-color: color-mix(in srgb, var(--betterld-primary) 64%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 22%, rgb(var(--betterld-surface-container-rgb)) 78%) !important;
   box-shadow: var(--betterld-shadow-level-1);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:focus-visible {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: var(--betterld-focus-offset);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable.loading {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable.loading {
   cursor: wait;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable .d-icon {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable .d-icon {
   flex: 0 0 auto;
   color: currentColor;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo {
+body.betterld-shell .topic-create-button__combo {
   min-height: 48px;
   box-sizing: border-box;
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
@@ -595,12 +622,12 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-
   transition: box-shadow var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo:hover {
+body.betterld-shell .topic-create-button__combo:hover {
   box-shadow: var(--betterld-shadow-level-2-hover);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-button,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-menu {
+body.betterld-shell .topic-create-button__combo > .d-combo-button-button,
+body.betterld-shell .topic-create-button__combo > .d-combo-button-menu {
   min-height: 48px;
   box-sizing: border-box;
   border: 0 !important;
@@ -611,14 +638,14 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-
   transition: background var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-button {
+body.betterld-shell .topic-create-button__combo > .d-combo-button-button {
   flex: 1 1 auto;
   min-width: 0;
   padding-inline: 20px;
   border-radius: 19px 0 0 19px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-menu {
+body.betterld-shell .topic-create-button__combo > .d-combo-button-menu {
   flex: 0 0 48px;
   width: 48px;
   margin: 0 !important;
@@ -628,12 +655,12 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-
   border-radius: 0 19px 19px 0;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-button:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > .d-combo-button-menu:hover {
+body.betterld-shell .topic-create-button__combo > .d-combo-button-button:hover,
+body.betterld-shell .topic-create-button__combo > .d-combo-button-menu:hover {
   background: color-mix(in srgb, var(--betterld-primary) 82%, rgb(var(--betterld-surface-rgb))) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo > :is(.d-combo-button-button, .d-combo-button-menu):focus-visible {
+body.betterld-shell .topic-create-button__combo > :is(.d-combo-button-button, .d-combo-button-menu):focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-on-primary);
   outline-offset: -4px;
 }
@@ -671,23 +698,23 @@ html[data-betterld-wallpaper-state] body .user-menu.revamped .menu-tabs-containe
   scrollbar-width: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .menu-tabs-container::-webkit-scrollbar {
+body.betterld-shell .user-menu.revamped .menu-tabs-container::-webkit-scrollbar {
   display: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped :is(.top-tabs, .bottom-tabs) {
+body.betterld-shell .user-menu.revamped :is(.top-tabs, .bottom-tabs) {
   width: 100%;
   align-items: center;
   gap: 4px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .bottom-tabs {
+body.betterld-shell .user-menu.revamped .bottom-tabs {
   margin-top: 4px !important;
   padding-top: 8px !important;
   border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.2);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab {
+body.betterld-shell .user-menu.revamped .user-menu-tab {
   position: relative;
   width: 40px !important;
   min-width: 40px !important;
@@ -705,28 +732,28 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   transition: background var(--betterld-motion-standard), border-color var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab .d-icon {
+body.betterld-shell .user-menu.revamped .user-menu-tab .d-icon {
   width: 20px;
   height: 20px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab.active,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab[aria-selected="true"] {
+body.betterld-shell .user-menu.revamped .user-menu-tab.active,
+body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="true"] {
   border-color: color-mix(in srgb, var(--betterld-primary) 42%, transparent) !important;
   background: var(--betterld-primary) !important;
   box-shadow: var(--betterld-shadow-active);
   color: var(--betterld-on-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab:not(.active):hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab[aria-selected="false"]:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab[aria-selected="false"]:focus-visible {
+body.betterld-shell .user-menu.revamped .user-menu-tab:not(.active):hover,
+body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="false"]:hover,
+body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="false"]:focus-visible {
   border-color: color-mix(in srgb, var(--betterld-primary) 28%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab .badge-notification {
+body.betterld-shell .user-menu.revamped .user-menu-tab .badge-notification {
   position: absolute;
   top: 1px;
   right: 1px;
@@ -752,7 +779,7 @@ html[data-betterld-wallpaper-state] body .user-menu.revamped .quick-access-panel
   color: var(--betterld-on-surface) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel > ul {
+body.betterld-shell .user-menu.revamped .quick-access-panel > ul {
   min-height: 0;
   box-sizing: border-box;
   margin: 0 !important;
@@ -764,7 +791,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   scrollbar-width: thin;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification {
+body.betterld-shell .user-menu.revamped .notification {
   min-width: 0;
   margin: 0 !important;
   border: 0 !important;
@@ -772,7 +799,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   background: transparent !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a {
+body.betterld-shell .user-menu.revamped .notification > a {
   width: 100% !important;
   min-width: 0;
   min-height: 64px;
@@ -789,19 +816,19 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   transition: background var(--betterld-motion-standard), border-color var(--betterld-motion-standard), color var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a:focus-visible {
+body.betterld-shell .user-menu.revamped .notification > a:hover,
+body.betterld-shell .user-menu.revamped .notification > a:focus-visible {
   border-color: color-mix(in srgb, var(--betterld-primary) 30%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 12%, transparent) !important;
   color: var(--betterld-on-surface) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification.unread > a {
+body.betterld-shell .user-menu.revamped .notification.unread > a {
   border-color: color-mix(in srgb, var(--betterld-primary) 30%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 10%, rgb(var(--betterld-surface-rgb)) 90%) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .icon-avatar {
+body.betterld-shell .user-menu.revamped .notification .icon-avatar {
   width: 40px;
   height: 40px;
   display: grid;
@@ -813,7 +840,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   color: var(--betterld-primary);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .icon-avatar img.avatar {
+body.betterld-shell .user-menu.revamped .notification .icon-avatar img.avatar {
   width: 100%;
   height: 100%;
   display: block;
@@ -821,7 +848,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   object-fit: cover;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .icon-avatar__icon-wrapper {
+body.betterld-shell .user-menu.revamped .notification .icon-avatar__icon-wrapper {
   position: absolute;
   top: -4px !important;
   right: -4px !important;
@@ -841,12 +868,12 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   transform: none;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .icon-avatar__icon-wrapper .d-icon {
+body.betterld-shell .user-menu.revamped .notification .icon-avatar__icon-wrapper .d-icon {
   width: 12px;
   height: 12px;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a > div:not(.icon-avatar) {
+body.betterld-shell .user-menu.revamped .notification > a > div:not(.icon-avatar) {
   min-width: 0;
   flex: 1 1 auto;
   display: flex;
@@ -855,7 +882,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   overflow: hidden;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .item-label {
+body.betterld-shell .user-menu.revamped .notification .item-label {
   min-width: 0;
   overflow: hidden;
   color: var(--betterld-on-surface) !important;
@@ -866,11 +893,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   white-space: nowrap;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification.unread .item-label {
+body.betterld-shell .user-menu.revamped .notification.unread .item-label {
   color: var(--betterld-primary) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification .item-description {
+body.betterld-shell .user-menu.revamped .notification .item-description {
   display: -webkit-box;
   overflow: hidden;
   color: var(--betterld-on-surface-variant) !important;
@@ -880,13 +907,13 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   -webkit-line-clamp: 2;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification img.emoji {
+body.betterld-shell .user-menu.revamped .notification img.emoji {
   width: 18px;
   height: 18px;
   vertical-align: middle;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom {
+body.betterld-shell .user-menu.revamped .panel-body-bottom {
   min-height: 64px;
   box-sizing: border-box;
   align-items: center;
@@ -896,7 +923,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   background: rgb(var(--betterld-surface-container-rgb) / 0.58) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
+body.betterld-shell .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
   min-height: 40px;
   box-sizing: border-box;
   align-items: center;
@@ -912,23 +939,23 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
   transition: background var(--betterld-motion-standard), border-color var(--betterld-motion-standard), color var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > .show-all {
+body.betterld-shell .user-menu.revamped .panel-body-bottom > .show-all {
   flex: 1 1 auto;
   display: flex !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > .notifications-dismiss {
+body.betterld-shell .user-menu.revamped .panel-body-bottom > .notifications-dismiss {
   flex: 0 0 auto;
   display: flex !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss):hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss):focus-visible {
+body.betterld-shell .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss):hover,
+body.betterld-shell .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss):focus-visible {
   border-color: color-mix(in srgb, var(--betterld-primary) 58%, transparent) !important;
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel .empty-state {
+body.betterld-shell .user-menu.revamped .quick-access-panel .empty-state {
   min-height: 240px;
   box-sizing: border-box;
   display: grid;
@@ -939,87 +966,89 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-m
 }
 
 @media (max-width: 560px) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped {
+  body.betterld-shell .user-menu.revamped {
     width: min(368px, calc(100vw - 16px)) !important;
     max-width: calc(100vw - 16px) !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .menu-tabs-container {
+  body.betterld-shell .user-menu.revamped .menu-tabs-container {
     flex-basis: 52px !important;
     width: 52px !important;
     padding-inline: 6px !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab {
+  body.betterld-shell .user-menu.revamped .user-menu-tab {
     width: 36px !important;
     min-width: 36px !important;
     height: 36px !important;
     min-height: 36px !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel > ul {
+  body.betterld-shell .user-menu.revamped .quick-access-panel > ul {
     padding-inline: 6px !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a {
+  body.betterld-shell .user-menu.revamped .notification > a {
     gap: 8px;
     padding-inline: 8px !important;
   }
 }
 
 @supports not (backdrop-filter: blur(1px)) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .menu-tabs-container {
+  body.betterld-shell .user-menu.revamped,
+  body.betterld-shell .user-menu.revamped .quick-access-panel,
+  body.betterld-shell .user-menu.revamped .menu-tabs-container {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgb(var(--betterld-surface-container-high-rgb) / 0.96) !important;
   }
 }
 
-html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped,
-html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel,
-html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .menu-tabs-container {
+html[data-betterld-material="fallback"] body.betterld-shell .user-menu.revamped,
+html[data-betterld-material="fallback"] body.betterld-shell .user-menu.revamped .quick-access-panel,
+html[data-betterld-material="fallback"] body.betterld-shell .user-menu.revamped .menu-tabs-container {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgb(var(--betterld-surface-container-high-rgb) / 0.96) !important;
 }
 
 @media (forced-colors: active) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .quick-access-panel,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .menu-tabs-container,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
+  body.betterld-shell .user-menu.revamped,
+  body.betterld-shell .user-menu.revamped .quick-access-panel,
+  body.betterld-shell .user-menu.revamped .menu-tabs-container,
+  body.betterld-shell .user-menu.revamped .notification > a,
+  body.betterld-shell .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
     background: Canvas !important;
     border-color: CanvasText !important;
     box-shadow: none !important;
     color: CanvasText !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab.active,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab[aria-selected="true"] {
+  body.betterld-shell .user-menu.revamped .user-menu-tab.active,
+  body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="true"] {
     background: Highlight !important;
     color: HighlightText !important;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .user-menu-tab,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .notification > a,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
+  body.betterld-shell .user-menu.revamped,
+  body.betterld-shell .user-menu.revamped .user-menu-tab,
+  body.betterld-shell .user-menu.revamped .notification > a,
+  body.betterld-shell .user-menu.revamped .panel-body-bottom > :is(.show-all, .notifications-dismiss) {
     animation: none !important;
     transition: none !important;
   }
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-container,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #list-area,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #header-list-area,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-list-container {
+body.betterld-shell #main-container,
+body.betterld-shell #main-outlet-wrapper,
+body.betterld-shell #main-outlet,
+body.betterld-shell #main-outlet > :is(.regular, .container),
+body.betterld-shell #main-outlet > * > .container,
+body.betterld-shell #list-area,
+body.betterld-shell #header-list-area,
+body.betterld-shell .topic-list-container {
   position: relative;
   z-index: 1;
   background: transparent !important;
@@ -1211,7 +1240,7 @@ body.betterld-topic-page [data-betterld-source-body="true"] {
   display: none !important;
 }
 
-body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls {
+body.betterld-shell #main-outlet-wrapper #main-outlet > .list-controls.list-controls {
   width: calc(100% - 48px) !important;
   max-width: calc(var(--d-max-width, 1320px) - 48px) !important;
   box-sizing: border-box;
@@ -1229,8 +1258,7 @@ body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #m
   will-change: transform, opacity;
 }
 
-body.betterld-topic-page .list-controls .category-breadcrumb,
-body.betterld-categories-page .list-controls .category-breadcrumb {
+body.betterld-shell .list-controls .category-breadcrumb {
   color: var(--betterld-on-surface) !important;
 }
 
@@ -1365,8 +1393,7 @@ html[data-betterld-wallpaper-state] body :is(.category-navigation, .category-bre
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
-body.betterld-topic-page .list-controls a,
-body.betterld-categories-page .list-controls a {
+body.betterld-shell .list-controls a {
   color: var(--betterld-primary) !important;
 }
 
@@ -1817,6 +1844,23 @@ body.betterld-tags-page .tags-index {
 .betterld-action-rail__icon {
   font-size: 19px;
   line-height: 1;
+}
+
+/* 合并后的「返回顶部或刷新」按钮：未到顶部显示向上箭头，已在顶部显示刷新图标 */
+.betterld-action-rail__button[data-betterld-action="topOrRefresh"] .betterld-action-rail__icon {
+  display: none;
+}
+
+.betterld-action-rail__button[data-betterld-action="topOrRefresh"] .betterld-action-rail__icon:first-child {
+  display: inline;
+}
+
+html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterld-action="topOrRefresh"] .betterld-action-rail__icon:first-child {
+  display: none;
+}
+
+html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterld-action="topOrRefresh"] .betterld-action-rail__icon:last-child {
+  display: inline;
 }
 
 .betterld-action-rail .betterld-settings-trigger {
@@ -2368,6 +2412,8 @@ body.betterld-tags-page .tags-index {
   backdrop-filter: blur(3px);
 }
 
+/* 宿主元素由外层文档样式接管，shadow root 里的 `:host { display: grid; place-items: center }` 会输给这条规则；
+   因此居中必须在同一个外层规则里声明，否则设置窗口会贴在视口顶部。 */
 .betterld-settings-dialog__surface {
   display: grid;
   place-items: center;
@@ -2501,6 +2547,35 @@ html[data-betterld-show-topic-meta="false"] .betterld-topic-card__meta {
   display: none;
 }
 
+/* 元信息与阅读卡统计的细分开关：只隐藏对应片段，元数据请求不变 */
+html[data-betterld-show-topic-tags="false"] .betterld-topic-card__tags {
+  display: none;
+}
+
+html[data-betterld-show-topic-replies="false"] .betterld-topic-card__meta-part[data-betterld-meta-part="replies"],
+html[data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta-part[data-betterld-meta-part="activity"] {
+  display: none;
+}
+
+html[data-betterld-show-topic-replies="false"] .betterld-topic-card__meta-separator,
+html[data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta-separator {
+  display: none;
+}
+
+html[data-betterld-show-topic-replies="false"][data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta {
+  display: none;
+}
+
+html[data-betterld-show-topic-replies="false"] .betterld-topic-card__reading-stat[data-betterld-stat="replies"],
+html[data-betterld-show-topic-likes="false"] .betterld-topic-card__reading-stat[data-betterld-stat="likes"],
+html[data-betterld-show-topic-views="false"] .betterld-topic-card__reading-stat[data-betterld-stat="views"] {
+  display: none;
+}
+
+html[data-betterld-show-topic-watched-state="false"] .betterld-topic-card__badge[data-betterld-badge="watched"] {
+  display: none;
+}
+
 html[data-betterld-show-topic-unread-state="false"] .betterld-topic-card.is-unread {
   border-color: rgb(var(--betterld-outline-rgb) / 0.24);
 }
@@ -2614,7 +2689,7 @@ html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
   }
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+body.betterld-shell :where(
   a,
   button,
   [role="button"],
@@ -2627,7 +2702,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
   outline-offset: var(--betterld-focus-offset);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+body.betterld-shell :where(
   .category-title-link,
   .subcategory a,
   .category-list a,
@@ -2636,7 +2711,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
   border-radius: var(--betterld-radius-sm);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .betterld-topic-card[data-excerpt-state="loading"] {
+body.betterld-shell .betterld-topic-card[data-excerpt-state="loading"] {
   cursor: progress;
 }
 
@@ -2720,43 +2795,43 @@ html[data-betterld-wallpaper-state] body::after {
   transition: background-color 360ms ease, opacity 360ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice {
+body.betterld-shell #global-notice-alert-global-notice {
   animation: betterld-surface-enter 360ms ease-out backwards;
   transition: background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice:hover {
+body.betterld-shell #global-notice-alert-global-notice:hover {
   transform: translateY(-1px) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) {
   animation: betterld-surface-enter 360ms ease-out 40ms backwards;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a {
   transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li:not(.active) > a:hover,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:not(.active):hover {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover {
   transform: translateY(-1px) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable {
   animation: betterld-surface-enter 360ms ease-out 80ms backwards;
   transition: background var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), border-color var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:hover {
+body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:hover {
   transform: translateY(-1px) !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo {
+body.betterld-shell .topic-create-button__combo {
   animation: betterld-surface-enter 360ms ease-out 80ms backwards;
   transition: box-shadow var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo:hover {
+body.betterld-shell .topic-create-button__combo:hover {
   transform: translateY(-1px) !important;
 }
 
@@ -2764,7 +2839,7 @@ body.betterld-topic-page .category-heading {
   animation: betterld-surface-enter 360ms ease-out backwards;
 }
 
-body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls[data-betterld-scroll-state="hidden"] {
+body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls[data-betterld-scroll-state="hidden"] {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: translateY(calc(-100% - 16px)) !important;
@@ -2786,10 +2861,10 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
 
 
 @supports not (backdrop-filter: blur(1px)) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
+  body.betterld-shell #global-notice-alert-global-notice,
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
+  body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable,
+  body.betterld-shell #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
   body.betterld-topic-page .category-heading,
   body.betterld-topic-page .category-navigation .select-kit-body,
   body.betterld-categories-page .category-list > tbody > tr {
@@ -2805,9 +2880,9 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
   }
 }
 
-html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+html[data-betterld-material="fallback"] body.betterld-shell :where(
   #global-notice-alert-global-notice,
-  #navigation-bar.nav.nav-pills,
+  :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
   .show-more.has-topics > a.alert.alert-info.clickable,
   #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
   .category-heading,
@@ -2831,9 +2906,9 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
     color: CanvasText;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+  body.betterld-shell :where(
     #global-notice-alert-global-notice,
-    #navigation-bar.nav.nav-pills,
+    :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
     .show-more.has-topics > a.alert.alert-info.clickable,
     #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
     .category-heading,
@@ -2866,11 +2941,11 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
     transition: none !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #global-notice-alert-global-notice:hover,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li:not(.active) > a:hover,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills > li > a:not(.active):hover,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .show-more.has-topics > a.alert.alert-info.clickable:hover,
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .topic-create-button__combo:hover,
+  body.betterld-shell #global-notice-alert-global-notice:hover,
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover,
+  body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:hover,
+  body.betterld-shell .topic-create-button__combo:hover,
   body:is(.betterld-categories-page) .category-list > tbody > tr:hover,
   .betterld-topic-card:hover {
     transform: none !important;
@@ -2878,10 +2953,10 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+  body.betterld-shell :where(
     #global-notice-alert-global-notice,
     #global-notice-alert-global-notice a,
-    #navigation-bar.nav.nav-pills > li > a,
+    :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a,
     .show-more.has-topics > a.alert.alert-info.clickable,
     .topic-create-button__combo,
     .topic-create-button__combo > .d-combo-button-button,
@@ -2897,7 +2972,7 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
     transition: none !important;
   }
 
-  body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) :where(
+  body.betterld-shell :where(
     .category-list > tbody > tr:hover,
     .betterld-topic-card:hover
   ) {
@@ -2905,89 +2980,126 @@ html[data-betterld-material="fallback"] body:is(.betterld-home, .betterld-topic-
   }
 }
 
-html[data-betterld-header-visual="native"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-visual="native"] body.betterld-shell .d-header {
   background: revert !important;
   box-shadow: revert !important;
   -webkit-backdrop-filter: revert;
   backdrop-filter: revert;
 }
 
-html[data-betterld-header-visual="solid"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-visual="solid"] body.betterld-shell .d-header {
   background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
   box-shadow: var(--betterld-shadow-level-1);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 
-html[data-betterld-header-visual="frosted"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-visual="frosted"] body.betterld-shell .d-header {
   background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
   -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
-html[data-betterld-header-visible="false"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header,
-html[data-betterld-header-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-visible="false"] body.betterld-shell .d-header,
+html[data-betterld-header-state="hidden"] body.betterld-shell .d-header {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: translateY(calc(-100% - 12px)) !important;
 }
 
-html[data-betterld-header-state="visible"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-state="visible"] body.betterld-shell .d-header {
   opacity: 1;
   transform: translateY(0);
   transition: opacity var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-html[data-betterld-header-sticky="false"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header {
+html[data-betterld-header-sticky="false"] body.betterld-shell .d-header {
   position: relative !important;
 }
 
-html[data-betterld-sidebar-position="right"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+/* 话题页 Header 里的标题块：站点把它做成透明浮层，这里给它 betterLD 的毛玻璃材质面 */
+body.betterld-shell .d-header .extra-info-wrapper {
+  /* 站点把该块放在 Header 五列网格的中间 1320px 轨道里（width 由轨道决定，改 width 无效），
+     因此用 content-box + 左右 padding 把面板横向放宽，再用负 margin 抵消 padding 让标题位置不变；
+     padding 同时受两侧可用空间限制，窄屏不会溢出视口 */
+  --betterld-title-block-bleed: min(
+    calc(var(--betterld-title-block-extra-width) / 2),
+    calc((100vw - var(--d-max-width, 1320px) - 24px) / 2)
+  );
+  box-sizing: content-box;
+  padding-inline: var(--betterld-title-block-bleed);
+  margin-inline: calc(var(--betterld-title-block-bleed) * -1);
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: var(--betterld-radius-lg);
+  background: rgb(var(--betterld-surface-container-rgb) / 0.72);
+  box-shadow: var(--betterld-shadow-level-1);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+/* 站点 Logo 样式：只改显隐与滤镜，不重建 Header 结构 */
+html[data-betterld-site-logo-visible="false"] body.betterld-shell #site-logo {
+  display: none !important;
+}
+
+html[data-betterld-site-logo-outline="true"] body.betterld-shell :is(#site-logo, #site-logo :is(img, svg)) {
+  filter: drop-shadow(1px 0 0 var(--betterld-primary)) drop-shadow(-1px 0 0 var(--betterld-primary)) drop-shadow(0 1px 0 var(--betterld-primary)) drop-shadow(0 -1px 0 var(--betterld-primary));
+}
+
+html[data-betterld-site-logo-glow="true"] body.betterld-shell :is(#site-logo, #site-logo :is(img, svg)) {
+  filter: drop-shadow(0 0 10px var(--betterld-primary));
+}
+
+html[data-betterld-site-logo-outline="true"][data-betterld-site-logo-glow="true"] body.betterld-shell :is(#site-logo, #site-logo :is(img, svg)) {
+  filter: drop-shadow(1px 0 0 var(--betterld-primary)) drop-shadow(-1px 0 0 var(--betterld-primary)) drop-shadow(0 1px 0 var(--betterld-primary)) drop-shadow(0 -1px 0 var(--betterld-primary)) drop-shadow(0 0 10px var(--betterld-primary));
+}
+
+html[data-betterld-sidebar-position="right"] body.betterld-shell .sidebar-wrapper {
   order: 2;
 }
 
-html[data-betterld-sidebar-position="right"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper {
+html[data-betterld-sidebar-position="right"] body.betterld-shell #main-outlet-wrapper {
   order: 1;
 }
 
-html[data-betterld-sidebar-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+html[data-betterld-sidebar-state="hidden"] body.betterld-shell .sidebar-wrapper {
   opacity: 0.12;
   pointer-events: auto;
   transform: translateX(-92%);
   transition: opacity var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-html[data-betterld-sidebar-position="right"][data-betterld-sidebar-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+html[data-betterld-sidebar-position="right"][data-betterld-sidebar-state="hidden"] body.betterld-shell .sidebar-wrapper {
   transform: translateX(92%);
 }
 
-html[data-betterld-sidebar-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper:hover,
-html[data-betterld-sidebar-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper:focus-within {
+html[data-betterld-sidebar-state="hidden"] body.betterld-shell .sidebar-wrapper:hover,
+html[data-betterld-sidebar-state="hidden"] body.betterld-shell .sidebar-wrapper:focus-within {
   opacity: 1;
   transform: translateX(0);
 }
 
-html[data-betterld-navigation-alignment="center"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills {
+html[data-betterld-navigation-alignment="center"] body.betterld-shell #navigation-bar.nav.nav-pills {
   justify-content: center;
 }
 
-html[data-betterld-navigation-sticky="true"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .navigation-container {
+html[data-betterld-navigation-sticky="true"] body.betterld-shell .navigation-container {
   position: sticky;
   top: var(--header-offset, 52px);
   z-index: 4;
 }
 
-html[data-betterld-navigation-sticky="false"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .navigation-container {
+html[data-betterld-navigation-sticky="false"] body.betterld-shell .navigation-container {
   position: static;
 }
 
-html[data-betterld-navigation-counts="false"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar [data-betterld-navigation-count] {
+html[data-betterld-navigation-counts="false"] body.betterld-shell #navigation-bar [data-betterld-navigation-count] {
   display: none !important;
 }
 
 @media (max-width: 720px) {
-  html[data-betterld-sidebar-position="right"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper,
-  html[data-betterld-sidebar-state="hidden"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+  html[data-betterld-sidebar-position="right"] body.betterld-shell .sidebar-wrapper,
+  html[data-betterld-sidebar-state="hidden"] body.betterld-shell .sidebar-wrapper {
     order: initial;
     opacity: 1;
     pointer-events: auto;
@@ -3045,14 +3157,14 @@ html[data-betterld-remove-punctuation-indent="true"] :is(.betterld-topic-card, .
   text-indent: 0 !important;
 }
 
-html[data-betterld-navigation-scroll="true"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills {
+html[data-betterld-navigation-scroll="true"] body.betterld-shell #navigation-bar.nav.nav-pills {
   flex-wrap: nowrap;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;
 }
 
-html[data-betterld-touch-mode="true"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills a,
+html[data-betterld-touch-mode="true"] body.betterld-shell #navigation-bar.nav.nav-pills a,
 html[data-betterld-touch-mode="true"] .betterld-settings-trigger,
 html[data-betterld-touch-mode="true"] .betterld-action-rail__button,
 html[data-betterld-touch-mode="true"] .betterld-topic-card__menu-trigger,
@@ -3063,7 +3175,7 @@ html[data-betterld-touch-mode="true"] .betterld-touch-home {
   min-height: 44px;
 }
 
-html[data-betterld-navigation-scroll="true"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) #navigation-bar.nav.nav-pills a {
+html[data-betterld-navigation-scroll="true"] body.betterld-shell #navigation-bar.nav.nav-pills a {
   flex: 0 0 auto;
 }
 
@@ -3105,9 +3217,223 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
   background: rgb(var(--betterld-mask-rgb) / 0.46);
 }
 
-html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data-betterld-search-focus-blur="true"] body.betterld-search-page::before {
+html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data-betterld-search-focus-blur="true"] body.betterld-shell::before {
   filter: blur(calc(var(--betterld-background-blur) + 8px));
 }
+
+/* #region 搜索结果：卡片模式与翻页模式 */
+
+/* 卡片模式只重排站点已经返回的结果，不额外请求；标题/分类/标签/摘要仍用站点内容 */
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "author topic"
+    "blurb blurb";
+  gap: 8px 12px;
+  align-items: start;
+  position: relative;
+  box-sizing: border-box;
+  width: auto;
+  padding: 16px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.34);
+  border-radius: 20px;
+  background: rgb(var(--betterld-surface-rgb) / 0.56);
+  box-shadow: var(--betterld-shadow-level-1);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
+  backdrop-filter: blur(var(--betterld-surface-blur));
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .author {
+  grid-area: author;
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .fps-topic {
+  grid-area: topic;
+  min-width: 0;
+  margin: 0;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .fps-topic .topic {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .search-link {
+  display: block;
+  overflow: hidden;
+  color: var(--betterld-on-surface);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .blurb.container {
+  grid-area: blurb;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+  color: var(--betterld-on-surface-variant);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .blurb.container > span:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .ai-result__icon {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* 翻页模式：站点自动加载被禁用，改用 betterLD 的显式按钮 */
+.betterld-search-more {
+  display: block;
+  min-height: 40px;
+  margin: 20px auto 0;
+  padding: 0 20px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.4);
+  border-radius: 999px;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.86);
+  color: var(--betterld-on-surface);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
+  backdrop-filter: blur(var(--betterld-surface-blur));
+}
+
+.betterld-search-more:hover:not(:disabled) {
+  border-color: var(--betterld-primary);
+  color: var(--betterld-primary);
+}
+
+.betterld-search-more:focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+
+.betterld-search-more:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* 搜索历史浮层：随输入框聚焦出现，点击回填并提交 */
+.betterld-search-history {
+  position: fixed;
+  z-index: 2147483000;
+  display: grid;
+  gap: 4px;
+  box-sizing: border-box;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: var(--betterld-radius-lg);
+  background: rgb(var(--betterld-surface-container-high-rgb) / 0.98);
+  box-shadow: var(--betterld-shadow-raised);
+  color: var(--betterld-on-surface);
+  font: inherit;
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
+  backdrop-filter: blur(var(--betterld-surface-blur));
+}
+
+.betterld-search-history__list {
+  display: grid;
+  gap: 2px;
+}
+
+.betterld-search-history__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.betterld-search-history__term {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--betterld-radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.betterld-search-history__term:hover {
+  background: color-mix(in srgb, var(--betterld-primary) 14%, transparent);
+}
+
+.betterld-search-history__remove {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.betterld-search-history__remove:hover {
+  background: rgb(var(--betterld-outline-rgb) / 0.18);
+  color: var(--betterld-error);
+}
+
+.betterld-search-history__clear {
+  min-height: 34px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.betterld-search-history__clear:hover {
+  border-color: var(--betterld-primary);
+  color: var(--betterld-primary);
+}
+
+.betterld-search-history :is(button):focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+
+/* #endregion */
 
 @media (forced-colors: active) {
   :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-action-rail__button, .betterld-settings-trigger, .betterld-touch-home, .betterld-action-status) {
@@ -3406,10 +3732,38 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
   line-height: 1.2;
 }
 
+/* 统计图标形状只在这里定义：运行时卡片与 reader-card-preview.html 共用同一组 CSS 掩膜 */
+.betterld-topic-card__reading-stat-icon {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: var(--betterld-stat-icon-image);
+  mask-image: var(--betterld-stat-icon-image);
+}
+
+/* 24×24 Material 轮廓图标：回复（chat_bubble_outline）/ 点赞（favorite_border）/ 浏览（visibility） */
+.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="comment"] {
+  --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z'/%3E%3C/svg%3E");
+}
+
+.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="heart"] {
+  --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z'/%3E%3C/svg%3E");
+}
+
+.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="views"] {
+  --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
+}
+
 .betterld-topic-card--reading .betterld-topic-card__reading-stat-icon {
   color: var(--betterld-on-surface-variant);
   font-size: 20px;
-  line-height: 1;
 }
 
 .betterld-topic-card--reading .betterld-topic-card__reading-action {
@@ -3579,7 +3933,7 @@ html[data-betterld-show-topic-meta="false"] .betterld-topic-card--reading .bette
 }
 
 .betterld-topic-card--reading .betterld-topic-card__reading-stat-icon {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .betterld-topic-card--reading .betterld-topic-card__reading-action {

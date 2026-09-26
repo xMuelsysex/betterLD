@@ -11,10 +11,11 @@
   ],
   "host_permissions": [
     "https://linux.do/*",
-    "https://www.linux.do/*"
+    "https://www.linux.do/*",
+    "https://api.github.com/*"
   ],
   "background": {
-    "scripts": ["src/webdav.js", "src/background.js"],
+    "scripts": ["betterld.config.js", "src/webdav.js", "src/background.js"],
     "service_worker": "src/background.js"
   },
   "content_scripts": [

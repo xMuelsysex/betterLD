@@ -17,6 +17,8 @@
 ### Homepage Topic Card
 - **Definition**：首页信息流中展示一个帖子的可视化条目，包含内容预览、作者身份和帖子归属信息。
 - **Rules/Invariants**：卡片保留帖子作者的 ID 和头像作为身份识别信息；回复数、最后活动时间等现有元信息以紧凑形式保留。
+- **Rules/Invariants**：卡片内容的显隐由各自独立的开关控制（头像、作者、分类、摘要、标签、元信息、未读、置顶、已看），其中元信息是总开关，
+  回复数、点赞数、浏览数与活动时间是它内部的细分开关；细分开关只隐藏对应片段（`data-betterld-meta-part`、`data-betterld-stat`），不改变元数据请求，也不制造替代数值。
 
 ### Cover Content Area
 - **Definition**：参考图中原本展示视频封面的上方大面积内容区域。
@@ -43,6 +45,8 @@
 ### Card Navigation
 - **Definition**：用户通过首页主题卡片进入对应原帖的行为。
 - **Rules/Invariants**：整张卡片沿用原帖链接习惯，并保留右键、Ctrl/Cmd 点击和键盘新标签页等浏览器原生操作。
+- **Rules/Invariants**：打开方式是一套共用取值，同时作用于主题卡片、主题导航与搜索链接：当前标签页、新标签页、后台标签页，
+  以及两个条件取值（首页外开新标签页 / 仅首页开新标签页）；修饰键点击一律交回浏览器原生行为，取值解析只在 `linkOpenBehavior` 一处。
 
 ### Section Level
 - **Definition**：帖子所属的一级分区名称，在作者 ID 下方以使用分区原色的 Material 3 风格 Chip 展示为帖子归属标识。
@@ -51,6 +55,11 @@
 ### Visual Enhancement
 - **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次和氛围的效果集合。
 - **Rules/Invariants**：首版默认启用可调整的背景图片、页面遮罩和模糊效果；背景图片的加载和呈现方式参考 BewlyCat；没有可用背景图片时仍保持可用的明暗对应渐变视觉。
+- **Rules/Invariants**：背景、遮罩与 Header/Sidebar 这套壳层视觉在 betterLD 运行的所有 linux.do 页面生效，由唯一类 `body.betterld-shell` 界定，不按页面类型枚举；页面级类（首页/话题列表/分类/标签/搜索）只用于主题卡片、导航胶囊与分类盒子等页面级能力。
+- **Rules/Invariants**：壳层页面里站点自带的页面级底板（`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`）必须透明，壁纸与遮罩在该区域可见。
+- **Rules/Invariants**：壳层页面里站点的纯白表面一律换成两种 betterLD 材质面之一，不再保留站点自己的白底：站点内容卡片（原生主题表行、`.badge-card`、`.latest-topic-list-item`、`.user-main .details`、分类盒子 `.category-box`、标签面板、用户页 `.user-main`）用 `surface-rgb / 0.56` + 模糊 + betterLD 描边/圆角/阴影；浮层与输入控件（`.user-card/.group-card/.category-card`、`.select-kit-body`、`.fk-d-menu__inner-content`、`.d-modal__container`、`#dialog-holder .dialog-content`、`#reply-control`、搜索框、导航行的类别/标签下拉 header）用 `surface-container-rgb / 0.96（搜索框 0.82）`；站点标签胶囊 `a.discourse-tag.box` 沿用卡片标签写法（`surface-container-rgb / 0.58` + 999px 圆角 + betterLD 描边），不用站点的 `--primary-low` 灰底。新增站点组件时沿用这两种写法，不引入第三种白底。
+- **Rules/Invariants**：站点自己的二级导航条（用户页 `.user-navigation .nav-pills`、私信页 `.messages-nav`）与主题列表导航共用同一套胶囊规则（选择器组写在一处，不复制声明）；站点按钮 `.btn-default`/`.btn-primary`/`.btn-danger` 统一为 betterLD 形态，只改背景、描边、圆角与文字色，保持原几何尺寸，`.btn-icon`/`.btn-flat`/`.btn-transparent` 不受影响。
+- **Rules/Invariants**：站点用 `var(--d-content-background)` / `var(--secondary)` 画的整页底板都算壳层要处理的对象，已知清单：`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`、`.list-controls`、`.search-container`、`.user-main`、`.user-content`、`.body-page`（静态文档页）、`#main-outlet.not-found-container`（404）、`.show-badge`（徽章详情）、`.login-fullpage`、`.container.group`（群组页）、`.latest-topic-list-item`、`.user-stream-item`、`.follow-stream-item`、`.badge-card`。聊天页（`.full-page-chat`、`.chat-message-container`、`.c-navbar-container`、`.chat-pinned-bar`、`.chat-channel-status`）与 AI 机器人输入区同样处理。第三方组件（如 `/upcoming-events` 的日历）与帖子正文内容元素（blockquote、代码块）保留自身观感。
 - **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
 
 ### BewlyCat Wallpaper Selection
@@ -63,7 +72,7 @@
 
 ### Real LinuxDo Homepage
 - **Definition**：用户访问 `https://linux.do/` 时的真实首页信息流，而不是仅用于开发验证的静态页面。
-- **Rules/Invariants**：本轮首版改造只在真实首页启用；离开首页后恢复 LinuxDo 原页面结构。
+- **Rules/Invariants**：真实 linux.do 是所有页面（列表、主题详情、用户、分类、标签、搜索等）上改造效果的验收基准，不用静态页面代替；betterLD 在真实页面上按页面类型启用对应的页面级能力，壳层视觉则全页面生效，不因离开首页而恢复站点原生外观。
 
 ### Reading Topic Card
 - **Definition**：首页主题卡片的一种可选展示形式，以略长的桌面端圆角矩形集中呈现标题、作者、头像、标签、Markdown 正文预览、互动数据和详情入口。
@@ -96,10 +105,16 @@
 ### Immediate Apply
 - **Definition**：用户调整设置后立即作用于当前页面并持久化的生效方式。
 - **Rules/Invariants**：任何设置项被调整后立即成为当前生效值，设置窗口不提供提交动作；破坏性操作（恢复默认、导入、清空搜索历史）必须保留独立确认；界面必须让「改动已生效」可见。
+- **Rules/Invariants**：页面内的即时入口（浮动操作栏的卡片样式切换按钮、搜索历史面板）只写同一份设置或同一份本机数据，不引入第二套状态；
+  样式切换的取值顺序由 `config.settingsEnums.topicListLayoutMode` 决定，权威取值始终是 `topicListLayoutMode` 本身。
 
 ### Settings Search
 - **Definition**：在设置窗口内按名称或关键词定位设置项的能力。
 - **Rules/Invariants**：搜索只定位分类与设置项，不修改任何设置值；跨分类跳转后仍保留搜索关键字与结果上下文。
+
+### Topic Sort
+- **Definition**：话题列表的排序方式，可选 LinuxDo 默认的最新回复顺序，或按主题发布时间的倒序。
+- **Rules/Invariants**：排序由 Discourse 服务端的 `order` 参数决定，不做前端重排，因此不改变分页语义、也不产生额外请求；取值映射只在 `betterld.config.js` 的 `topicSortOrders` 维护，`activity` 不写参数（`bumped_at` 倒序），`created` 写 `order=created`（`created_at` 倒序）；只接管 betterLD 自己写入的 `created` 取值，URL 上其它 `order` 一律不改；生效范围是所有话题列表页，但热门与最高保留各自的排序语义，个人空间 `/u/{name}/activity/topics` 也在范围内；Discourse 不提供按最后编辑时间排序，编辑首帖不改变 `bumped_at`。
 
 ### Topic Filter
 - **Definition**：在 betterLD 卡片层按规则隐藏、淡化、高亮或只显示主题的能力，不改变 LinuxDo 原始查询与分页。
@@ -116,3 +131,23 @@
 ### WebDAV Rule Backup
 - **Definition**：把五组筛选规则上传到 WebDAV 地址，或从该地址下载并追加到现有规则。
 - **Rules/Invariants**：请求统一经后台 service worker 发出并按 origin 申请权限，不依赖页面 CORS；地址只接受 https，http 仅允许环回地址；WebDAV 密码只保存在本地，不进入浏览器同步投影与设置导出文件；下载采用追加 + 去重，不是覆盖。
+
+### Watched Topic Mark
+- **Definition**：卡片上的「已看」徒标，数据来自本机浏览记录（`visitedTopicStorageKey` 里的主题 id 列表，访问 `/t/{slug}/{id}` 时追加）。
+- **Rules/Invariants**：只读本机记录，不读也不写 Discourse 的已读状态；列表不进入浏览器同步投影；超过 `visitedTopicMaxEntries` 时丢弃最早的记录；
+  标记只按主题 id 匹配，不根据页面上的未读类名推断。
+
+### Search History Panel
+- **Definition**：搜索输入框聚焦时弹出的浮层，列出本机保存的搜索历史，支持回填、单条删除与清空全部。
+- **Rules/Invariants**：数据源与搜索推荐词完全共用本机搜索历史，不请求站点的搜索建议接口；
+  条目数量上限由 `searchHistoryPanelMaxItems` 决定；回填后仅当页面存在搜索表单时才自动提交，否则只填入输入框。
+
+### Version Reminder
+- **Definition**：关于页的「检查更新」动作，比对 GitHub Releases 的最新 tag 与本地 manifest 版本号，只做提示。
+- **Rules/Invariants**：只在用户点击时请求一次，不做自动轮询、不自动更新；
+  请求经后台 service worker 发出（设置窗口在页面内以 Shadow DOM 复用，页面环境直连不可靠），
+  权限只限于 `host_permissions` 里声明的版本接口来源；请求失败只显示失败原因，不隐式降级为「已是最新」。
+
+### Site Logo Style
+- **Definition**：原站 Header 里站点 Logo（`#site-logo`）的显隐、描边与发光。
+- **Rules/Invariants**：只改 `#site-logo` 自身（在这个站上它就是一个 `<img>`）的显隐与滤镜，不重建 Header 结构，也不影响其余 Header 内容。
