@@ -43,11 +43,17 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicChallengeCooldownMs: 600000,
   topicRequestRecoveryCount: 1,
   topicRequestRecoveryDelayMs: 10000,
+  topicPreview: Object.freeze({
+    aspectRatio: 4 / 3,
+    viewportArea: 0.7,
+    marginPx: 16
+  }),
   storageKey: "betterld.settings",
   syncMetadataKey: "betterld.sync-meta",
   wallpaperLocalStorageKey: "betterld.local-wallpaper",
   wallpaperRemoteCacheKey: "betterld.remote-wallpaper-cache",
   wallpaperRandomSeedPattern: "https://picsum.photos/seed/{date}/2560/1440/?nature",
+  wallpaperColorSampleSize: 32,
   wallpaperUpload: Object.freeze({
     maxWidth: 2560,
     maxHeight: 1440,
@@ -241,6 +247,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
             "themeScheduleStart",
             "themeScheduleEnd",
             "themeColor",
+            "wallpaperThemeColor",
             "darkModeBaseColor",
             "useGradientThemeColorBackground",
             "liquidSegmentIndicatorEnabled"
@@ -452,6 +459,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     themeScheduleStart: "18:00",
     themeScheduleEnd: "07:00",
     themeColor: "#6750a4",
+    wallpaperThemeColor: true,
     darkModeBaseColor: "#141218",
     useGradientThemeColorBackground: false,
     liquidSegmentIndicatorEnabled: false,

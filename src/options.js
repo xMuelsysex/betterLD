@@ -767,7 +767,7 @@
     sidebarPosition: { original: "保留原位", right: "移动到右侧" },
     actionRailPosition: { left: "左侧", right: "右侧", bottom: "底部" },
     actionRailVisibility: { always: "始终显示", auto: "滚动时半隐藏", hidden: "默认隐藏" },
-    topicCardOpenMode: { currentTab: "当前标签页", newTab: "新标签页", background: "后台标签页", drawer: "摘要抽屉" },
+    topicCardOpenMode: { currentTab: "当前标签页", newTab: "新标签页", background: "后台标签页", drawer: "原帖预览" },
     navigationOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     searchOpenMode: { currentTab: "当前标签页", newTab: "新标签页" },
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
@@ -796,7 +796,7 @@
     sidebarPosition: { original: "Original", right: "Right" },
     actionRailPosition: { left: "Left", right: "Right", bottom: "Bottom" },
     actionRailVisibility: { always: "Always", auto: "Partly hidden while scrolling", hidden: "Hidden by default" },
-    topicCardOpenMode: { currentTab: "Current tab", newTab: "New tab", background: "Background tab", drawer: "Summary drawer" },
+    topicCardOpenMode: { currentTab: "Current tab", newTab: "New tab", background: "Background tab", drawer: "Topic preview" },
     navigationOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     searchOpenMode: { currentTab: "Current tab", newTab: "New tab" },
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
@@ -809,7 +809,7 @@
   };
 
   const englishFieldLabels = {
-    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Theme color", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
+    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
     topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
@@ -987,7 +987,8 @@
     { key: "themeMode", type: "select", label: "主题模式", help: "自动模式优先读取 LinuxDo 的主题状态。" },
     { key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "按时间切换时使用。", dependsOn: ["themeMode", "scheduled"] },
     { key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "支持跨午夜时间段。", dependsOn: ["themeMode", "scheduled"] },
-    { key: "themeColor", type: "color", label: "主题色", help: "只作用于 betterLD 自有控件和卡片。" },
+    { key: "themeColor", type: "color", label: "手动主题色", help: "关闭壁纸取色或图片不允许读取颜色时使用。" },
+    { key: "wallpaperThemeColor", type: "toggle", label: "从壁纸提取主题色", help: "随背景图片调整网站和 betterLD 的强调色，并适配明暗模式。" },
     { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
     { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
     { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "减少动效时会自动使用静态指示器。" },
@@ -1082,7 +1083,7 @@
   const labelMap = {
     latest: "最新", new: "新主题", unread: "未读", hot: "热门", top: "热门排行", posted: "我发布的", read: "已读", bookmarks: "书签", categories: "分类",
     settings: "设置", theme: "主题", refresh: "刷新",
-    openCurrentTab: "当前标签页打开", openNewTab: "新标签页打开", openBackground: "后台标签页打开", openDrawer: "打开摘要抽屉",
+    openCurrentTab: "当前标签页打开", openNewTab: "新标签页打开", openBackground: "后台标签页打开", openDrawer: "打开原帖预览",
     copyTopicUrl: "复制主题 URL", copyCleanUrl: "复制干净 URL", copyTopicId: "复制主题 ID", openCategory: "打开分类", openAuthor: "打开作者主页"
   };
 
@@ -2123,7 +2124,7 @@
   });
   document.querySelector("#webdav-upload").addEventListener("click", webdavUpload);
   document.querySelector("#webdav-download").addEventListener("click", webdavDownload);
-  document.querySelector("#about-version").textContent = `版本 ${api.runtime?.getManifest?.().version || "0.1.0"} · Manifest V3`;
+  document.querySelector("#about-version").textContent = `版本 ${api.runtime?.getManifest?.().version || "未知"} · Manifest V3`;
 
   wallpaperSources.replaceChildren(...sourceOptions.map(createSourceOption));
   renderWallpaperCatalog();

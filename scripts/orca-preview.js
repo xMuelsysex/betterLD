@@ -10,6 +10,7 @@ const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(__dirname, "..");
+const MANIFEST = require("../manifest.json");
 const DEFAULT_URL = "https://linux.do/";
 const POLL_MS = 1000;
 const MIME_TYPES = {
@@ -245,7 +246,7 @@ function buildOptionsBridge() {
     runtime: {
       lastError: null,
       getManifest() {
-        return { version: "0.1.0" };
+        return { version: ${JSON.stringify(MANIFEST.version)} };
       },
       getURL(file) {
         return location.origin + "/" + file;
@@ -498,7 +499,7 @@ function buildInjection(port) {
   api.runtime = {
     lastError: null,
     getManifest() {
-      return { version: "0.1.0" };
+      return { version: ${JSON.stringify(MANIFEST.version)} };
     },
     getURL(file) {
       if (file === "src/options.html") {

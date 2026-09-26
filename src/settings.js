@@ -80,6 +80,7 @@
     return result;
   }
   const booleanKeys = [
+    "wallpaperThemeColor",
     "useGradientThemeColorBackground",
     "liquidSegmentIndicatorEnabled",
     "frostedGlassEnabled",

@@ -26,6 +26,8 @@
     mutating: false,
     wallpaperRequest: 0,
     wallpaperState: "default",
+    wallpaperColorUrl: "",
+    wallpaperColor: null,
     localWallpaper: null,
     remoteWallpaperCache: null,
     excerptCache: new Map(),
@@ -48,7 +50,6 @@
     scrollDistance: 0,
     openMenu: null,
     drawerTrigger: null,
-    drawerRequest: 0,
     topicDrawer: null,
     settingsDialog: null,
     settingsDialogTrigger: null,
@@ -312,6 +313,11 @@
     const wallpaperRequest = ++state.wallpaperRequest;
 
     state.currentSettings = settings;
+    const wallpaperUrl = resolveWallpaper(settings);
+    if (wallpaperUrl !== state.wallpaperColorUrl) {
+      state.wallpaperColorUrl = wallpaperUrl;
+      state.wallpaperColor = null;
+    }
     const materialSupported = Boolean(
       globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
       || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
@@ -383,7 +389,6 @@
     applySearchSettings();
     document.body?.classList.toggle("betterld-unmanaged-page", isUnmanagedShellPage());
 
-    const wallpaperUrl = resolveWallpaper(settings);
     if (!wallpaperUrl) {
       const hasWallpaperCandidate = settings.wallpaperMode !== config.wallpaperModes.none;
       setWallpaperState(root, options.forceFallback || hasWallpaperCandidate ? "fallback" : "default");
@@ -393,6 +398,7 @@
     if (remoteWallpaperCacheIsFresh(settings, wallpaperUrl)) {
       root.style.setProperty("--betterld-wallpaper-image", `url(${JSON.stringify(wallpaperUrl)})`);
       setWallpaperState(root, "ready");
+      updateWallpaperColor(wallpaperUrl, wallpaperRequest);
       return;
     }
 
@@ -407,6 +413,8 @@
       root.style.removeProperty("--betterld-wallpaper-image");
       recordRemoteWallpaperCache(settings, wallpaperUrl, false);
       setWallpaperState(root, "fallback");
+      state.wallpaperColor = null;
+      applyThemeTokens(settings);
       console.warn("[betterLD] wallpaper could not be decoded; using the safe gradient", wallpaperUrl);
     };
     const ready = () => {
@@ -416,6 +424,7 @@
       root.style.setProperty("--betterld-wallpaper-image", `url(${JSON.stringify(wallpaperUrl)})`);
       recordRemoteWallpaperCache(settings, wallpaperUrl, true);
       setWallpaperState(root, "ready");
+      updateWallpaperColor(wallpaperUrl, wallpaperRequest);
     };
     image.onload = () => {
       if (typeof image.decode !== "function") {
@@ -430,6 +439,79 @@
     };
     image.onerror = fallback;
     image.src = wallpaperUrl;
+  }
+
+  async function updateWallpaperColor(url, request) {
+    if (!state.currentSettings.wallpaperThemeColor) return;
+    if (state.wallpaperColor) {
+      applyThemeTokens(state.currentSettings);
+      return;
+    }
+    let objectUrl;
+    try {
+      // Firefox 内容脚本直接解码跨域图片会报 Invalid image request；改用同源 Blob 解码。
+      const image = new Image();
+      if (firefoxApi && !url.startsWith("data:")) {
+        const response = await fetch(url, { mode: "cors" });
+        if (!response.ok) throw new Error(`壁纸取色请求失败：${response.status}`);
+        objectUrl = URL.createObjectURL(await response.blob());
+        image.src = objectUrl;
+      } else {
+        image.crossOrigin = "anonymous";
+        image.src = url;
+      }
+      await image.decode();
+      if (request !== state.wallpaperRequest) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = config.wallpaperColorSampleSize;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const buckets = new Map();
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (!pixels[i + 3]) continue;
+        const rgb = [pixels[i], pixels[i + 1], pixels[i + 2]];
+        const key = rgb.map((channel) => channel >> 5).join(",");
+        const bucket = buckets.get(key) || { weight: 0, sum: [0, 0, 0] };
+        const chroma = (Math.max(...rgb) - Math.min(...rgb)) / 255;
+        const lightness = (Math.max(...rgb) + Math.min(...rgb)) / (2 * 255);
+        // 阴影和白云不应压过壁纸中有辨识度的颜色；灰度图片仍保留权重。
+        const weight = (pixels[i + 3] / 255) * (1 / 255 + chroma) * (1 / 255 + lightness * (1 - lightness));
+        bucket.weight += weight;
+        rgb.forEach((channel, index) => { bucket.sum[index] += channel * weight; });
+        buckets.set(key, bucket);
+      }
+      const dominant = [...buckets.values()].sort((a, b) => b.weight - a.weight)[0];
+      if (!dominant) throw new Error("壁纸没有可读取的非透明像素");
+      state.wallpaperColor = dominant.sum.map((channel) => Math.round(channel / dominant.weight));
+      applyThemeTokens(state.currentSettings);
+    } catch (error) {
+      if (request !== state.wallpaperRequest) return;
+      document.documentElement.dataset.betterldWallpaperColor = "unavailable";
+      console.warn("[betterLD] 壁纸取色失败，保留手动主题色", error);
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  function relativeLuminance(rgb) {
+    const linear = rgb.map((value) => value / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  }
+
+  function wallpaperPrimary() {
+    const dark = document.documentElement.dataset.betterldMode === "dark";
+    const background = dark ? hexToRgb(state.currentSettings.darkModeBaseColor).split(" ").map(Number) : [255, 255, 255];
+    const base = relativeLuminance(background);
+    const rgb = [...state.wallpaperColor];
+    const target = dark ? 255 : 0;
+    // 逐步调整亮度，保留壁纸色相并保证强调文本的对比度。
+    while (true) {
+      const luminance = relativeLuminance(rgb);
+      if ((Math.max(base, luminance) + 0.05) / (Math.min(base, luminance) + 0.05) >= 4.5 || rgb.every((channel) => channel === target)) break;
+      rgb.forEach((channel, index) => { rgb[index] = channel + Math.sign(target - channel); });
+    }
+    return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
   }
 
   function themeFromValue(value) {
@@ -465,9 +547,7 @@
     if (rgb.length !== 3 || rgb.some((part) => !Number.isFinite(part))) {
       return "#ffffff";
     }
-    const luminance = rgb.map((part) => part / 255).map((part) => part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
-    const relative = 0.2126 * luminance[0] + 0.7152 * luminance[1] + 0.0722 * luminance[2];
-    return relative > 0.42 ? "#1c1b1f" : "#ffffff";
+    return relativeLuminance(rgb) > 0.179 ? "#000000" : "#ffffff";
   }
 
   function scheduledMode(settings) {
@@ -485,7 +565,9 @@
 
   function applyThemeTokens(settings) {
     const root = document.documentElement;
-    const primary = settings.themeColor;
+    const fromWallpaper = settings.wallpaperThemeColor && state.wallpaperColor;
+    const primary = fromWallpaper ? wallpaperPrimary() : settings.themeColor;
+    root.dataset.betterldWallpaperColor = fromWallpaper ? "ready" : "manual";
     const background = settings.darkModeBaseColor;
     const primaryRgb = hexToRgb(primary);
     const backgroundRgb = hexToRgb(background);
@@ -1515,7 +1597,7 @@
       openCurrentTab: "当前页打开",
       openNewTab: "新标签页打开",
       openBackground: "后台打开",
-      openDrawer: "打开摘要抽屉",
+      openDrawer: "打开原帖预览",
       copyTopicUrl: "复制主题 URL",
       copyCleanUrl: "复制干净 URL",
       copyTopicId: "复制主题 ID",
@@ -1741,19 +1823,18 @@
     close.type = "button";
     close.addEventListener("click", () => closeTopicDrawer());
     header.append(title, close);
-    const details = createElement("div", "betterld-topic-drawer__details");
-    const category = createElement("span", "betterld-topic-drawer__category");
-    const author = createElement("span", "betterld-topic-drawer__author");
-    const meta = createElement("span", "betterld-topic-drawer__meta");
-    details.append(category, author, meta);
-    const excerpt = createElement("p", "betterld-topic-drawer__excerpt");
-    const status = createElement("p", "betterld-topic-drawer__status");
-    status.setAttribute("role", "status");
+    title.id = "betterld-topic-preview-title";
+    dialog.setAttribute("aria-labelledby", title.id);
+    const frame = document.createElement("iframe");
+    frame.className = "betterld-topic-drawer__frame";
+    frame.title = "原帖网页";
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
-    dialog.append(header, details, excerpt, status, openLink);
+    dialog.append(header, frame, openLink);
     dialog.addEventListener("click", (event) => {
-      if (event.target === dialog && state.currentSettings.drawerCloseOnOverlay) {
+      const bounds = dialog.getBoundingClientRect();
+      if (event.target === dialog && state.currentSettings.drawerCloseOnOverlay
+        && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) {
         closeTopicDrawer();
       }
     });
@@ -1764,6 +1845,8 @@
       }
     });
     dialog.addEventListener("close", () => {
+      frame.removeAttribute("src");
+      state.topicDrawer.frameDocument = null;
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
       if (trigger?.isConnected) {
@@ -1771,8 +1854,23 @@
       }
     });
     document.body.append(dialog);
-    state.topicDrawer = { dialog, title, category, author, meta, excerpt, status, openLink, close };
+    state.topicDrawer = { dialog, title, frame, openLink, close };
     return state.topicDrawer;
+  }
+
+  function syncTopicDrawerDocument() {
+    const drawer = state.topicDrawer;
+    if (!drawer?.dialog.open) return;
+    const frameDocument = drawer.frame.contentDocument;
+    if (!frameDocument || frameDocument === drawer.frameDocument) return;
+    drawer.frameDocument = frameDocument;
+    // 复用路由轮询，在图片尚未加载完时也能关闭；键盘事件不跨 iframe 冒泡。
+    frameDocument.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.currentSettings.drawerCloseOnEscape) {
+        event.preventDefault();
+        closeTopicDrawer();
+      }
+    }, true);
   }
 
   function closeTopicDrawer() {
@@ -1780,7 +1878,7 @@
     if (!drawer) {
       return;
     }
-    state.drawerRequest += 1;
+    drawer.frame.removeAttribute("src");
     if (drawer.dialog.open && typeof drawer.dialog.close === "function") {
       drawer.dialog.close();
     } else {
@@ -1791,44 +1889,35 @@
     }
   }
 
+  function resizeTopicDrawer() {
+    const dialog = state.topicDrawer?.dialog;
+    if (!dialog?.open) return;
+    const { aspectRatio, viewportArea, marginPx } = config.topicPreview;
+    const width = Math.min(
+      Math.sqrt(window.innerWidth * window.innerHeight * viewportArea * aspectRatio),
+      window.innerWidth - marginPx * 2,
+      (window.innerHeight - marginPx * 2) * aspectRatio
+    );
+    dialog.style.width = `${width}px`;
+    dialog.style.height = `${width / aspectRatio}px`;
+  }
+
   function openTopicDrawer(card) {
     const drawer = ensureTopicDrawer();
     if (!drawer) {
-      showActionStatus("摘要抽屉不可用");
+      showActionStatus("原帖预览不可用");
+      return;
+    }
+    const topicUrl = safeTopicUrl(card.dataset.topicHref);
+    if (!topicUrl) {
+      showActionStatus("原帖链接无效");
       return;
     }
     closeCardMenus();
-    const drawerRequest = ++state.drawerRequest;
     state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
-    drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "主题预览";
-    drawer.category.textContent = card.querySelector(".betterld-topic-card__chip")?.textContent || "未分类";
-    drawer.author.textContent = card.querySelector(".betterld-topic-card__author")?.textContent || config.authorPlaceholder;
-    drawer.meta.textContent = card.querySelector(".betterld-topic-card__meta")?.textContent || "";
-    drawer.openLink.href = safeTopicUrl(card.dataset.topicHref) || "#";
-    drawer.excerpt.textContent = card.querySelector(".betterld-topic-card__excerpt")?.textContent || config.excerptPlaceholder;
-    drawer.status.textContent = "";
-    const showExcerpt = card.dataset.excerptState === "ready";
-    if (!showExcerpt && card.dataset.topicId) {
-      drawer.status.textContent = config.excerptLoadingLabel;
-      requestExcerpt(card.dataset.topicId)
-        .then((metadata) => {
-          if (drawerRequest !== state.drawerRequest) {
-            return;
-          }
-          drawer.excerpt.textContent = metadata.text;
-          drawer.status.textContent = "";
-          setExcerpt(card, metadata.text, metadata.contentState, metadata.markdown);
-          if (metadata.stats) setReadingStats(card, metadata.stats);
-          if (metadata.participants) setReadingParticipants(card, metadata.participants);
-        })
-        .catch((error) => {
-          if (drawerRequest !== state.drawerRequest) {
-            return;
-          }
-          drawer.status.textContent = error instanceof Error ? error.message : config.excerptPlaceholder;
-          drawer.excerpt.textContent = config.excerptPlaceholder;
-        });
-    }
+    drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "原帖预览";
+    drawer.openLink.href = topicUrl;
+    drawer.frame.src = topicUrl;
     if (typeof drawer.dialog.showModal === "function") {
       if (!drawer.dialog.open) {
         drawer.dialog.showModal();
@@ -1836,6 +1925,7 @@
     } else {
       drawer.dialog.setAttribute("open", "");
     }
+    resizeTopicDrawer();
     window.requestAnimationFrame(() => drawer.close.focus());
   }
 
@@ -3251,6 +3341,14 @@
   }
 
   function checkRoute() {
+    syncTopicDrawerDocument();
+    // 以原站实际帖子列为准，兼容侧栏开关和不同视口的时间轴宽度。
+    const title = document.querySelector("#topic-title .title-wrapper");
+    const topic = document.querySelector(".container.posts .topic-area");
+    if (title && topic) {
+      const width = `${topic.getBoundingClientRect().width}px`;
+      if (title.style.maxWidth !== width) title.style.maxWidth = width;
+    }
     checkDailyWallpaper();
     if (location.href === state.currentHref) {
       return;
@@ -3391,6 +3489,7 @@
   coarsePointerMedia?.addEventListener?.("change", applyChromeSettings);
 
   window.addEventListener("scroll", updateListControlsScrollState, { passive: true });
+  window.addEventListener("resize", resizeTopicDrawer);
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
   state.currentHref = location.href;
