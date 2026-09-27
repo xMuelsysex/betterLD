@@ -76,6 +76,7 @@
     scrollDistance: 0,
     openMenu: null,
     drawerTrigger: null,
+    drawerRequest: 0,
     topicDrawer: null,
     settingsDialog: null,
     settingsDialogTrigger: null,
@@ -2350,7 +2351,8 @@
     dialog.setAttribute("aria-labelledby", title.id);
     const frame = document.createElement("iframe");
     frame.className = "betterld-topic-drawer__frame";
-    frame.title = "原帖网页";
+    frame.title = "原帖正文预览";
+    frame.sandbox.add("allow-same-origin");
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
     dialog.append(header, frame, openLink);
@@ -2368,7 +2370,8 @@
       }
     });
     dialog.addEventListener("close", () => {
-      frame.removeAttribute("src");
+      state.drawerRequest += 1;
+      frame.removeAttribute("srcdoc");
       state.topicDrawer.frameDocument = null;
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
@@ -2401,7 +2404,8 @@
     if (!drawer) {
       return;
     }
-    drawer.frame.removeAttribute("src");
+    state.drawerRequest += 1;
+    drawer.frame.removeAttribute("srcdoc");
     if (drawer.dialog.open && typeof drawer.dialog.close === "function") {
       drawer.dialog.close();
     } else {
@@ -2425,6 +2429,15 @@
     dialog.style.height = `${width / aspectRatio}px`;
   }
 
+  function topicPreviewDocument(content) {
+    const dark = document.documentElement.dataset.betterldMode === "dark";
+    const background = dark ? "#211f26" : "#fffbfe";
+    const foreground = dark ? "#e6e1e5" : "#1c1b1f";
+    const surface = dark ? "#2b2930" : "#f3edf7";
+    const accent = dark ? "#d0bcff" : "#6750a4";
+    return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><base href="${location.origin}/"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{color-scheme:${dark ? "dark" : "light"}}body{margin:0;padding:20px;background:${background};color:${foreground};font:15px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}img,video{max-width:100%;height:auto}pre{max-width:100%;overflow:auto;padding:12px;border-radius:12px;background:${surface}}code{font-family:ui-monospace,monospace}a{color:${accent}}blockquote{margin-inline:0;padding-inline:16px;border-inline-start:3px solid ${accent}}table{display:block;max-width:100%;overflow-x:auto}</style></head><body>${content}</body></html>`;
+  }
+
   function openTopicDrawer(card) {
     const drawer = ensureTopicDrawer();
     if (!drawer) {
@@ -2437,10 +2450,11 @@
       return;
     }
     closeCardMenus();
+    const requestId = ++state.drawerRequest;
     state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
     drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "原帖预览";
     drawer.openLink.href = topicUrl;
-    drawer.frame.src = topicUrl;
+    drawer.frame.srcdoc = topicPreviewDocument("<p>正在读取原帖正文…</p>");
     if (typeof drawer.dialog.showModal === "function") {
       if (!drawer.dialog.open) {
         drawer.dialog.showModal();
@@ -2450,6 +2464,26 @@
     }
     resizeTopicDrawer();
     window.requestAnimationFrame(() => drawer.close.focus());
+    if (state.metadataCooldownUntil > Date.now()) {
+      drawer.frame.srcdoc = topicPreviewDocument("<p>站点正在限制正文请求，请稍后再试或打开完整主题。</p>");
+      return;
+    }
+    const endpoint = new URL(`/t/${card.dataset.topicId}.json`, location.origin);
+    requestTopicResponse(endpoint.href, () => drawer.dialog.open && state.drawerRequest === requestId, () => true)
+      .then((data) => {
+        if (state.drawerRequest !== requestId) return;
+        const cooked = String(openingPost(data).cooked || "").trim();
+        if (!cooked) throw new Error("topic opening post content unavailable");
+        drawer.frame.srcdoc = topicPreviewDocument(`<article class="cooked">${cooked}</article>`);
+      })
+      .catch((error) => {
+        if (state.drawerRequest !== requestId) return;
+        console.warn("[betterLD] topic preview unavailable", error);
+        const blocked = /challenge|403|429/.test(error.message);
+        drawer.frame.srcdoc = topicPreviewDocument(blocked
+          ? "<p>站点验证阻止了原帖请求，请在当前页打开完整主题。</p>"
+          : "<p>原帖正文加载失败，请在当前页打开完整主题。</p>");
+      });
   }
 
   function plainText(markup) {
@@ -2566,6 +2600,12 @@
     }, isNeeded, isPriority);
   }
 
+  function openingPost(data) {
+    const post = data?.post_stream?.posts?.find((entry) => entry.post_number === 1);
+    if (!post) throw new Error("topic opening post unavailable");
+    return post;
+  }
+
   async function fetchTopicMetadata(topicId) {
     const endpoint = new URL(`/t/${topicId}.json`, location.origin);
     endpoint.searchParams.set("include_raw", "1");
@@ -2580,10 +2620,7 @@
     }), () => managedCards().some((card) => card.dataset.topicId === topicId
       && (card.matches(":hover, :focus-within")
         || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card))));
-    const post = data?.post_stream?.posts?.find((entry) => entry.post_number === 1);
-    if (!post) {
-      throw new Error("topic opening post unavailable");
-    }
+    const post = openingPost(data);
     const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
     const cooked = String(post?.cooked || "").trim();
     const text = plainText(cooked || raw);

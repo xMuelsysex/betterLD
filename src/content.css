@@ -110,10 +110,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
 
 body.betterld-shell .sidebar-wrapper {
   position: sticky !important;
-  top: var(--header-offset, 52px) !important;
+  top: calc(var(--header-offset, 52px) + 12px) !important;
   align-self: start;
-  height: calc(100vh - var(--header-offset, 52px)) !important;
-  max-height: calc(100vh - var(--header-offset, 52px)) !important;
+  margin-block: 12px;
+  height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
+  max-height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
   overflow-y: auto !important;
 }
 
@@ -362,25 +363,30 @@ body.betterld-shell .sidebar-section-hover-button:focus-visible {
 }
 
 html[data-betterld-wallpaper-state] body .sidebar-footer-wrapper {
-  min-height: 48px;
   box-sizing: border-box;
-  border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.24) !important;
-  background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
-  backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
+  border-top: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
 }
 
 body.betterld-shell .sidebar-footer-container {
-  padding: 8px !important;
+  padding: 8px 12px 12px !important;
 }
 
 body.betterld-shell .sidebar-footer-actions {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: center;
+  justify-items: center;
   gap: 4px;
 }
 
 body.betterld-shell .sidebar-theme-toggle__wrapper {
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
+  grid-column: 1 / -1;
+  order: -1;
   margin: 0 !important;
   padding: 0 !important;
 }
@@ -434,6 +440,50 @@ body.betterld-shell .sidebar-footer-actions-button:focus-visible {
 body.betterld-shell .sidebar-footer-actions-button:focus-visible {
   outline: 3px solid var(--betterld-primary);
   outline-offset: -3px;
+}
+
+body.betterld-shell .sidebar-footer-actions-button > .d-icon {
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 20px;
+}
+
+body.betterld-shell .sidebar-footer-actions-button > span[aria-hidden="true"] {
+  display: none !important;
+}
+
+body.betterld-shell .sidebar-panel-header {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+body.betterld-shell .sidebar-panel-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+body.betterld-shell .sidebar-sections__back-to-forum {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0 !important;
+}
+
+body.betterld-shell .sidebar-sections__back-to-forum > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 html[data-betterld-wallpaper-state] body #global-notice-alert-global-notice {
@@ -612,8 +662,11 @@ body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable .d-icon
 }
 
 body.betterld-shell .topic-create-button__combo {
-  min-height: 48px;
+  width: 220px !important;
+  max-width: 100%;
+  min-height: 40px;
   box-sizing: border-box;
+  margin-inline: auto !important;
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
   border-radius: var(--betterld-radius-lg);
   background: var(--betterld-primary) !important;
@@ -628,7 +681,7 @@ body.betterld-shell .topic-create-button__combo:hover {
 
 body.betterld-shell .topic-create-button__combo > .d-combo-button-button,
 body.betterld-shell .topic-create-button__combo > .d-combo-button-menu {
-  min-height: 48px;
+  min-height: 40px;
   box-sizing: border-box;
   border: 0 !important;
   background: transparent !important;
@@ -641,13 +694,15 @@ body.betterld-shell .topic-create-button__combo > .d-combo-button-menu {
 body.betterld-shell .topic-create-button__combo > .d-combo-button-button {
   flex: 1 1 auto;
   min-width: 0;
-  padding-inline: 20px;
+  width: auto !important;
+  justify-content: center;
+  padding-inline: 16px;
   border-radius: 19px 0 0 19px;
 }
 
 body.betterld-shell .topic-create-button__combo > .d-combo-button-menu {
-  flex: 0 0 48px;
-  width: 48px;
+  flex: 0 0 40px;
+  width: 40px;
   margin: 0 !important;
   padding: 0;
   display: grid;
@@ -1101,15 +1156,92 @@ html[data-betterld-wallpaper-state] body :is(
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
+/* 保留用户自选封面和原生操作，仅统一内层材质与信息排布。 */
+body.betterld-shell #user-card {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
+  border-radius: var(--betterld-radius-lg) !important;
+  box-shadow: var(--betterld-shadow-level-3);
+  color: var(--betterld-on-surface);
+}
+
+body.betterld-shell .user-card .card-content {
+  box-sizing: border-box;
+  padding: 20px;
+  border-radius: inherit;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.78);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+body.betterld-shell .user-card .first-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+body.betterld-shell .user-card .user-card-avatar {
+  margin: 0;
+}
+
+body.betterld-shell .user-card .names {
+  min-width: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+body.betterld-shell .user-card .names__secondary {
+  color: var(--betterld-on-surface-variant);
+}
+
+body.betterld-shell #user-card .usercard-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+
+body.betterld-shell .user-card .usercard-controls li {
+  margin: 0;
+}
+
+body.betterld-shell .user-card .usercard-controls .btn {
+  width: auto;
+  border-radius: 999px;
+}
+
+body.betterld-shell .user-card .card-row + .card-row {
+  margin-top: 16px;
+}
+
+body.betterld-shell .user-card .metadata-row {
+  padding-top: 12px;
+  border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+}
+
+body.betterld-shell .user-card .metadata {
+  gap: 8px 16px;
+}
+
+body.betterld-shell .user-card .user-badge {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: 999px;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.58);
+  color: var(--betterld-on-surface);
+}
+
 html[data-betterld-wallpaper-state] body .discourse-tag.box {
   background-color: rgb(var(--betterld-surface-container-rgb) / 0.58) !important;
 }
 
-/* 标题材质限于内容列；帖子页顶栏保留原有模糊。 */
+/* 帖子顶栏减淡底色，保留模糊以维持标题可读性。 */
 html[data-betterld-wallpaper-state] body #topic-title .title-wrapper,
 html[data-betterld-wallpaper-state]:is([data-betterld-header-visual="native"], [data-betterld-header-visual="frosted"]) body:has(#topic-title) .d-header {
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
-  background: rgb(var(--betterld-surface-container-rgb) / 0.82) !important;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.56) !important;
   box-shadow: var(--betterld-shadow-level-1);
   color: var(--betterld-on-surface);
   -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
@@ -1785,8 +1917,8 @@ body.betterld-tags-page .tags-index {
 }
 
 .betterld-action-rail[data-visibility="auto"] {
-  opacity: 0.24;
-  transition: opacity var(--betterld-motion-standard);
+  opacity: 0.65;
+  transition: opacity var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
 .betterld-action-rail[data-visibility="auto"][data-scroll-state="visible"],
@@ -1801,6 +1933,23 @@ body.betterld-tags-page .tags-index {
   opacity: 0;
   pointer-events: auto;
   transition: opacity var(--betterld-motion-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .betterld-action-rail[data-position="right"][data-visibility="auto"] {
+    right: 0;
+    transform: translate(50%, -50%);
+  }
+
+  .betterld-action-rail[data-position="right"][data-visibility="auto"]:is(:hover, :focus-within) {
+    transform: translate(0, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .betterld-action-rail[data-visibility="auto"] {
+    transition: none;
+  }
 }
 
 .betterld-action-rail[data-glow="true"] .betterld-action-rail__button,
@@ -2995,7 +3144,7 @@ html[data-betterld-header-visual="solid"] body.betterld-shell .d-header {
 }
 
 html[data-betterld-header-visual="frosted"] body.betterld-shell .d-header {
-  background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.56) !important;
   -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
@@ -3017,7 +3166,7 @@ html[data-betterld-header-sticky="false"] body.betterld-shell .d-header {
   position: relative !important;
 }
 
-/* 话题页 Header 里的标题块：站点把它做成透明浮层，这里给它 betterLD 的毛玻璃材质面 */
+/* 标题块复用 Header 材质，避免两层底色叠加后过于不透明。 */
 body.betterld-shell .d-header .extra-info-wrapper {
   /* 站点把该块放在 Header 五列网格的中间 1320px 轨道里（width 由轨道决定，改 width 无效），
      因此用 content-box + 左右 padding 把面板横向放宽，再用负 margin 抵消 padding 让标题位置不变；
@@ -3029,12 +3178,9 @@ body.betterld-shell .d-header .extra-info-wrapper {
   box-sizing: content-box;
   padding-inline: var(--betterld-title-block-bleed);
   margin-inline: calc(var(--betterld-title-block-bleed) * -1);
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
-  border-radius: var(--betterld-radius-lg);
-  background: rgb(var(--betterld-surface-container-rgb) / 0.72);
-  box-shadow: var(--betterld-shadow-level-1);
-  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
-  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 站点 Logo 样式：只改显隐与滤镜，不重建 Header 结构 */
@@ -3503,6 +3649,7 @@ html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .ai-resu
   min-width: 0;
   display: grid;
   gap: 14px;
+  padding-inline-end: 44px;
 }
 
 .betterld-topic-card--reading .betterld-topic-card__reading-title {
