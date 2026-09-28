@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.5",
+  "version": "0.1.13",
   "description": "将 LinuxDo 首页主题信息流转换为可读的 Material 3 风格卡片。",
   "permissions": ["storage"],
   "optional_host_permissions": [
@@ -31,6 +31,7 @@
         "src/content.js"
       ],
       "css": ["src/content.css"],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ],
@@ -46,6 +47,7 @@
     {
       "resources": [
         "betterld.config.js",
+        "src/page-refresh.js",
         "src/options.html",
         "src/options.css",
         "src/options.js",

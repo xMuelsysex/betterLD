@@ -448,12 +448,12 @@ function buildInjection(port) {
     throw new Error("page CSP nonce or head is unavailable");
   }
 
-  const runScript = (code) => {
-    const script = document.createElement("script");
-    script.nonce = nonce;
-    script.setAttribute("nonce", nonce);
+  const runScript = (code, targetDocument = document, targetNonce = nonce) => {
+    const script = targetDocument.createElement("script");
+    script.nonce = targetNonce;
+    script.setAttribute("nonce", targetNonce);
     script.textContent = code;
-    document.head.append(script);
+    targetDocument.head.append(script);
   };
 
   runScript(configCode);
@@ -572,20 +572,50 @@ function buildInjection(port) {
   };
   globalThis.chrome = api;
 
-  document.querySelectorAll("style[data-betterld-preview]").forEach((node) => node.remove());
-
-  const style = document.createElement("style");
-  style.nonce = nonce;
-  style.setAttribute("nonce", nonce);
-  style.dataset.betterldPreview = "true";
-  style.textContent = styleCode;
-  document.head.append(style);
+  const injectStyle = (targetDocument, targetNonce) => {
+    targetDocument.querySelectorAll("style[data-betterld-preview]").forEach((node) => node.remove());
+    const style = targetDocument.createElement("style");
+    style.nonce = targetNonce;
+    style.setAttribute("nonce", targetNonce);
+    style.dataset.betterldPreview = "true";
+    style.textContent = styleCode;
+    targetDocument.head.append(style);
+  };
+  injectStyle(document, nonce);
 
   runScript(contentCode);
   if (!globalThis.__betterldContentScriptActive) {
     throw new Error("betterLD content script did not initialize");
   }
   globalThis.__betterldPreviewInjected = { at: Date.now() };
+
+  const injectPreviewFrame = (frame) => {
+    const frameDocument = frame.contentDocument;
+    const frameWindow = frame.contentWindow;
+    if (!frameDocument?.head || !frameWindow || !["linux.do", "www.linux.do"].includes(frameDocument.location.hostname)
+      || frameWindow.__betterldContentScriptActive) return;
+    const nonceElement = frameDocument.querySelector("script[nonce]");
+    const frameNonce = nonceElement?.nonce || nonceElement?.getAttribute("nonce");
+    if (!frameNonce) throw new Error("topic preview CSP nonce is unavailable");
+    frameWindow.chrome = api;
+    runScript(configCode, frameDocument, frameNonce);
+    runScript(settingsCode, frameDocument, frameNonce);
+    runScript(markdownCode, frameDocument, frameNonce);
+    injectStyle(frameDocument, frameNonce);
+    runScript(contentCode, frameDocument, frameNonce);
+    if (!frameWindow.__betterldContentScriptActive) throw new Error("topic preview content script did not initialize");
+    frameWindow.__betterldPreviewInjected = { at: Date.now() };
+  };
+  const attachPreviewFrame = () => {
+    const frame = document.querySelector(".betterld-topic-drawer__frame");
+    if (!frame) return;
+    frameObserver.disconnect();
+    frame.addEventListener("load", () => injectPreviewFrame(frame));
+    injectPreviewFrame(frame);
+  };
+  const frameObserver = new MutationObserver(attachPreviewFrame);
+  frameObserver.observe(document.body, { childList: true, subtree: true });
+  attachPreviewFrame();
 
   return {
     cards: document.querySelectorAll(".betterld-topic-card").length,

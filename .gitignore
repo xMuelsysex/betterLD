@@ -1,4 +1,5 @@
 .playwright-mcp/
+.ace-tool/
 .workflow/
 .pi/
 node_modules/

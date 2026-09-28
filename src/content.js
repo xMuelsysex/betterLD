@@ -1,6 +1,10 @@
 (() => {
   "use strict";
 
+  if (window !== window.top && !window.frameElement?.classList.contains("betterld-topic-drawer__frame")) {
+    return;
+  }
+
   const config = globalThis.BETTERLD_CONFIG;
   const settingsApi = globalThis.BETTERLD_SETTINGS;
   const api = globalThis.browser || globalThis.chrome;
@@ -49,6 +53,11 @@
     excerptCache: new Map(),
     metadataQueue: [],
     metadataRunning: false,
+    metadataStarts: [],
+    responseRequests: new Map(),
+    pageRefreshBridge: null,
+    refreshPromise: null,
+    refreshNextAt: 0,
     excerptStorageChain: Promise.resolve(),
     metadataNextAt: 0,
     metadataCooldownUntil: 0,
@@ -378,6 +387,10 @@
     root.style.setProperty("--betterld-mask-opacity", String(settings.maskOpacity));
     root.style.setProperty("--betterld-background-blur", `${settings.blurPx}px`);
     root.style.setProperty("--betterld-card-opacity", String(settings.cardOpacity));
+    root.style.setProperty("--betterld-card-motion", `${config.topicCardMotion.durationMs}ms ${config.topicCardMotion.easing}`);
+    root.style.setProperty("--betterld-card-hover-spread", `${config.topicCardMotion.spreadPx}px`);
+    root.style.setProperty("--betterld-card-hover-opacity", String(config.topicCardMotion.hoverOpacity));
+    root.style.setProperty("--betterld-card-active-opacity", String(config.topicCardMotion.activeOpacity));
     root.style.setProperty("--betterld-card-min-size", `${settings.cardMinSize}px`);
     root.style.setProperty("--betterld-card-side-gutter", `${settings.cardSideGutter}px`);
     root.style.setProperty("--betterld-grid-gap", `${settings.gridGap}px`);
@@ -1533,7 +1546,7 @@
       if (showTop && pageScrollTop() > config.scrollTopThreshold) {
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else if (showRefresh) {
-        refreshWithUndoSnapshot();
+        refreshTopicsList();
       }
     });
     return button;
@@ -1579,20 +1592,6 @@
       }));
     } catch (error) {
       console.warn("[betterLD] undo refresh snapshot write failed", error);
-    }
-  }
-
-  function refreshWithUndoSnapshot() {
-    captureUndoRefreshSnapshot();
-    markRefreshScrollTop();
-    location.reload();
-  }
-
-  function markRefreshScrollTop() {
-    try {
-      sessionStorage.setItem(config.refreshScrollTopStorageKey, String(Date.now()));
-    } catch (error) {
-      console.warn("[betterLD] refresh scroll intent write failed", error);
     }
   }
 
@@ -1741,7 +1740,7 @@
   }
 
   function authorName(item) {
-    const creator = item.querySelector(".topic-creator-data, .topic-poster, .posters, .creator");
+    const creator = item.querySelector(".topic-creator-data, .topic-poster, .posters, .creator, .author");
     const creatorNodes = creator ? [creator, ...creator.querySelectorAll("[data-user-card], [aria-label]")] : [];
     const name = creatorNodes
       .flatMap((node) => [node.getAttribute("data-user-card"), node.getAttribute("aria-label")])
@@ -1821,7 +1820,7 @@
       return null;
     }
 
-    const isReadingCard = state.currentSettings.topicListLayoutMode === "reading";
+    const isReadingCard = cardLayoutMode() === "reading";
     const author = topic.id ? authorName(item) : config.authorPlaceholder;
     const category = categoryInfo(item);
     const card = createElement("article", isReadingCard ? "betterld-topic-card betterld-topic-card--reading" : "betterld-topic-card");
@@ -1932,6 +1931,7 @@
       header.append(badges, title, infoRow);
       shell.append(header, tags, excerpt, readingFooter);
       card.append(shell, menu);
+      if (item.matches(".fps-result")) updateSearchCard(card, item);
       return card;
     }
 
@@ -2197,14 +2197,12 @@
 
   async function ignoreAuthorOnServer(username) {
     const token = document.querySelector('meta[name="csrf-token"]')?.content;
-    const userId = globalThis.Discourse?.User?.current()?.id;
-    if (!token || !userId) {
+    if (!token) {
       throw new Error("无法读取登录状态或 CSRF 令牌");
     }
     const params = new URLSearchParams();
     params.set("notification_level", "ignore");
     params.set("expiring_at", config.discourseIgnoreExpiringAt);
-    params.set("acting_user_id", String(userId));
     const response = await fetch(`/u/${encodeURIComponent(username)}/notification_level.json`, {
       method: "PUT",
       credentials: "same-origin",
@@ -2218,6 +2216,10 @@
     if (!response.ok) {
       throw new Error(`服务端屏蔽失败（HTTP ${response.status}）`);
     }
+    const result = await response.json();
+    if (result.success !== "OK") {
+      throw new Error(result.errors?.join("；") || "服务端未确认屏蔽成功");
+    }
   }
 
   async function executeCardAction(action, card, menu) {
@@ -2228,12 +2230,27 @@
         showActionStatus("作者尚未加载完成，暂时无法屏蔽");
         return;
       }
-      if (!globalThis.confirm(`确定在服务端屏蔽 @${author}？该操作会写入你的 LinuxDo 账号。`)) {
+      if (!globalThis.confirm(`确定屏蔽 @${author}？将写入 LinuxDo 账号，并加入本地作者规则、启用隐藏模式（白名单仍优先）。`)) {
         return;
       }
       try {
         await ignoreAuthorOnServer(author);
-        showActionStatus(`已在服务端屏蔽 @${author}`, "success");
+        const keyword = state.currentSettings.topicFilterMatchMode === "regex" ? `^${escapeRegExp(author)}$` : author;
+        const settings = normalizeSettings({
+          ...state.currentSettings,
+          topicFilterEnabled: true,
+          topicFilterMode: "hide",
+          topicAuthorRules: [{ keyword }, ...state.currentSettings.topicAuthorRules]
+        });
+        try {
+          await storageSet({ [config.storageKey]: settings });
+          applyVisualSettings(settings);
+          syncManagedCardContent();
+          showActionStatus(`已屏蔽 @${author}，本地作者隐藏规则已生效`, "success");
+        } catch (error) {
+          console.error("[betterLD] local author rule save failed", error);
+          showActionStatus(`服务端已屏蔽 @${author}，本地规则保存失败：${error.message}`);
+        }
       } catch (error) {
         showActionStatus(error instanceof Error ? error.message : "服务端屏蔽失败");
       }
@@ -2351,7 +2368,7 @@
     dialog.setAttribute("aria-labelledby", title.id);
     const frame = document.createElement("iframe");
     frame.className = "betterld-topic-drawer__frame";
-    frame.title = "原帖正文预览";
+    frame.title = "原帖网页预览";
     frame.sandbox.add("allow-same-origin");
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
@@ -2371,7 +2388,7 @@
     });
     dialog.addEventListener("close", () => {
       state.drawerRequest += 1;
-      frame.removeAttribute("srcdoc");
+      resetTopicDrawerFrame(state.topicDrawer);
       state.topicDrawer.frameDocument = null;
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
@@ -2399,13 +2416,20 @@
     }, true);
   }
 
+  function resetTopicDrawerFrame(drawer) {
+    clearTimeout(drawer.loadTimer);
+    drawer.frame.onload = null;
+    drawer.frame.removeAttribute("src");
+    drawer.frame.removeAttribute("srcdoc");
+  }
+
   function closeTopicDrawer() {
     const drawer = state.topicDrawer;
     if (!drawer) {
       return;
     }
     state.drawerRequest += 1;
-    drawer.frame.removeAttribute("srcdoc");
+    resetTopicDrawerFrame(drawer);
     if (drawer.dialog.open && typeof drawer.dialog.close === "function") {
       drawer.dialog.close();
     } else {
@@ -2451,10 +2475,10 @@
     }
     closeCardMenus();
     const requestId = ++state.drawerRequest;
+    resetTopicDrawerFrame(drawer);
     state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
     drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "原帖预览";
     drawer.openLink.href = topicUrl;
-    drawer.frame.srcdoc = topicPreviewDocument("<p>正在读取原帖正文…</p>");
     if (typeof drawer.dialog.showModal === "function") {
       if (!drawer.dialog.open) {
         drawer.dialog.showModal();
@@ -2464,26 +2488,48 @@
     }
     resizeTopicDrawer();
     window.requestAnimationFrame(() => drawer.close.focus());
-    if (state.metadataCooldownUntil > Date.now()) {
-      drawer.frame.srcdoc = topicPreviewDocument("<p>站点正在限制正文请求，请稍后再试或打开完整主题。</p>");
-      return;
-    }
-    const endpoint = new URL(`/t/${card.dataset.topicId}.json`, location.origin);
-    requestTopicResponse(endpoint.href, () => drawer.dialog.open && state.drawerRequest === requestId, () => true)
-      .then((data) => {
-        if (state.drawerRequest !== requestId) return;
-        const cooked = String(openingPost(data).cooked || "").trim();
-        if (!cooked) throw new Error("topic opening post content unavailable");
-        drawer.frame.srcdoc = topicPreviewDocument(`<article class="cooked">${cooked}</article>`);
-      })
-      .catch((error) => {
-        if (state.drawerRequest !== requestId) return;
-        console.warn("[betterLD] topic preview unavailable", error);
-        const blocked = /challenge|403|429/.test(error.message);
-        drawer.frame.srcdoc = topicPreviewDocument(blocked
-          ? "<p>站点验证阻止了原帖请求，请在当前页打开完整主题。</p>"
-          : "<p>原帖正文加载失败，请在当前页打开完整主题。</p>");
-      });
+
+    const showFallback = () => {
+      if (state.drawerRequest !== requestId || !drawer.dialog.open) return;
+      resetTopicDrawerFrame(drawer);
+      drawer.frame.setAttribute("sandbox", "allow-same-origin");
+      drawer.frame.srcdoc = topicPreviewDocument("<p>完整网页在预览中无法加载，以下为原帖正文。可在当前页打开完整主题。</p><p>正在读取原帖正文…</p>");
+      if (state.metadataCooldownUntil > Date.now()) {
+        drawer.frame.srcdoc = topicPreviewDocument("<p>站点正在限制正文请求，请稍后再试或打开完整主题。</p>");
+        return;
+      }
+      const topicId = card.dataset.topicId;
+      if (state.excerptCache.get(topicId)?.state === "failed") state.excerptCache.delete(topicId);
+      requestTopicMetadata(topicId)
+        .then((metadata) => {
+          if (state.drawerRequest !== requestId) return;
+          const cooked = metadata.cooked;
+          if (!cooked) throw new Error("topic opening post content unavailable");
+          drawer.frame.srcdoc = topicPreviewDocument(`<p>完整网页在预览中无法加载，以下为原帖正文。</p><article class="cooked">${cooked}</article>`);
+        })
+        .catch((error) => {
+          if (state.drawerRequest !== requestId) return;
+          console.warn("[betterLD] topic preview unavailable", error);
+          const blocked = /challenge|403|429/.test(error.message);
+          drawer.frame.srcdoc = topicPreviewDocument(blocked
+            ? "<p>站点验证阻止了原帖请求，请在当前页打开完整主题。</p>"
+            : "<p>原帖正文加载失败，请在当前页打开完整主题。</p>");
+        });
+    };
+    drawer.frame.onload = () => {
+      if (state.drawerRequest !== requestId || !drawer.dialog.open) return;
+      const page = drawer.frame.contentDocument;
+      if (page?.querySelector("#challenge-stage") || /just a moment|请稍候/i.test(page?.title || "")) {
+        showFallback();
+      }
+    };
+    drawer.loadTimer = window.setTimeout(() => {
+      if (state.drawerRequest === requestId && !drawer.frame.contentDocument?.querySelector("#main-outlet-wrapper")) {
+        showFallback();
+      }
+    }, config.topicPreview.loadTimeoutMs);
+    drawer.frame.removeAttribute("sandbox");
+    drawer.frame.src = topicUrl;
   }
 
   function plainText(markup) {
@@ -2547,8 +2593,13 @@
     state.metadataRunning = true;
     try {
       while (state.metadataQueue.length) {
-        let wait;
-        while ((wait = Math.max(state.metadataNextAt, state.metadataCooldownUntil) - Date.now()) > 0) {
+        while (true) {
+          const now = Date.now();
+          state.metadataStarts = state.metadataStarts.filter((at) => now - at < config.topicRequestWindowMs);
+          const windowNextAt = state.metadataStarts.length >= config.topicRequestMaxPerWindow
+            ? state.metadataStarts[0] + config.topicRequestWindowMs : 0;
+          const wait = Math.max(state.metadataNextAt, state.metadataCooldownUntil, windowNextAt) - now;
+          if (wait <= 0) break;
           await new Promise((resolve) => window.setTimeout(resolve, wait));
         }
         // 到真正发请求时再按当前关注位置排序，悬停不会绕过限速或冷却。
@@ -2558,6 +2609,7 @@
           entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
           continue;
         }
+        state.metadataStarts.push(Date.now());
         state.metadataNextAt = Date.now() + config.topicRequestMinIntervalMs;
         try {
           entry.resolve(await entry.task());
@@ -2573,31 +2625,43 @@
   // 站点前面的 Cloudflare 会对不像站点自身 ajax 的 JSON 请求直接返回挑战页，
   // 一旦被打上挑战状态，站点自己的分页请求也会一起被挡、底部加载 spinner 永不结束。
   // 所以这里带上 Discourse ajax 同款的 X-Requested-With，并在被挑战时长时间停发。
+  function applyRateLimit(retryAfter) {
+    const seconds = Number(retryAfter);
+    const delay = seconds > 0 ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
+    state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil,
+      Date.now() + Math.max(config.topicRequestCooldownMs, Number.isFinite(delay) ? delay : 0));
+  }
+
   function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false) {
-    return scheduleMetadataRequest(async () => {
+    const existing = state.responseRequests.get(url);
+    if (existing) {
+      existing.consumers.push({ isNeeded, isPriority });
+      return existing.promise;
+    }
+    const consumers = [{ isNeeded, isPriority }];
+    const promise = scheduleMetadataRequest(async () => {
       const response = await fetch(url, {
         credentials: "same-origin",
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          "X-Requested-With": "XMLHttpRequest"
-        }
+        headers: discourseAjaxHeaders
       });
       if (response.headers.get("cf-mitigated") === "challenge") {
-        state.metadataCooldownUntil = Date.now() + config.topicChallengeCooldownMs;
+        state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil, Date.now() + config.topicChallengeCooldownMs);
         throw new Error("topic request blocked by the site challenge; cooling down");
       }
       if (response.status === 429) {
-        const retryAfter = Number(response.headers.get("Retry-After"));
-        state.metadataCooldownUntil = Date.now()
-          + (retryAfter > 0 ? retryAfter * 1000 : config.topicRequestCooldownMs);
+        applyRateLimit(response.headers.get("Retry-After"));
         throw new Error("topic request rate limited; cooling down");
       }
       if (!response.ok) {
         throw new Error(`topic request failed with ${response.status}`);
       }
       return response.json();
-    }, isNeeded, isPriority);
+    }, () => consumers.some((consumer) => consumer.isNeeded()),
+    () => consumers.some((consumer) => consumer.isNeeded() && consumer.isPriority()))
+      .finally(() => state.responseRequests.delete(url));
+    state.responseRequests.set(url, { promise, consumers });
+    return promise;
   }
 
   function openingPost(data) {
@@ -2629,6 +2693,7 @@
     return {
       text: contentState === "ready" ? text || markdown : config.excerptEmptyLabel,
       markdown,
+      cooked,
       contentState,
       author: cleanText(data?.details?.created_by?.username),
       activityAt: cleanText(data?.last_posted_at || data?.bumped_at || data?.created_at),
@@ -2800,6 +2865,7 @@
   }
 
   function syncTopicListMetadata() {
+    if (isSearchPage()) return;
     if (state.topicListSync) {
       state.topicListSyncAgain = true;
       return;
@@ -3050,6 +3116,7 @@
   }
 
   function observeExcerpt(card) {
+    if (card.dataset.betterldSearchResult === "true") return;
     const needsReadingMetadata = card.dataset.betterldCardStyle === "reading" && state.currentSettings.showTopicMeta;
     if ((!state.currentSettings.showTopicExcerpt && !needsReadingMetadata)
       || card.hidden
@@ -3083,7 +3150,7 @@
 
   function observeCard(card) {
     applyCardFilter(card);
-    if (!card.dataset.topicId) {
+    if (card.dataset.betterldSearchResult === "true" || !card.dataset.topicId) {
       return;
     }
     applyTopicListMetadata(card);
@@ -3116,11 +3183,37 @@
     });
   }
 
+  function cardLayoutMode() {
+    return isSearchPage() ? "reading" : state.currentSettings.topicListLayoutMode;
+  }
+
+  function updateSearchCard(card, item) {
+    card.dataset.betterldSearchResult = "true";
+    const author = authorName(item);
+    const authorState = author === config.authorLoadingLabel ? "failed" : "ready";
+    if (card.dataset.authorState !== authorState || (authorState === "ready" && card.dataset.filterAuthor !== author)) {
+      setAuthor(card, author, authorState);
+    }
+    const excerpt = card.querySelector(".betterld-topic-card__excerpt");
+    const text = cleanText(item.querySelector(".blurb")?.textContent);
+    if (excerpt.textContent !== text) excerpt.textContent = text;
+    excerpt.dataset.state = text ? "ready" : "empty";
+    card.dataset.excerptState = excerpt.dataset.state;
+    const date = item.querySelector("[data-time], time[datetime]");
+    const timestamp = Number(date?.dataset.time);
+    const activityAt = date?.getAttribute("datetime") || (Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp).toISOString() : "");
+    const activity = Date.parse(activityAt);
+    if (card.dataset.filterActivity !== (Number.isFinite(activity) ? String(activity) : "")) setTopicActivity(card, activityAt);
+    card.setAttribute("aria-busy", "false");
+  }
+
   function syncManagedCardContent() {
     document.querySelectorAll('[data-betterld-grid="true"] .betterld-topic-card').forEach((card) => {
       applyCardFilter(card);
-      applyTopicListMetadata(card);
-      observeExcerpt(card);
+      if (card.dataset.betterldSearchResult !== "true") {
+        applyTopicListMetadata(card);
+        observeExcerpt(card);
+      }
       card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || card.dataset.excerptState === "loading"));
     });
     document.querySelectorAll('[data-betterld-grid="true"]').forEach(syncFilterEmptyState);
@@ -3501,6 +3594,10 @@
       return [];
     }
 
+    if (isSearchPage()) {
+      return [...root.querySelectorAll(".fps-result-entries")].map((container) =>
+        [container, [...container.querySelectorAll(".fps-result")]]);
+    }
     const groups = new Map();
     const items = root.querySelectorAll(".topic-list-item, .latest-topic-list-item");
     for (const item of items) {
@@ -3735,37 +3832,83 @@
     syncConfiguredLinkModes();
   }
 
-  function refreshTopicsList() {
-    state.topicListUnavailable.delete(topicListRouteKey());
-    state.topicListNextPage.delete(topicListRouteKey());
-    let retrying = false;
-    managedCards().forEach((card) => {
-      const authorFailed = card.dataset.authorState === "failed";
-      const excerptFailed = card.dataset.excerptState === "failed";
-      if (!authorFailed && !excerptFailed) {
-        return;
-      }
-      retrying = true;
-      state.excerptCache.delete(card.dataset.topicId);
-      card.dataset.topicRecoveryCount = "0";
-      if (authorFailed) {
-        setAuthor(card, config.authorLoadingLabel, "loading");
-      }
-      if (excerptFailed) {
-        setExcerpt(card, config.excerptLoadingLabel, "loading");
-        observeExcerpt(card);
-      }
+  function loadPageRefreshBridge() {
+    if (!state.pageRefreshBridge) {
+      state.pageRefreshBridge = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = api.runtime.getURL("src/page-refresh.js");
+        script.onload = () => { script.remove(); resolve(); };
+        script.onerror = () => { script.remove(); reject(new Error("无法加载原站刷新桥接")); };
+        document.head.append(script);
+      }).catch((error) => { state.pageRefreshBridge = null; throw error; });
+    }
+    return state.pageRefreshBridge;
+  }
+
+  async function refreshSitePage(href) {
+    await loadPageRefreshBridge();
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      const finish = (error) => {
+        clearTimeout(timer);
+        document.removeEventListener("betterld:refreshed", onResult);
+        if (error) reject(error); else resolve();
+      };
+      const onResult = (event) => {
+        const result = JSON.parse(event.detail);
+        if (result.id !== id) return;
+        if (result.status === 429) applyRateLimit(result.retryAfter);
+        finish(result.error ? new Error(result.error) : null);
+      };
+      const timer = window.setTimeout(() => finish(new Error("原站局部刷新超时")), config.pageRefreshTimeoutMs);
+      document.addEventListener("betterld:refreshed", onResult);
+      document.dispatchEvent(new CustomEvent("betterld:refresh", { detail: JSON.stringify({ id, href }) }));
     });
-    syncTopicListMetadata();
-    const notice = document.querySelector(".show-more.has-topics > a.alert.clickable");
-    if (!notice) {
-      showActionStatus(retrying ? "正在重新读取预览与作者信息" : "已是最新主题", "success");
+  }
+
+  function refreshTopicsList() {
+    if (state.refreshPromise) return state.refreshPromise;
+    const wait = Math.max(state.refreshNextAt, state.metadataCooldownUntil) - Date.now();
+    if (wait > 0) {
+      showActionStatus(`请等待 ${Math.ceil(wait / 1000)} 秒后刷新`);
       return;
     }
-    if (notice.classList.contains("loading")) {
-      return;
-    }
-    notice.click();
+    const href = location.href;
+    const scrollY = pageScrollTop();
+    captureUndoRefreshSnapshot();
+    showActionStatus("正在局部刷新…", "success");
+    state.refreshNextAt = Date.now() + config.pageRefreshMinIntervalMs;
+    state.refreshPromise = scheduleMetadataRequest(() => refreshSitePage(href), () => location.href === href, () => true)
+      .then(() => {
+        if (location.href !== href) return;
+        state.topicListUnavailable.delete(topicListRouteKey());
+        state.topicListNextPage.delete(topicListRouteKey());
+        managedCards().forEach((card) => {
+          const authorFailed = card.dataset.authorState === "failed";
+          const excerptFailed = card.dataset.excerptState === "failed";
+          if (!authorFailed && !excerptFailed) return;
+          state.excerptCache.delete(card.dataset.topicId);
+          card.dataset.topicRecoveryCount = "0";
+          if (authorFailed) setAuthor(card, config.authorLoadingLabel, "loading");
+          if (excerptFailed) {
+            setExcerpt(card, config.excerptLoadingLabel, "loading");
+            observeExcerpt(card);
+          }
+        });
+        syncTopicListMetadata();
+        state.undoRefreshSnapshot = readUndoRefreshSnapshot();
+        syncFloatingActions();
+        window.requestAnimationFrame(() => {
+          if (location.href === href) window.scrollTo({ top: scrollY, behavior: "auto" });
+        });
+        showActionStatus("已更新当前页面", "success");
+      })
+      .catch((error) => {
+        console.warn("[betterLD] local refresh failed", error);
+        if (location.href === href) showActionStatus(`刷新失败：${error.message}`);
+      })
+      .finally(() => { state.refreshPromise = null; });
+    return state.refreshPromise;
   }
 
   function cardSyncKey(item) {
@@ -3773,6 +3916,7 @@
     if (!topic) {
       return "";
     }
+    if (item.matches(".fps-result")) return `search:${topic.href}`;
     return topic.id ? `topic:${topic.id}` : `href:${topic.href}`;
   }
 
@@ -3780,6 +3924,17 @@
     const known = new Map([...grid.children].map((child) => [child.dataset.betterldCardKey, child]));
     let anchor = null;
     let changed = false;
+    if (isSearchPage()) {
+      const keys = new Set(items.map(cardSyncKey));
+      known.forEach((card, key) => {
+        if (!keys.has(key)) {
+          state.filterBin.delete(card);
+          card.remove();
+          known.delete(key);
+          changed = true;
+        }
+      });
+    }
     for (const item of items) {
       const key = cardSyncKey(item);
       if (!key) {
@@ -3798,6 +3953,7 @@
         known.set(key, card);
         observeCard(card);
       }
+      if (item.matches(".fps-result")) updateSearchCard(card, item);
       const reference = anchor ? anchor.nextElementSibling : grid.firstElementChild;
       if (card !== reference) {
         grid.insertBefore(card, reference);
@@ -3817,7 +3973,7 @@
 
   function syncContainer(container, items) {
     const grid = managedGrid(container);
-    if (grid?.isConnected && grid.dataset.betterldCardStyle === state.currentSettings.topicListLayoutMode) {
+    if (grid?.isConnected && grid.dataset.betterldCardStyle === cardLayoutMode()) {
       finishListRefresh(syncCards(grid, items));
       return;
     }
@@ -3838,7 +3994,7 @@
 
     const grid = createElement("div", "betterld-topic-grid");
     grid.dataset.betterldGrid = "true";
-    grid.dataset.betterldCardStyle = state.currentSettings.topicListLayoutMode;
+    grid.dataset.betterldCardStyle = cardLayoutMode();
     grid.setAttribute("aria-label", "LinuxDo 主题");
 
     syncCards(grid, items);
@@ -3865,7 +4021,8 @@
   }
 
   function syncHomepage() {
-    if (!isTopicListPage() || !["cards", "reading"].includes(state.currentSettings.topicListLayoutMode)) {
+    const searchCards = isSearchPage() && state.currentSettings.searchMode === "cards";
+    if (!searchCards && (!isTopicListPage() || !["cards", "reading"].includes(state.currentSettings.topicListLayoutMode))) {
       restoreAll();
       applyListControlsScrollState();
       return;
@@ -3941,7 +4098,7 @@
     syncNavigationState();
     applyChromeSettings();
     syncFloatingActions();
-    if (topicListPage) {
+    if (topicListPage || isSearchPage()) {
       scheduleSync();
     } else {
       restoreAll();

@@ -37,7 +37,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   listControlsScrollThreshold: 8,
   scrollTopThreshold: 16,
   excerptRootMargin: "0px",
-  excerptDwellMs: 0,
+  excerptDwellMs: 400,
   excerptStoragePrefix: "betterld.excerpt.v1.",
   excerptCacheTtlMs: 24 * 60 * 60 * 1000,
   excerptCacheMaxEntries: 500,
@@ -47,7 +47,11 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   excerptEmptyLabel: "正文为空",
   authorLoadingLabel: "作者信息加载中…",
   authorPlaceholder: "作者信息暂不可用",
-  topicRequestMinIntervalMs: 0,
+  topicRequestMinIntervalMs: 500,
+  topicRequestWindowMs: 3000,
+  topicRequestMaxPerWindow: 6,
+  pageRefreshMinIntervalMs: 3000,
+  pageRefreshTimeoutMs: 30000,
   topicRequestCooldownMs: 15000,
   topicChallengeCooldownMs: 600000,
   topicRequestRecoveryCount: 1,
@@ -64,10 +68,18 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   visitedTopicStorageKey: "betterld.visited-topics",
   visitedTopicMaxEntries: 500,
   versionCheckUrl: "https://api.github.com/repos/xMuelsysex/betterLD/releases/latest",
+  topicCardMotion: Object.freeze({
+    durationMs: 200,
+    easing: "ease",
+    spreadPx: 6,
+    hoverOpacity: 0.2,
+    activeOpacity: 0.3
+  }),
   topicPreview: Object.freeze({
     aspectRatio: 4 / 3,
     viewportArea: 0.7,
-    marginPx: 16
+    marginPx: 16,
+    loadTimeoutMs: 8000
   }),
   storageKey: "betterld.settings",
   syncMetadataKey: "betterld.sync-meta",
@@ -252,7 +264,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     { key: "topicTitleRules", title: "标题规则", empty: "暂无标题规则", help: "匹配主题标题。" },
     { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配主题所属分类名称。" },
     { key: "topicTagRules", title: "标签规则", empty: "暂无标签规则", help: "匹配主题标签；分类页面行内可能不渲染标签。" },
-    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "匹配主题创建者，名字来自 /t/{id}.json。" },
+    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "主题列表匹配创建者；搜索阅读卡匹配搜索命中帖的作者，直接使用搜索结果，不额外请求。" },
     { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "命中白名单的主题永远不参与过滤。" }
   ]),
   settingsCategories: Object.freeze([

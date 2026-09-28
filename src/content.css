@@ -61,14 +61,14 @@ html[data-betterld-mode="dark"] {
   --betterld-default-wallpaper: radial-gradient(circle at 16% 12%, rgb(112 76 174 / 0.62), transparent 34%), radial-gradient(circle at 86% 84%, rgb(33 104 153 / 0.52), transparent 38%), linear-gradient(135deg, #19132e 0%, #171b31 50%, #102733 100%);
 }
 
-html[data-betterld-wallpaper-state] body {
+html[data-betterld-wallpaper-state] body:has(#main-outlet-wrapper) {
   isolation: isolate;
   background: rgb(var(--betterld-background-rgb)) !important;
   color: var(--betterld-on-surface);
 }
 
-html[data-betterld-wallpaper-state] body::before,
-html[data-betterld-wallpaper-state] body::after {
+html[data-betterld-wallpaper-state] body:has(#main-outlet-wrapper)::before,
+html[data-betterld-wallpaper-state] body:has(#main-outlet-wrapper)::after {
   content: "";
   display: block;
   position: fixed;
@@ -76,7 +76,7 @@ html[data-betterld-wallpaper-state] body::after {
   pointer-events: none;
 }
 
-html[data-betterld-wallpaper-state] body::before {
+html[data-betterld-wallpaper-state] body:has(#main-outlet-wrapper)::before {
   z-index: 0;
   background-image: var(--betterld-wallpaper-image, var(--betterld-default-wallpaper));
   background-position: center;
@@ -86,7 +86,7 @@ html[data-betterld-wallpaper-state] body::before {
   transform: scale(1.06);
 }
 
-html[data-betterld-wallpaper-state] body::after {
+html[data-betterld-wallpaper-state] body:has(#main-outlet-wrapper)::after {
   z-index: 0;
   background: rgb(var(--betterld-mask-rgb) / var(--betterld-mask-opacity));
 }
@@ -374,6 +374,12 @@ body.betterld-shell .sidebar-footer-container {
   padding: 8px 12px 12px !important;
 }
 
+/* 原站用于滚动提示的浅色渐变会在透明侧栏上形成白条。 */
+body.betterld-shell .sidebar-footer-container::before {
+  content: none !important;
+  display: none !important;
+}
+
 body.betterld-shell .sidebar-footer-actions {
   display: grid !important;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -535,6 +541,16 @@ body.betterld-shell .navigation-container {
   align-items: flex-start;
 }
 
+/* 导航已用底色标识选中项，移除原站及主题的重复下划线。 */
+body.betterld-shell :is(.nav-pills, .messages-nav) {
+  --d-nav-underline-height: 0px;
+}
+
+body.betterld-shell :is(.nav-pills, .messages-nav) > li > :is(a, button)::after {
+  content: none !important;
+  display: none !important;
+}
+
 body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) {
   min-width: 0;
   max-width: 100%;
@@ -662,7 +678,7 @@ body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable .d-icon
 }
 
 body.betterld-shell .topic-create-button__combo {
-  width: 220px !important;
+  width: min(calc(100% - 42px), max(160px, 11vw)) !important;
   max-width: 100%;
   min-height: 40px;
   box-sizing: border-box;
@@ -2274,6 +2290,9 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 }
 
 .betterld-topic-card {
+  --betterld-card-feedback-color: transparent;
+  --betterld-card-feedback-spread: 0px;
+  --betterld-card-elevation: var(--betterld-shadow-level-2);
   min-width: 0;
   min-height: var(--betterld-card-min-size, 280px);
   aspect-ratio: 1 / 1;
@@ -2285,12 +2304,16 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
   border-radius: var(--betterld-radius-xl);
   background: rgb(var(--betterld-surface-container-high-rgb) / var(--betterld-card-opacity));
-  box-shadow: var(--betterld-shadow-level-2);
+  box-shadow: inset 0 0 0 100vmax var(--betterld-card-feedback-color), 0 0 0 var(--betterld-card-feedback-spread) var(--betterld-card-feedback-color), var(--betterld-card-elevation);
   color: var(--betterld-on-surface) !important;
   text-decoration: none !important;
   -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
-  transition: transform var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), border-color var(--betterld-motion-standard);
+  transition: box-shadow var(--betterld-card-motion), border-color var(--betterld-card-motion);
+}
+
+.betterld-topic-card[hidden] {
+  display: none !important;
 }
 
 .betterld-topic-card__link {
@@ -2303,10 +2326,17 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   text-decoration: none;
 }
 
-.betterld-topic-card:hover {
-  border-color: rgb(var(--betterld-outline-rgb) / 0.5);
-  box-shadow: var(--betterld-shadow-level-2-hover);
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .betterld-topic-card:hover {
+    --betterld-card-feedback-color: rgb(var(--betterld-outline-rgb) / var(--betterld-card-hover-opacity));
+    --betterld-card-feedback-spread: var(--betterld-card-hover-spread);
+    border-color: rgb(var(--betterld-outline-rgb) / 0.5);
+  }
+}
+
+.betterld-topic-card:active {
+  --betterld-card-feedback-color: rgb(var(--betterld-outline-rgb) / var(--betterld-card-active-opacity));
+  --betterld-card-feedback-spread: var(--betterld-card-hover-spread);
 }
 
 .betterld-topic-card:focus-visible,
@@ -2603,6 +2633,7 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   width: 100%;
   height: 100%;
   min-height: 0;
+  max-height: none !important;
   border: 0;
   border-radius: 12px;
   background: var(--betterld-background);
@@ -2779,11 +2810,11 @@ html[data-betterld-topic-meta-size="large"] .betterld-topic-card__meta {
 }
 
 html[data-betterld-shadow-mode="none"] .betterld-topic-card {
-  box-shadow: none;
+  --betterld-card-elevation: 0 0 0 transparent;
 }
 
 html[data-betterld-shadow-mode="custom"] .betterld-topic-card {
-  box-shadow: var(--betterld-card-shadow, var(--betterld-shadow-level-2));
+  --betterld-card-elevation: var(--betterld-card-shadow, var(--betterld-shadow-level-2));
 }
 
 html[data-betterld-frosted-glass="false"] .betterld-topic-card {
@@ -3002,11 +3033,6 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
   transform: translateY(-1px) !important;
 }
 
-
-
-.betterld-topic-card:hover {
-  transform: translateY(-1px) !important;
-}
 
 
 @supports not (backdrop-filter: blur(1px)) {
@@ -3359,6 +3385,47 @@ body.betterld-search-page .sidebar-wrapper {
   background: transparent !important;
 }
 
+body.betterld-search-page .search-container {
+  display: flex;
+  flex-direction: column;
+}
+
+body.betterld-search-page .search-advanced {
+  display: contents;
+}
+
+body.betterld-search-page .search-container .search-header {
+  order: -2;
+  margin-bottom: 0 !important;
+  border-bottom: 0 !important;
+  border-radius: var(--betterld-radius-lg) var(--betterld-radius-lg) 0 0 !important;
+}
+
+body.betterld-search-page .search-container .search-info {
+  order: -1;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 16px !important;
+  padding: 12px 16px;
+  border-top: 0 !important;
+  border-radius: 0 0 var(--betterld-radius-lg) var(--betterld-radius-lg) !important;
+}
+
+body.betterld-search-page :is(.search-header, .search-info) {
+  box-sizing: border-box;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24) !important;
+  border-radius: var(--betterld-radius-lg);
+  background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
+  box-shadow: var(--betterld-shadow-level-1);
+  color: var(--betterld-on-surface);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+body.betterld-search-page .search-header :is(.search-bar, .search-filters) {
+  background: transparent !important;
+}
+
 html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data-betterld-search-focus-dimming="true"] body.betterld-search-page::after {
   background: rgb(var(--betterld-mask-rgb) / 0.46);
 }
@@ -3369,88 +3436,11 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
 
 /* #region 搜索结果：卡片模式与翻页模式 */
 
-/* 卡片模式只重排站点已经返回的结果，不额外请求；标题/分类/标签/摘要仍用站点内容 */
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 16px;
-  align-items: start;
+/* 阅读卡使用共享渲染器，保留隐藏的原站结果供分页和路由更新。 */
+html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries[hidden] {
+  display: none !important;
 }
 
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "author topic"
-    "blurb blurb";
-  gap: 8px 12px;
-  align-items: start;
-  position: relative;
-  box-sizing: border-box;
-  width: auto;
-  padding: 16px;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.34);
-  border-radius: 20px;
-  background: rgb(var(--betterld-surface-rgb) / 0.56);
-  box-shadow: var(--betterld-shadow-level-1);
-  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
-  backdrop-filter: blur(var(--betterld-surface-blur));
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .author {
-  grid-area: author;
-  display: flex;
-  align-items: center;
-  margin: 0;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .fps-topic {
-  grid-area: topic;
-  min-width: 0;
-  margin: 0;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .fps-topic .topic {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .search-link {
-  display: block;
-  overflow: hidden;
-  color: var(--betterld-on-surface);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: normal;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .blurb.container {
-  grid-area: blurb;
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin: 0;
-  color: var(--betterld-on-surface-variant);
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .blurb.container > span:last-child {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-}
-
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .ai-result__icon {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-}
 
 /* 翻页模式：站点自动加载被禁用，改用 betterLD 的显式按钮 */
 .betterld-search-more {
@@ -3622,6 +3612,10 @@ html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .ai-resu
 .betterld-topic-grid[data-betterld-card-style="reading"] {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
   align-items: stretch;
+}
+
+body.betterld-search-page .betterld-topic-grid[data-betterld-card-style="reading"] {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
 }
 
 .betterld-topic-card--reading {
@@ -3879,7 +3873,7 @@ html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result .ai-resu
   line-height: 1.2;
 }
 
-/* 统计图标形状只在这里定义：运行时卡片与 reader-card-preview.html 共用同一组 CSS 掩膜 */
+/* 回复、点赞和浏览统计共用同一组 CSS 图标掩膜。 */
 .betterld-topic-card__reading-stat-icon {
   flex: 0 0 auto;
   width: 1em;

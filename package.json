@@ -1,10 +1,10 @@
 {
   "name": "betterld",
-  "version": "0.1.5",
+  "version": "0.1.13",
   "private": true,
   "description": "A dependency-free Manifest V3 browser extension for LinuxDo.",
   "scripts": {
-    "check": "node --check betterld.config.js && node --check src/settings.js && node --check src/markdown.js && node --check src/webdav.js && node --check src/background.js && node --check src/content.js && node --check src/options.js",
+    "check": "node --check betterld.config.js && node --check src/settings.js && node --check src/markdown.js && node --check src/webdav.js && node --check src/background.js && node --check src/content.js && node --check src/page-refresh.js && node --check src/options.js",
     "package": "node scripts/package.js",
     "preview:orca": "node scripts/orca-preview.js"
   }

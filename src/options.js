@@ -775,7 +775,7 @@
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
     topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", highlight: "高亮命中项", include: "只显示命中项" },
     topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
-    searchMode: { native: "原生结果", cards: "主题卡片" },
+    searchMode: { native: "原生结果", cards: "阅读卡" },
     searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
     searchPageWallpaperMode: { inherit: "继承全局", builtin: "内置图片", url: "远程图片" },
     touchOptimization: { auto: "自动", on: "开启", off: "关闭" }
@@ -805,7 +805,7 @@
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
     topicFilterMode: { hide: "Hide matches", dim: "Dim matches", highlight: "Highlight matches", include: "Show matches only" },
     topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
-    searchMode: { native: "Native results", cards: "Topic cards" },
+    searchMode: { native: "Native results", cards: "Reading cards" },
     searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
     searchPageWallpaperMode: { inherit: "Inherit global", builtin: "Built-in image", url: "Remote image" },
     touchOptimization: { auto: "Automatic", on: "On", off: "Off" }
@@ -1068,7 +1068,7 @@
     { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后命中项不再生成卡片。", dependsOn: ["topicFilterEnabled", true] },
 
-    { key: "searchMode", type: "select", label: "搜索结果模式", help: "卡片模式把搜索结果排成 betterLD 卡片网格，只重排站点已返回的结果（不额外请求）；原生模式保持站点结果页。" },
+    { key: "searchMode", type: "select", label: "搜索结果模式", help: "阅读卡复用搜索结果的作者和摘要，不额外请求；支持作者等过滤规则。原生模式保持站点结果页。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
     { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
     { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
