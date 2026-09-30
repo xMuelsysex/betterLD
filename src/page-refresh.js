@@ -70,6 +70,15 @@
           postIndex, percent: stream.stream.length > 1 ? (postIndex - 1) / (stream.stream.length - 1) : 0
         });
       }
+      const timelineReplies = document.querySelector(".topic-timeline .timeline-replies");
+      const currentFloor = Number(active ? postNumber : controller.currentPostNumber);
+      const lastFloor = Number(topic.highest_post_number);
+      if (timelineReplies && Number.isInteger(currentFloor) && Number.isInteger(lastFloor) && currentFloor > 0 && lastFloor >= currentFloor) {
+        const label = `${currentFloor} / ${lastFloor}`;
+        if (timelineReplies.textContent.trim() !== label) timelineReplies.textContent = label;
+        const slider = timelineReplies.closest(".timeline-scroller");
+        if (slider?.hasAttribute("aria-valuetext")) slider.setAttribute("aria-valuetext", label);
+      }
     } catch (error) {
       document.dispatchEvent(new CustomEvent("betterld:reply-data", {
         detail: JSON.stringify({ topicId, error: error.message || "原站回复同步失败" })
