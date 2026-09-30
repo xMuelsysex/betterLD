@@ -1366,26 +1366,29 @@ body.betterld-shell[data-betterld-topic-detail="true"] #topic-title .title-wrapp
   border-radius: var(--betterld-radius-lg);
 }
 
-/* 树表面铺满主题容器，原生时间轴仍占右侧导航列。 */
+/* 为时间轴在正文区域外留出一列，公告、标题和树仍保持同宽。 */
+html.desktop-view body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+  width: 80% !important;
+  margin-inline: 0 !important;
+  justify-self: start;
+}
+
 body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
   grid-column: 1 / -1;
   grid-row: 1;
   min-width: 0;
 }
 
-body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] .betterld-reply-tree {
-  padding-inline-end: calc(25% + 16px);
-}
-
 body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
   grid-column: 2;
   grid-row: 1;
   align-self: start;
+  min-width: 0;
   z-index: 1;
 }
 
-html.mobile-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] .betterld-reply-tree {
-  padding-inline-end: 16px;
+html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+  transform: translateX(calc(100% + 16px));
 }
 
 html[data-betterld-header-visual="solid"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
