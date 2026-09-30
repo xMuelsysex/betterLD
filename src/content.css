@@ -1204,21 +1204,19 @@ html[data-betterld-wallpaper-state] body :is(
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
-/* 时间轴处于正文外，独立底板隔离壁纸亮度，避免文字与背景同色。 */
+/* 透明区域使用与前景相反的局部轮廓，保持文字可读而不遮盖壁纸。 */
 body.betterld-shell .topic-timeline {
-  box-sizing: border-box;
-  padding: 12px;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
-  border-radius: var(--betterld-radius-lg);
-  background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
-  box-shadow: var(--betterld-shadow-level-1);
   color: var(--betterld-on-surface);
-  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
-  backdrop-filter: blur(var(--betterld-surface-blur));
+}
+
+body.betterld-shell .topic-timeline :is(.start-date, .now-date, .timeline-ago, .timeline-replies) {
+  text-shadow: 0 0 2px rgb(var(--betterld-surface-rgb)), 0 1px 3px rgb(var(--betterld-surface-rgb));
+  -webkit-text-stroke: 2px rgb(var(--betterld-surface-rgb));
+  paint-order: stroke fill;
 }
 
 body.betterld-shell .topic-timeline :is(.start-date, .now-date, .timeline-ago) {
-  color: var(--betterld-on-surface-variant) !important;
+  color: var(--betterld-on-surface) !important;
   opacity: 1;
 }
 
@@ -4468,6 +4466,10 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   width: 18px;
   height: 18px;
   fill: currentColor;
+}
+
+.betterld-reply-tree__reaction-summary .betterld-reply-tree__reaction-image + .betterld-reply-tree__reaction-image {
+  margin-inline-start: -4px;
 }
 
 .betterld-reply-tree__reaction-users {

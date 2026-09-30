@@ -1003,7 +1003,7 @@
     { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "在设置页的分段控件上使用滑动液态指示器；关闭后为静态选中态，减少动效时同样使用静态。" },
     { key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
     { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "开启时侧栏容器用壁纸高斯模糊封面（半透明 + 背景模糊）；关闭后改用不透明表面。" },
-    { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、菜单、导航和 Header 的独立模糊强度。" },
+    { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、用户资料卡、菜单、导航和 Header 的独立模糊强度；需开启「启用毛玻璃」。" },
     { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
     { key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "控制卡片阴影的整体高度。" },
     { key: "fontMode", type: "select", label: "字体偏好", help: "不加载远程字体。" },

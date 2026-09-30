@@ -58,6 +58,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   replyTreeReactionHoldMs: 500,
   replyTreeReactionHoverMs: 400,
   replyTreeReactionUsersPageSize: 30,
+  replyTreeReactionSummaryLimit: 3,
   replyTreeEmojiBaseUrl: "https://cdn.ldstatic.com/images/emoji/",
   replyTreeCustomEmojiUrls: Object.freeze({
     tieba_087: "https://cdn3.ldstatic.com/original/3X/2/e/2e09f3a3c7b27eacbabe9e9614b06b88d5b06343.png?v=15",

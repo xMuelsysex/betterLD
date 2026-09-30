@@ -4424,7 +4424,7 @@
       });
       picker.append(choice);
     });
-    const count = trigger.querySelector(".betterld-reply-tree__action-count")?.textContent;
+    const count = trigger.parentElement.querySelector(".betterld-reply-tree__action-count")?.textContent;
     if (count) {
       const view = createElement("button", "betterld-reply-tree__reaction-view", `查看 ${count} 个回应`);
       view.type = "button";
@@ -4555,13 +4555,27 @@
       const liked = selected === "heart";
       const label = selected && !liked ? `已回应 ${selected}，点击切换为点赞` : liked ? "取消点赞" : "点赞此帖子";
       let longPressed = false;
-      const like = replyTreeActionButton(`${label}${reactionCount ? `，${reactionCount} 个回应，点击数字查看列表` : ""}`, liked ? "heart" : "far-heart", (event) => {
+      if (reactionCount > 0) {
+        const summary = createElement("button", "betterld-reply-tree__action betterld-reply-tree__reaction-summary");
+        summary.type = "button";
+        summary.setAttribute("aria-label", `${reactionCount} 个回应，查看回应人列表`);
+        summary.setAttribute("aria-haspopup", "dialog");
+        summary.setAttribute("aria-expanded", "false");
+        const reactions = [...post.reactions || []].sort((a, b) => b.count - a.count).slice(0, config.replyTreeReactionSummaryLimit);
+        for (const reaction of reactions) {
+          const image = createElement("img", "betterld-reply-tree__reaction-image");
+          image.src = replyTreeReactionIcon(tree, reaction.id);
+          image.alt = "";
+          image.title = `${reaction.id}：${reaction.count}`;
+          summary.append(image);
+        }
+        summary.append(createElement("span", "betterld-reply-tree__action-count", String(reactionCount)));
+        summary.addEventListener("click", () => openReplyReactionUsers(tree, post, summary));
+        actions.append(summary);
+      }
+      const like = replyTreeActionButton(label, liked ? "heart" : "far-heart", () => {
         if (longPressed) {
           longPressed = false;
-          return;
-        }
-        if (event.target.closest(".betterld-reply-tree__action-count")) {
-          openReplyReactionUsers(tree, post, like);
           return;
         }
         closeReplyReactionPicker(tree);
@@ -4570,7 +4584,7 @@
       like.setAttribute("aria-pressed", String(Boolean(selected)));
       like.setAttribute("aria-haspopup", "dialog");
       like.setAttribute("aria-expanded", "false");
-      like.title = reactionCount ? "点击心形点赞，点击数字查看回应；悬停或长按选择其他回应" : "点击点赞，悬停或长按选择其他回应";
+      like.title = "点击点赞，悬停或长按选择其他回应";
       if (selected && !liked) {
         try {
           const icon = createElement("img", "betterld-reply-tree__reaction-image");
@@ -4581,7 +4595,6 @@
           like.append(createElement("span", "betterld-reply-tree__reaction-name", selected));
         }
       }
-      if (reactionCount > 0) like.append(createElement("span", "betterld-reply-tree__action-count", String(reactionCount)));
       let holdTimer;
       let hoverTimer;
       like.addEventListener("pointerenter", (event) => {
