@@ -85,6 +85,27 @@
     jumpReply(Number(link.pathname.split('/').pop()));
   }, true);
 
+  document.addEventListener("betterld:reply-compose", async (event) => {
+    const { id, topicId, postId } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      const topic = controller.model;
+      if (String(topic?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新回复");
+      if (!topic.details.can_create_post) throw new Error("当前主题不允许回复");
+      const post = topic.postStream.findLoadedPost(postId) || await owner.lookup("service:store").find("post", postId);
+      if (String(controller.model?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新回复");
+      if (Number(post.topic_id) !== Number(topicId)) throw new Error("回复目标不属于当前主题");
+      post.set("topic", topic);
+      await controller.replyToPost(post);
+      document.dispatchEvent(new CustomEvent("betterld:reply-composed", { detail: JSON.stringify({ id }) }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-composed", {
+        detail: JSON.stringify({ id, error: error.message || "原站回复编辑器打开失败" })
+      }));
+    }
+  });
+
   document.addEventListener("betterld:refresh", async (event) => {
     const { id, href } = JSON.parse(event.detail);
     try {

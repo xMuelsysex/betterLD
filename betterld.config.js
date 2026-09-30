@@ -308,7 +308,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "surface",
           title: "表面与毛玻璃",
           description: "betterLD 自有卡片、菜单和面板的表面效果。",
-          keys: ["frostedGlassEnabled", "surfaceBlurPx", "sidebarCoverBlurEnabled", "shadowMode", "shadowHeight"]
+          keys: ["frostedGlassEnabled", "surfaceBlurPx", "sidebarCoverBlurEnabled", "userCardCoverMaskEnabled", "userCardCoverMaskOpacity", "shadowMode", "shadowHeight"]
         },
         {
           id: "font",
@@ -541,6 +541,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     liquidSegmentIndicatorEnabled: false,
     frostedGlassEnabled: true,
     sidebarCoverBlurEnabled: true,
+    userCardCoverMaskEnabled: true,
+    userCardCoverMaskOpacity: 0.78,
     surfaceBlurPx: 16,
     shadowMode: "default",
     shadowHeight: 1,
@@ -669,6 +671,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     blurPx: Object.freeze({ min: 0, max: 32, step: 1 }),
     cardOpacity: Object.freeze({ min: 0.55, max: 0.95, step: 0.01 }),
     surfaceBlurPx: Object.freeze({ min: 0, max: 32, step: 1 }),
+    userCardCoverMaskOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
     shadowHeight: Object.freeze({ min: 0, max: 2, step: 0.1 }),
     shadowCurveOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
     cardMinSize: Object.freeze({ min: 240, max: 480, step: 8 }),

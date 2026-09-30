@@ -402,6 +402,7 @@
     root.style.setProperty("--betterld-card-side-gutter", `${settings.cardSideGutter}px`);
     root.style.setProperty("--betterld-grid-gap", `${settings.gridGap}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
+    root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);
     root.style.setProperty("--betterld-shadow-level-2-hover", `0 ${4 * settings.shadowHeight}px 10px rgb(var(--betterld-shadow-color) / 0.12), 0 ${18 * settings.shadowHeight}px 36px rgb(var(--betterld-shadow-color) / 0.20)`);
     Object.entries(settings.gridColumns || {}).forEach(([key, value]) => {
@@ -4145,8 +4146,7 @@
 
   const replyActionSelectors = {
     boost: ".post-action-menu__boost",
-    more: ".post-action-menu__show-more",
-    reply: ".post-action-menu__reply"
+    more: ".post-action-menu__show-more"
   };
 
   function nativeReplyAction(postNumber, action) {
@@ -4156,6 +4156,38 @@
   function promptReplyTreeLogin(tree) {
     tree.status.textContent = "请登录后使用帖子操作。";
     document.querySelector(".d-header .login-button")?.click();
+  }
+
+  async function openReplyTreeComposer(tree, post) {
+    tree.status.textContent = "";
+    if (!document.querySelector(".current-user")) {
+      promptReplyTreeLogin(tree);
+      return;
+    }
+    try {
+      await loadPageRefreshBridge();
+      await new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
+        const finish = (error) => {
+          clearTimeout(timer);
+          document.removeEventListener("betterld:reply-composed", onResult);
+          if (error) reject(error); else resolve();
+        };
+        const onResult = (event) => {
+          const result = JSON.parse(event.detail);
+          if (result.id !== id) return;
+          finish(result.error ? new Error(result.error) : null);
+        };
+        const timer = window.setTimeout(() => finish(new Error("回复编辑器打开超时")), config.replyTreeActionTimeoutMs);
+        document.addEventListener("betterld:reply-composed", onResult);
+        document.dispatchEvent(new CustomEvent("betterld:reply-compose", {
+          detail: JSON.stringify({ id, topicId: tree.topicId, postId: post.id })
+        }));
+      });
+    } catch (error) {
+      console.error("[betterLD] reply composer failed", error);
+      if (state.replyTree === tree) tree.status.textContent = `回复编辑器打开失败：${error.message}`;
+    }
   }
 
   function openNativeReplyAction(tree, post, action) {
@@ -4647,7 +4679,7 @@
         actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openNativeReplyAction(tree, post, "boost")));
       }
       actions.append(replyTreeActionButton("更多帖子操作", "ellipsis", () => openNativeReplyAction(tree, post, "more")));
-      const reply = replyTreeActionButton(`回复 #${post.post_number}`, "reply", () => openNativeReplyAction(tree, post, "reply"), "betterld-reply-tree__action--reply");
+      const reply = replyTreeActionButton(`回复 #${post.post_number}`, "reply", () => openReplyTreeComposer(tree, post), "betterld-reply-tree__action--reply");
       reply.append(createElement("span", "betterld-reply-tree__action-label", "回复"));
       actions.append(reply);
       body.append(actions);

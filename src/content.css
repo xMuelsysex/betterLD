@@ -1296,6 +1296,17 @@ body.betterld-shell .user-card .card-content {
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
+/* 封面只保留内容层遮罩，避免菜单和卡片底色重复叠加。 */
+body.betterld-shell :is(.fk-d-menu__inner-content:has(#user-card:not(.no-bg)), #user-card:not(.no-bg)) {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body.betterld-shell #user-card:not(.no-bg) .card-content {
+  background: rgb(var(--betterld-surface-container-rgb) / var(--betterld-user-card-cover-mask-opacity)) !important;
+}
+
 body.betterld-shell .user-card .first-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
