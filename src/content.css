@@ -1204,6 +1204,28 @@ html[data-betterld-wallpaper-state] body :is(
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
+/* 时间轴处于正文外，独立底板隔离壁纸亮度，避免文字与背景同色。 */
+body.betterld-shell .topic-timeline {
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
+  border-radius: var(--betterld-radius-lg);
+  background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
+  box-shadow: var(--betterld-shadow-level-1);
+  color: var(--betterld-on-surface);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur));
+  backdrop-filter: blur(var(--betterld-surface-blur));
+}
+
+body.betterld-shell .topic-timeline :is(.start-date, .now-date, .timeline-ago) {
+  color: var(--betterld-on-surface-variant) !important;
+  opacity: 1;
+}
+
+body.betterld-shell .topic-timeline .timeline-replies {
+  color: var(--betterld-on-surface) !important;
+}
+
 /* 群组列表与群组内页使用同一层材质，保留原站筛选、成员表格与入退群操作。 */
 body.betterld-shell .groups-index .groups-header,
 body.betterld-shell .groups-index .group-box,
@@ -1553,19 +1575,25 @@ body:is(.betterld-topic-page, .betterld-categories-page) .category-box-inner {
 }
 
 body.betterld-topic-page .category-heading__logo {
-  width: 64px;
-  height: 64px;
+  width: 64px !important;
+  height: 64px !important;
   flex: 0 0 64px;
   overflow: hidden;
   border-radius: 20px;
   background: color-mix(in srgb, var(--betterld-primary) 16%, transparent);
 }
 
-body.betterld-topic-page .category-heading__logo img {
+body.betterld-topic-page .category-heading__logo picture {
+  display: block;
   width: 100%;
   height: 100%;
+}
+
+body.betterld-topic-page .category-heading__logo img {
+  width: 100% !important;
+  height: 100% !important;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 body.betterld-topic-page .category-heading__content {
