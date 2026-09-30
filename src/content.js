@@ -619,6 +619,7 @@
     const backgroundRgb = hexToRgb(background);
     if (primaryRgb) {
       root.style.setProperty("--betterld-primary", primary);
+      root.style.setProperty("--betterld-primary-rgb", primaryRgb.split(" ").join(", "));
       root.style.setProperty("--betterld-on-primary", contrastColor(primary));
     }
     if (root.dataset.betterldMode === "dark" && backgroundRgb) {
