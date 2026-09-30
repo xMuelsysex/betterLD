@@ -19,6 +19,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 ## 开发命令
 
 - `npm run check`：执行 JavaScript 语法检查。
+- 后续每次更新版本号，完成对应改动、打包与验证后自动创建 Git 提交，无需再次询问；只提交该版本相关文件，保留无关工作区改动。推送、发布与部署仍需主人明确授权。
 - `npm run package`：每次完成扩展源码修改后自动将当前文件就地更新到固定测试包目录 `dist/betterLD/`，无需单独询问是否覆盖该生成包；保留该目录，不另建带版本或时间后缀的 ZIP。
 - Chrome：打开 `chrome://extensions`，启用开发者模式后加载 `dist/betterLD/`。
 - Firefox：打开 `about:debugging#/runtime/this-firefox`，临时加载 `dist/betterLD/manifest.json`；交付有实际改动的新包时同步递增 `manifest.json` 和 `package.json` 版本，重新打包后对这个路径的附加组件点击「重新载入」，再刷新已打开的 LinuxDo 标签页。在 `about:addons` 的 betterLD 详情中核对新版本号以区分旧包和新包；版本已更新但页面未更新时，继续查内容脚本、用户设置和 CSS，而非重复打包。Firefox 已加载的内容脚本和样式留在内存中，仅覆盖磁盘文件不会更新页面。

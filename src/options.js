@@ -760,6 +760,7 @@
     shadowMode: { default: "默认阴影", none: "关闭阴影", custom: "自定义阴影" },
     gridMode: { auto: "自适应列数", fixed: "固定断点列数" },
     topicListLayoutMode: { reading: "阅读卡", cards: "Material 3 卡片", native: "原生主题列表" },
+    replyTreeNameMode: { both: "昵称和用户名", nickname: "仅昵称", username: "仅用户名" },
     topicSortMode: { activity: "最新回复", created: "发布时间" },
     topicTitleFontSize: { responsive: "响应式", small: "小", base: "标准", large: "大" },
     topicAuthorFontSize: { small: "小", base: "标准", large: "大" },
@@ -790,6 +791,7 @@
     shadowMode: { default: "Default shadow", none: "No shadow", custom: "Custom shadow" },
     gridMode: { auto: "Responsive columns", fixed: "Fixed breakpoint columns" },
     topicListLayoutMode: { reading: "Reading cards", cards: "Material 3 cards", native: "Native topic list" },
+    replyTreeNameMode: { both: "Nickname and username", nickname: "Nickname only", username: "Username only" },
     topicSortMode: { activity: "Latest reply", created: "Publish time" },
     topicTitleFontSize: { responsive: "Responsive", small: "Small", base: "Base", large: "Large" },
     topicAuthorFontSize: { small: "Small", base: "Base", large: "Large" },
@@ -813,7 +815,7 @@
 
   const englishFieldLabels = {
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
-    gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
+    gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", replyTreeNameMode: "Reply author name", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
     topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
     topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
@@ -834,6 +836,8 @@
     "卡片透明度": "Card opacity",
     "外观": "Appearance",
     "主题卡片": "Topic cards",
+    "树状回复": "Reply tree",
+    "主题回复树中作者昵称与用户名的显示方式。": "Choose which author names to show in topic replies.",
     "页面导航": "Page navigation",
     "筛选": "Filter",
     "搜索": "Search",
@@ -1032,6 +1036,7 @@
     { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
     { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看记录只保存在本机浏览记录里，不写服务端已读状态。" },
     { key: "topicListLayoutMode", type: "select", label: "主题卡片样式", help: "阅读卡适配核心 Markdown；原生模式恢复原始列表、分页和控制项。" },
+    { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "只影响主题页树状回复；默认与原站一样同时显示昵称和用户名。" },
     { key: "topicSortMode", type: "select", label: "话题排序方式", help: "最新回复按 LinuxDo 默认的最后活动时间倒序；发布时间按主题创建时间倒序（Discourse 的 created）。切换后会重新加载当前列表，热门与最高保留各自排序。" },
     { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题。" },
     { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者。" },

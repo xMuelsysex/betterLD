@@ -4,6 +4,87 @@
   // 仅在页面上下文调用原站模型，原站的 MessageBus 和分页仍由 Discourse 管理。
   let pending = null;
   let pendingHref = "";
+  let replyTopicId = "";
+  let replySignature = "";
+  const boundControllers = new WeakSet();
+  const postFields = ["id", "post_number", "reply_to_post_number", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+
+  function jumpReply(postNumber, postId) {
+    document.dispatchEvent(new CustomEvent("betterld:reply-jump", {
+      detail: JSON.stringify({ topicId: replyTopicId, postNumber, postId })
+    }));
+  }
+
+  // 原站时间轴、楼层输入框和日期跳转继续使用原控件，仅将同主题定位交给树。
+  const discourseUrl = window.require("discourse/lib/url").default;
+  const routeTo = discourseUrl.routeTo;
+  discourseUrl.routeTo = function (url, options) {
+    const match = String(url).match(/^\/t\/(?:(\d+)|[^/]+\/(\d+))(?:\/(\d+))?\/?(?:[?#].*)?$/);
+    if (replyTopicId && (match?.[1] || match?.[2]) === replyTopicId && document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) {
+      jumpReply(Number(match[3]) || 1);
+      return;
+    }
+    return routeTo.call(this, url, options);
+  };
+
+  document.addEventListener("betterld:reply-sync", (event) => {
+    const { topicId, postNumber, postId, active } = JSON.parse(event.detail);
+    try {
+      const { getOwnerWithFallback } = window.require("discourse/lib/get-owner");
+      const owner = getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      const topic = controller.model;
+      if (!topicId || String(topic?.id) !== topicId) {
+        replyTopicId = "";
+        replySignature = "";
+        return;
+      }
+      if (replyTopicId !== topicId) replySignature = "";
+      replyTopicId = topicId;
+      const stream = topic.postStream;
+      if (!boundControllers.has(controller)) {
+        const jumpToIndex = controller._jumpToIndex;
+        controller._jumpToIndex = function (index) {
+          if (document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) {
+            const ids = this.model.postStream.stream;
+            jumpReply(undefined, ids[Math.max(0, Math.min(ids.length - 1, index - 1))]);
+            return;
+          }
+          return jumpToIndex.call(this, index);
+        };
+        boundControllers.add(controller);
+      }
+      const data = {
+        topicId,
+        stream: [...stream.stream],
+        posts: stream.posts.map((post) => Object.fromEntries(postFields.map((key) => [key, post[key]])))
+      };
+      const signature = JSON.stringify(data);
+      if (signature !== replySignature) {
+        replySignature = signature;
+        document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: signature }));
+      }
+      if (active && postNumber) {
+        const postIndex = stream.stream.indexOf(postId) + 1;
+        owner.lookup("service:app-events").trigger("topic:current-post-scrolled", {
+          postIndex, percent: stream.stream.length > 1 ? (postIndex - 1) / (stream.stream.length - 1) : 0
+        });
+      }
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-data", {
+        detail: JSON.stringify({ topicId, error: error.message || "原站回复同步失败" })
+      }));
+    }
+  });
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.('.topic-timeline :is(.start-date, .now-date)');
+    if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey
+      || !document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    jumpReply(Number(link.pathname.split('/').pop()));
+  }, true);
+
   document.addEventListener("betterld:refresh", async (event) => {
     const { id, href } = JSON.parse(event.detail);
     try {

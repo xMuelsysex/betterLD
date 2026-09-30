@@ -50,6 +50,19 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestMinIntervalMs: 500,
   topicRequestWindowMs: 3000,
   topicRequestMaxPerWindow: 6,
+  replyTreePageSize: 20,
+  replyTreeLoadAheadPx: 400,
+  replyTreeTimeRefreshMs: 60000,
+  replyTreeDeepLinkDelayMs: 1200,
+  replyTreeActionTimeoutMs: 8000,
+  replyTreeReactionHoldMs: 500,
+  replyTreeReactionHoverMs: 400,
+  replyTreeReactionUsersPageSize: 30,
+  replyTreeEmojiBaseUrl: "https://cdn.ldstatic.com/images/emoji/",
+  replyTreeCustomEmojiUrls: Object.freeze({
+    tieba_087: "https://cdn3.ldstatic.com/original/3X/2/e/2e09f3a3c7b27eacbabe9e9614b06b88d5b06343.png?v=15",
+    bili_057: "https://cdn3.ldstatic.com/original/3X/1/a/1a9f6c30e88a7901b721fffc1aaeec040f54bdf3.png?v=15"
+  }),
   pageRefreshMinIntervalMs: 3000,
   pageRefreshTimeoutMs: 30000,
   topicRequestCooldownMs: 15000,
@@ -235,6 +248,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     shadowMode: Object.freeze(["default", "none", "custom"]),
     gridMode: Object.freeze(["auto", "fixed"]),
     topicListLayoutMode: Object.freeze(["reading", "cards", "native"]),
+    replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),
     topicAuthorFontSize: Object.freeze(["small", "base", "large"]),
@@ -342,6 +356,12 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
             "topicAuthorFontSize",
             "topicMetaFontSize"
           ]
+        },
+        {
+          id: "replyTree",
+          title: "树状回复",
+          description: "主题回复树中作者昵称与用户名的显示方式。",
+          keys: ["replyTreeNameMode"]
         },
         {
           id: "filter",
@@ -561,6 +581,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicPinnedState: true,
     showTopicWatchedState: true,
     topicListLayoutMode: "reading",
+    replyTreeNameMode: "both",
     topicSortMode: "activity",
     topicCardContextMenuConfig: [
       { key: "openCurrentTab", visible: true, order: 0 },
