@@ -3129,6 +3129,16 @@ body.betterld-shell :where(
   outline-offset: var(--betterld-focus-offset);
 }
 
+/* 编辑器由容器呈现焦点，输入区不重复绘制内层光效。 */
+body.betterld-shell .d-editor-textarea-wrapper:has(> .d-editor-input:focus-visible) {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary) !important;
+  outline-offset: var(--betterld-focus-offset);
+}
+
+body.betterld-shell .d-editor-textarea-wrapper > .d-editor-input:focus-visible {
+  outline: none !important;
+}
+
 body.betterld-shell :where(
   .category-title-link,
   .subcategory a,
