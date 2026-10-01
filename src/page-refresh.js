@@ -6,16 +6,130 @@
   let pendingHref = "";
   let replyTopicId = "";
   let replySignature = "";
-  const boundControllers = new WeakSet();
+  let floorTimeline = null;
   const postFields = ["id", "post_number", "reply_to_post_number", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
 
-  function jumpReply(postNumber, postId) {
+  function jumpReply(postNumber, postId, requestId) {
     document.dispatchEvent(new CustomEvent("betterld:reply-jump", {
-      detail: JSON.stringify({ topicId: replyTopicId, postNumber, postId })
+      detail: JSON.stringify({ topicId: replyTopicId, postNumber, postId, requestId })
     }));
   }
 
-  // 原站时间轴、楼层输入框和日期跳转继续使用原控件，仅将同主题定位交给树。
+  function resetFloorTimeline() {
+    if (!floorTimeline) return;
+    clearTimeout(floorTimeline.timer);
+    floorTimeline.host.classList.remove("betterld-floor-timeline-active");
+    floorTimeline.element.remove();
+    floorTimeline = null;
+  }
+
+  function renderFloorTimeline(timeline, floor) {
+    timeline.input.value = String(floor);
+    const label = `${floor} / ${timeline.lastFloor}`;
+    timeline.label.textContent = label;
+    timeline.input.setAttribute("aria-valuetext", label);
+    timeline.element.style.setProperty("--betterld-floor-progress", timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0);
+  }
+
+  function finishFloorJump(timeline, floor, error = "") {
+    clearTimeout(timeline.timer);
+    timeline.pending = null;
+    timeline.input.disabled = timeline.lastFloor === 1;
+    timeline.status.textContent = error;
+    renderFloorTimeline(timeline, floor);
+  }
+
+  function syncFloorTimeline(topic, floor, active, timeoutMs) {
+    const host = document.querySelector(".topic-timeline");
+    const source = host?.querySelector(".timeline-scrollarea");
+    const lastFloor = Number(topic.highest_post_number);
+    if (!source || !Number.isInteger(lastFloor) || lastFloor < 1 || !Number.isInteger(floor) || floor < 1 || floor > lastFloor) {
+      resetFloorTimeline();
+      return;
+    }
+    if (floorTimeline?.source !== source || floorTimeline?.topicId !== String(topic.id) || !floorTimeline.element.isConnected) {
+      resetFloorTimeline();
+      const element = document.createElement("div");
+      element.className = "betterld-floor-timeline";
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = "1";
+      input.step = "1";
+      input.setAttribute("aria-label", "按实际楼号跳转");
+      input.setAttribute("aria-orientation", "vertical");
+      const label = document.createElement("output");
+      label.className = "betterld-floor-timeline__label";
+      const status = document.createElement("p");
+      status.className = "betterld-floor-timeline__status";
+      status.setAttribute("role", "status");
+      element.append(input, label, status);
+      source.after(element);
+      host.classList.add("betterld-floor-timeline-active");
+      const timeline = { host, source, element, input, label, status, topicId: String(topic.id), floor, lastFloor, editing: false, pending: null };
+      floorTimeline = timeline;
+      input.addEventListener("input", () => {
+        timeline.editing = true;
+        renderFloorTimeline(timeline, input.valueAsNumber);
+      });
+      const cancelPreview = () => {
+        timeline.editing = false;
+        if (!timeline.pending) renderFloorTimeline(timeline, timeline.floor);
+      };
+      input.addEventListener("pointercancel", cancelPreview);
+      input.addEventListener("blur", cancelPreview);
+      input.addEventListener("change", () => {
+        const target = input.valueAsNumber;
+        timeline.editing = false;
+        timeline.status.textContent = "";
+        if (target === timeline.floor && !timeline.active) return;
+        const requestId = crypto.randomUUID();
+        timeline.pending = { requestId, target };
+        input.disabled = true;
+        timeline.status.textContent = `正在前往 #${target}…`;
+        timeline.timer = setTimeout(() => {
+          if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
+            finishFloorJump(timeline, timeline.floor, `#${target} 跳转未完成，请重试。`);
+          }
+        }, timeline.timeoutMs);
+        if (timeline.active) {
+          jumpReply(target, undefined, requestId);
+        } else {
+          try {
+            Promise.resolve(discourseUrl.routeTo(`/t/topic/${timeline.topicId}/${target}`)).catch((error) => {
+              if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
+                finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
+              }
+            });
+          } catch (error) {
+            finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
+          }
+        }
+      });
+    }
+    const timeline = floorTimeline;
+    timeline.lastFloor = lastFloor;
+    timeline.active = active;
+    timeline.timeoutMs = timeoutMs;
+    timeline.input.max = String(lastFloor);
+    timeline.element.style.height = source.style.height;
+    if (Number.isInteger(floor) && floor > 0 && floor <= lastFloor) timeline.floor = floor;
+    if (!active && timeline.pending?.target === timeline.floor) finishFloorJump(timeline, timeline.floor);
+    if (!timeline.editing && !timeline.pending) {
+      timeline.input.disabled = lastFloor === 1;
+      renderFloorTimeline(timeline, timeline.floor);
+    }
+  }
+
+  document.addEventListener("betterld:timeline-reset", resetFloorTimeline);
+  document.addEventListener("betterld:reply-jumped", (event) => {
+    const { topicId, requestId, postNumber, error } = JSON.parse(event.detail);
+    const timeline = floorTimeline;
+    if (timeline?.topicId !== topicId || timeline.pending?.requestId !== requestId) return;
+    if (!error) timeline.floor = postNumber;
+    finishFloorJump(timeline, timeline.floor, error || "");
+  });
+
+  // 原站楼号链接继续使用路由；树模式下直接按实际楼号定位。
   const discourseUrl = window.require("discourse/lib/url").default;
   const routeTo = discourseUrl.routeTo;
   discourseUrl.routeTo = function (url, options) {
@@ -28,7 +142,7 @@
   };
 
   document.addEventListener("betterld:reply-sync", (event) => {
-    const { topicId, postNumber, postId, active } = JSON.parse(event.detail);
+    const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
     try {
       const { getOwnerWithFallback } = window.require("discourse/lib/get-owner");
       const owner = getOwnerWithFallback();
@@ -37,23 +151,12 @@
       if (!topicId || String(topic?.id) !== topicId) {
         replyTopicId = "";
         replySignature = "";
+        resetFloorTimeline();
         return;
       }
       if (replyTopicId !== topicId) replySignature = "";
       replyTopicId = topicId;
       const stream = topic.postStream;
-      if (!boundControllers.has(controller)) {
-        const jumpToIndex = controller._jumpToIndex;
-        controller._jumpToIndex = function (index) {
-          if (document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) {
-            const ids = this.model.postStream.stream;
-            jumpReply(undefined, ids[Math.max(0, Math.min(ids.length - 1, index - 1))]);
-            return;
-          }
-          return jumpToIndex.call(this, index);
-        };
-        boundControllers.add(controller);
-      }
       const data = {
         topicId,
         stream: [...stream.stream],
@@ -64,21 +167,7 @@
         replySignature = signature;
         document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: signature }));
       }
-      if (active && postNumber) {
-        const postIndex = stream.stream.indexOf(postId) + 1;
-        owner.lookup("service:app-events").trigger("topic:current-post-scrolled", {
-          postIndex, percent: stream.stream.length > 1 ? (postIndex - 1) / (stream.stream.length - 1) : 0
-        });
-      }
-      const timelineReplies = document.querySelector(".topic-timeline .timeline-replies");
-      const currentFloor = Number(active ? postNumber : controller.currentPostNumber);
-      const lastFloor = Number(topic.highest_post_number);
-      if (timelineReplies && Number.isInteger(currentFloor) && Number.isInteger(lastFloor) && currentFloor > 0 && lastFloor >= currentFloor) {
-        const label = `${currentFloor} / ${lastFloor}`;
-        if (timelineReplies.textContent.trim() !== label) timelineReplies.textContent = label;
-        const slider = timelineReplies.closest(".timeline-scroller");
-        if (slider?.hasAttribute("aria-valuetext")) slider.setAttribute("aria-valuetext", label);
-      }
+      syncFloorTimeline(topic, Number(active ? postNumber : controller.currentPostNumber), active, timeoutMs);
     } catch (error) {
       document.dispatchEvent(new CustomEvent("betterld:reply-data", {
         detail: JSON.stringify({ topicId, error: error.message || "原站回复同步失败" })

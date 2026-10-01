@@ -4806,6 +4806,8 @@
   }
 
   function replyTreeCurrentPost(tree) {
+    if (tree.positionedPost && tree.positionedPost.scrollY === pageScrollTop()) return tree.positionedPost;
+    tree.positionedPost = null;
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     const cards = [...tree.content.querySelectorAll('.betterld-reply-tree__card')];
     const visible = cards.find((card) => card.getBoundingClientRect().bottom > headerHeight && card.getClientRects().length);
@@ -4875,12 +4877,13 @@
     }
   }
 
-  async function jumpReplyTree(tree, postNumber, postId) {
+  async function jumpReplyTree(tree, postNumber, postId, requestId) {
     if (tree.busy) {
-      tree.pendingJump = { postNumber, postId };
+      tree.pendingJump = { postNumber, postId, requestId };
       return;
     }
     tree.busy = true;
+    let errorMessage = "";
     try {
       let post = postId ? tree.posts.get(postId) : [...tree.posts.values()].find((entry) => entry.post_number === postNumber);
       if (!post) {
@@ -4900,17 +4903,28 @@
       let parent = Number(post.reply_to_post_number);
       while (parent > 1) {
         tree.collapsed.delete(parent);
-        parent = Number([...tree.posts.values()].find((entry) => entry.post_number === parent)?.reply_to_post_number);
+        const parentPost = [...tree.posts.values()].find((entry) => entry.post_number === parent);
+        parent = Number(parentPost?.reply_to_post_number);
       }
       tree.collapsed.delete(1);
       tree.targetLocated = true;
       renderReplyTree(tree);
-      tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card`).scrollIntoView({ block: 'center' });
+      const card = tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card`);
+      const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
+      window.scrollTo({ top: pageScrollTop() + card.getBoundingClientRect().top - headerHeight, behavior: 'instant' });
+      // 末楼可能无法贴到视口顶部；在用户实际滚动前保持刚命中的楼号。
+      tree.positionedPost = { postNumber, postId: post.id, scrollY: pageScrollTop() };
       tree.status.textContent = '';
     } catch (error) {
-      if (state.replyTree === tree) tree.status.textContent = `楼层跳转失败：${error.message}`;
+      errorMessage = `楼层跳转失败：${error.message}`;
+      if (state.replyTree === tree) tree.status.textContent = errorMessage;
     } finally {
       tree.busy = false;
+      if (state.replyTree === tree && requestId) {
+        document.dispatchEvent(new CustomEvent('betterld:reply-jumped', {
+          detail: JSON.stringify({ topicId: tree.topicId, requestId, postNumber, error: errorMessage })
+        }));
+      }
     }
   }
 
@@ -4924,7 +4938,7 @@
   document.addEventListener('betterld:reply-jump', (event) => {
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
-    if (tree?.topicId === data.topicId && !tree.contentContainer.hidden) jumpReplyTree(tree, data.postNumber, data.postId);
+    if (tree?.topicId === data.topicId && !tree.contentContainer.hidden) jumpReplyTree(tree, data.postNumber, data.postId, data.requestId);
   });
 
   function syncReplyTree() {
@@ -4943,6 +4957,7 @@
       state.replyTree.streamElement.removeAttribute("data-betterld-reply-source");
       state.replyTree.topicContainer.removeAttribute("data-betterld-reply-tree-active");
       state.replyTree.panel.remove();
+      document.dispatchEvent(new CustomEvent('betterld:timeline-reset'));
       state.replyTree = null;
     }
     if (!topicId) {
@@ -4953,15 +4968,15 @@
     if (state.replyTree) {
       const tree = state.replyTree;
       if (tree.pendingJump && !tree.busy) {
-        const { postNumber, postId } = tree.pendingJump;
+        const { postNumber, postId, requestId } = tree.pendingJump;
         tree.pendingJump = null;
-        jumpReplyTree(tree, postNumber, postId);
+        jumpReplyTree(tree, postNumber, postId, requestId);
       }
       if (tree.liveIds.size && !tree.pendingData) tree.pendingData = { stream: tree.stream, posts: [] };
       syncReplyTreeData(tree);
       if (state.pageRefreshBridge && tree.bridgeReady) {
         document.dispatchEvent(new CustomEvent('betterld:reply-sync', {
-          detail: JSON.stringify({ topicId, ...replyTreeCurrentPost(tree), active: !tree.contentContainer.hidden })
+          detail: JSON.stringify({ topicId, ...replyTreeCurrentPost(tree), active: !tree.contentContainer.hidden, timeoutMs: config.pageRefreshTimeoutMs })
         }));
       }
       return;

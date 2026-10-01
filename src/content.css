@@ -4405,6 +4405,54 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   display: none !important;
 }
 
+/* 楼号滑块独立于原站流索引；只隐藏中央轨道，其余原站控件保持可用。 */
+.betterld-floor-timeline-active .timeline-scrollarea {
+  display: none !important;
+}
+
+.betterld-floor-timeline {
+  position: relative;
+  height: 300px;
+  padding-inline-start: 4px;
+  color: var(--betterld-on-surface);
+}
+
+.betterld-floor-timeline input[type="range"] {
+  writing-mode: vertical-lr;
+  direction: ltr;
+  width: 20px;
+  height: 100%;
+  margin: 0;
+  accent-color: var(--betterld-primary);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.betterld-floor-timeline input:focus-visible {
+  outline: 2px solid var(--betterld-primary);
+  outline-offset: 4px;
+}
+
+.betterld-floor-timeline__label {
+  position: absolute;
+  inset-inline-start: 32px;
+  top: calc(var(--betterld-floor-progress) * (100% - 24px));
+  line-height: 24px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgb(var(--betterld-surface-rgb)), 0 1px 3px rgb(var(--betterld-surface-rgb));
+}
+
+.betterld-floor-timeline__status {
+  position: absolute;
+  inset-inline-start: 32px;
+  bottom: 0;
+  max-width: 220px;
+  font-size: 12px;
+  margin: 0;
+}
+
 /* 回复关系由 Discourse 的 reply_to_post_number 提供；竖干与弧线仅属于树状阅读视图。 */
 .betterld-reply-tree {
   box-sizing: border-box;
