@@ -4559,7 +4559,7 @@
     }
     if (post.can_boost === true) {
       // 原站这个按钮就是 Discourse 的图标按钮（.btn.btn-icon + .d-icon），沿用同一套类名以继承原站尺寸与配色。
-      const add = createElement("button", "btn no-text btn-icon btn-flat discourse-boosts__add-btn betterld-reply-tree__boost-add");
+      const add = createElement("button", "btn no-text btn-icon btn-flat discourse-boosts__add-btn");
       add.type = "button";
       add.setAttribute("aria-label", `为 #${post.post_number} 添加 Boost`);
       add.title = `为 #${post.post_number} 添加 Boost`;
