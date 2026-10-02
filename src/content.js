@@ -4974,6 +4974,9 @@
       }
       if (tree.liveIds.size && !tree.pendingData) tree.pendingData = { stream: tree.stream, posts: [] };
       syncReplyTreeData(tree);
+      // 续载由路由轮询驱动：交叉观察器只在可见性变化时回调一次，标签页隐藏、窗口遮挡或回调落在忙碌期间都会让续载链停住，
+      // 而新回复同步是定时驱动的，会继续追加末尾楼层，于是树里只剩首屏窗口加上最新楼层、中间楼层一直读不出来。
+      maybeLoadMoreReplyTree(tree);
       if (state.pageRefreshBridge && tree.bridgeReady) {
         document.dispatchEvent(new CustomEvent('betterld:reply-sync', {
           detail: JSON.stringify({ topicId, ...replyTreeCurrentPost(tree), active: !tree.contentContainer.hidden, timeoutMs: config.pageRefreshTimeoutMs })
