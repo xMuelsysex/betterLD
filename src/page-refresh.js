@@ -1,7 +1,8 @@
 (() => {
   "use strict";
 
-  // 仅在页面上下文调用原站模型，原站的 MessageBus 和分页仍由 Discourse 管理。
+  // 仅在页面上下文调用原站模型：原站的 MessageBus 和分页仍由 Discourse 管理，
+  // 列表主题与主题回复都直接读 Discourse 自己已经下载好的模型，避免同一份数据再请求一遍。
   let pending = null;
   let pendingHref = "";
   let replyTopicId = "";
@@ -210,6 +211,54 @@
         detail: JSON.stringify({ id, error: error.message || "原站回复编辑器打开失败" })
       }));
     }
+  });
+
+  // 当前列表路由的主题数据就在站点自己的模型里（服务端预载、无限滚动、客户端路由取回的都在），
+  // 投影成列表接口的载荷形状，交给内容脚本用同一套映射取值，不再向站点重新请求一遍。
+  function isoOrEmpty(value) {
+    if (!value) return "";
+    if (value instanceof Date) return Number.isNaN(value.getTime()) ? "" : value.toISOString();
+    return typeof value === "string" ? value : "";
+  }
+
+  function currentTopicListPayload() {
+    const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+    const name = owner.lookup("service:router")?.currentRouteName;
+    const model = name ? owner.lookup(`route:${name}`)?.currentModel : null;
+    const list = model?.list ?? model;
+    const topics = Array.isArray(list?.topics) ? list.topics
+      : Array.isArray(list?.topic_list?.topics) ? list.topic_list.topics : null;
+    if (!topics?.length) return null;
+    const users = Array.isArray(list?.users) ? list.users
+      : Array.isArray(model?.users) ? model.users : [];
+    return {
+      users: users.map((user) => ({ id: user.id, username: user.username })),
+      topic_list: {
+        topics: topics.map((topic) => ({
+          id: String(topic.id),
+          creator: topic.creator?.username || "",
+          posters: (Array.isArray(topic.posters) ? topic.posters : []).map((poster) => ({
+            user_id: poster.user_id ?? poster.userId
+          })),
+          last_posted_at: isoOrEmpty(topic.last_posted_at ?? topic.lastPostedAt),
+          bumped_at: isoOrEmpty(topic.bumped_at ?? topic.bumpedAt),
+          created_at: isoOrEmpty(topic.created_at ?? topic.createdAt)
+        }))
+      }
+    };
+  }
+
+  document.addEventListener("betterld:topic-list-request", (event) => {
+    const { id } = JSON.parse(event.detail);
+    let payload = null;
+    try {
+      payload = currentTopicListPayload();
+    } catch (error) {
+      console.error("[betterLD] 原站主题列表读取失败", error);
+    }
+    document.dispatchEvent(new CustomEvent("betterld:topic-list", {
+      detail: JSON.stringify({ id, payload })
+    }));
   });
 
   document.addEventListener("betterld:refresh", async (event) => {

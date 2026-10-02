@@ -60,21 +60,17 @@
     refreshNextAt: 0,
     excerptStorageChain: Promise.resolve(),
     metadataNextAt: 0,
+    excerptTokens: config.excerptRequestBurst,
+    excerptTokensAt: 0,
+    excerptRequestNextAt: 0,
     metadataCooldownUntil: 0,
     topicListMetadata: new Map(),
-    topicListUnavailable: new Set(),
-    topicListNextPage: new Map(),
     preloadedTopicListSeeded: false,
     topicListSync: null,
     topicListSyncAgain: false,
     excerptObserver: null,
-    cardObserver: null,
-    topicRequestQueue: [],
-    topicRequestActive: 0,
-    topicRequestLastStart: 0,
-    topicRequestPausedUntil: 0,
-    topicRequestPump: 0,
-    topicRequestRecoveryTimer: 0,
+    excerptVisible: new Set(),
+    excerptIdleTimer: 0,
     searchLoadMoreBusy: false,
     undoRefreshSnapshot: null,
     refreshScrollTopSince: 0,
@@ -103,7 +99,7 @@
     replyTreeSnapshot: null
   };
 
-  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey]) {
+  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.topicRequestCooldownStorageKey]) {
     const storageKeys = keys;
     if (firefoxApi) {
       return api.storage.local.get(storageKeys);
@@ -2589,11 +2585,36 @@
   }
 
   // 等上一请求完成再放行，确保挑战/限流响应先更新冷却时间，并给原站分页留出请求余量。
-  function scheduleMetadataRequest(task, isNeeded, isPriority) {
+  // 正文预览属于批量流量（一屏卡片一次），单独走更慢的节奏与配额，
+  // 不然它会占满队列、把回复加载这种阅读必需的请求一起拖住。
+  function scheduleMetadataRequest(task, isNeeded, isPriority, isExcerpt = false) {
     return new Promise((resolve, reject) => {
-      state.metadataQueue.push({ task, isNeeded, isPriority, resolve, reject });
+      state.metadataQueue.push({ task, isNeeded, isPriority, isExcerpt, resolve, reject });
       drainMetadataQueue();
     });
+  }
+
+  function requestWindowWait(starts, windowMs, maxPerWindow, now) {
+    const recent = starts.filter((at) => now - at < windowMs);
+    starts.length = 0;
+    starts.push(...recent);
+    return recent.length >= maxPerWindow ? recent[0] + windowMs : 0;
+  }
+
+  // 正文预览用令牌桶：一次阅读停顿需要的几张卡能立刻发出（突发额度），
+  // 持续阅读时按固定速度补充，长期速率不会超过站点可接受的量。
+  // 返回值是“下一个令牌可用的绝对时间”，与队列里其它门的写法定一致。
+  function excerptTokenWait(now) {
+    if (state.excerptTokens >= config.excerptRequestBurst) {
+      state.excerptTokensAt = now;
+      return 0;
+    }
+    const gained = Math.floor((now - state.excerptTokensAt) / config.excerptRequestRefillMs);
+    if (gained > 0) {
+      state.excerptTokens = Math.min(config.excerptRequestBurst, state.excerptTokens + gained);
+      state.excerptTokensAt += gained * config.excerptRequestRefillMs;
+    }
+    return state.excerptTokens >= 1 ? 0 : state.excerptTokensAt + config.excerptRequestRefillMs;
   }
 
   async function drainMetadataQueue() {
@@ -2604,11 +2625,18 @@
     try {
       while (state.metadataQueue.length) {
         while (true) {
+          const priorityIndex = state.metadataQueue.findIndex((entry) => entry.isPriority());
+          const index = priorityIndex < 0 ? 0 : priorityIndex;
+          const entry = state.metadataQueue[index];
           const now = Date.now();
-          state.metadataStarts = state.metadataStarts.filter((at) => now - at < config.topicRequestWindowMs);
-          const windowNextAt = state.metadataStarts.length >= config.topicRequestMaxPerWindow
-            ? state.metadataStarts[0] + config.topicRequestWindowMs : 0;
-          const wait = Math.max(state.metadataNextAt, state.metadataCooldownUntil, windowNextAt) - now;
+          const wait = Math.max(
+            state.metadataNextAt,
+            state.metadataCooldownUntil,
+            requestWindowWait(state.metadataStarts, config.topicRequestWindowMs, config.topicRequestMaxPerWindow, now),
+            entry.isExcerpt
+              ? Math.max(state.excerptRequestNextAt, excerptTokenWait(now))
+              : 0
+          ) - now;
           if (wait <= 0) break;
           await new Promise((resolve) => window.setTimeout(resolve, wait));
         }
@@ -2619,8 +2647,13 @@
           entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
           continue;
         }
-        state.metadataStarts.push(Date.now());
-        state.metadataNextAt = Date.now() + config.topicRequestMinIntervalMs;
+        const startedAt = Date.now();
+        state.metadataStarts.push(startedAt);
+        state.metadataNextAt = startedAt + config.topicRequestMinIntervalMs;
+        if (entry.isExcerpt) {
+          state.excerptTokens -= 1;
+          state.excerptRequestNextAt = startedAt + config.excerptRequestMinIntervalMs;
+        }
         try {
           entry.resolve(await entry.task());
         } catch (error) {
@@ -2632,17 +2665,26 @@
     }
   }
 
+  // 冷却时间写进 storage.local：站点限速是按 IP 计的，同一窗口里再打开/切换页面时
+  // 新页面不能从头再起一轮突发请求，而要接着等上一个窗口结束。
+  function holdMetadataRequests(until) {
+    state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil, until);
+    storageSet({ [config.topicRequestCooldownStorageKey]: state.metadataCooldownUntil })
+      .catch((error) => console.warn("[betterLD] 请求冷却时间写入失败", error));
+  }
+
   // 站点前面的 Cloudflare 会对不像站点自身 ajax 的 JSON 请求直接返回挑战页，
   // 一旦被打上挑战状态，站点自己的分页请求也会一起被挡、底部加载 spinner 永不结束。
   // 所以这里带上 Discourse ajax 同款的 X-Requested-With，并在被挑战时长时间停发。
   function applyRateLimit(retryAfter) {
     const seconds = Number(retryAfter);
     const delay = seconds > 0 ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
-    state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil,
-      Date.now() + Math.max(config.topicRequestCooldownMs, Number.isFinite(delay) ? delay : 0));
+    holdMetadataRequests(Date.now() + Math.min(
+      Math.max(config.topicRequestCooldownMs, Number.isFinite(delay) ? delay : 0),
+      config.topicChallengeCooldownMs));
   }
 
-  function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false) {
+  function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false, isExcerpt = false) {
     const existing = state.responseRequests.get(url);
     if (existing) {
       existing.consumers.push({ isNeeded, isPriority });
@@ -2656,7 +2698,7 @@
         headers: discourseAjaxHeaders
       });
       if (response.headers.get("cf-mitigated") === "challenge") {
-        state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil, Date.now() + config.topicChallengeCooldownMs);
+        holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
         throw new Error("topic request blocked by the site challenge; cooling down");
       }
       if (response.status === 429) {
@@ -2668,7 +2710,7 @@
       }
       return response.json();
     }, () => consumers.some((consumer) => consumer.isNeeded()),
-    () => consumers.some((consumer) => consumer.isNeeded() && consumer.isPriority()))
+    () => consumers.some((consumer) => consumer.isNeeded() && consumer.isPriority()), isExcerpt)
       .finally(() => state.responseRequests.delete(url));
     state.responseRequests.set(url, { promise, consumers });
     return promise;
@@ -2693,7 +2735,7 @@
         || (!card.hidden && rect.bottom > 0 && rect.top < window.innerHeight);
     }), () => managedCards().some((card) => card.dataset.topicId === topicId
       && (card.matches(":hover, :focus-within")
-        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card))));
+        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card))), true);
     const post = openingPost(data);
     const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
     const cooked = String(post?.cooked || "").trim();
@@ -2776,52 +2818,46 @@
   }
 
   // 逐主题请求 /t/{id}.json 一屏就是几十个请求，会触发站点防护并连带把站点自己的分页请求挡成 429，
-  // 所以作者与活动时间统一取列表接口（或首屏服务端预载）里的同一份主题数据，
+  // 而列表接口的每一页本来就已经被站点自己下载过一个（无限滚动 / 客户端路由），再取一遍等于把这份流量翻倍。
+  // 所以列表元数据只从站点自己已有的数据里读：首屏读服务端预载，其余读原站当前列表路由的模型；
   // /t/{id}.json 只留给视口内卡片的正文预览。
-  function topicListRouteKey() {
-    return `${currentPath()}${location.search}`;
-  }
-
-  function topicListMetadataPath() {
-    const username = userTopicsUsername();
-    if (username) {
-      return `/topics/created-by/${username}`;
-    }
-    if (!isHomepage()) {
-      return currentPath();
-    }
-    const active = document.querySelector("#navigation-bar a.active[href]");
-    if (!active) {
-      return "";
-    }
-    try {
-      return new URL(active.href, location.href).pathname.replace(/\/+$/, "");
-    } catch {
-      return "";
-    }
-  }
-
-  // Discourse 的列表主题把创建者排在 posters[0]（TopicPostersSummary 只把最新发帖人挪到末尾），
+  // 原站列表模型里的主题自带 creator（BasicUser）与活动时间；服务端预载的列表接口载荷没有这个字段，
+  // 用 posters[0] + users 映射：Discourse 的 TopicPostersSummary 只把最新发帖人挪到末尾，所以 posters[0] 恒为创建者，
   // users 数组给出该 user_id 的 username，与 /t/{id}.json 的 details.created_by.username 同源。
+  // 两条数据路径都在这里映射成同一份条目。
   function topicListEntries(payload) {
     const usernames = new Map(
       (Array.isArray(payload?.users) ? payload.users : []).map((user) => [user.id, cleanText(user.username)])
     );
     return (Array.isArray(payload?.topic_list?.topics) ? payload.topic_list.topics : []).map((topic) => ({
       id: String(topic.id),
-      author: usernames.get(topic.posters?.[0]?.user_id) || "",
+      author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
+        || usernames.get(topic.posters?.[0]?.user_id) || "",
       activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at)
     }));
   }
 
-  async function requestTopicListPage(page, routeKey, path, search) {
-    if (!path) {
-      return [];
-    }
-    const url = new URL(`${path}.json`, location.origin);
-    url.search = search;
-    url.searchParams.set("page", String(page));
-    return topicListEntries(await requestTopicResponse(url.href, () => topicListRouteKey() === routeKey));
+  function requestSiteTopicListPayload() {
+    return loadPageRefreshBridge().then(() => new Promise((resolve) => {
+      const id = crypto.randomUUID();
+      const finish = (payload) => {
+        window.clearTimeout(timer);
+        document.removeEventListener("betterld:topic-list", onResult);
+        resolve(payload);
+      };
+      const onResult = (event) => {
+        const result = JSON.parse(event.detail);
+        if (result.id === id) {
+          finish(result.payload || null);
+        }
+      };
+      const timer = window.setTimeout(() => finish(null), config.siteTopicListTimeoutMs);
+      document.addEventListener("betterld:topic-list", onResult);
+      document.dispatchEvent(new CustomEvent("betterld:topic-list-request", { detail: JSON.stringify({ id }) }));
+    })).catch((error) => {
+      console.warn("[betterLD] 原站主题列表读取不可用", error);
+      return null;
+    });
   }
 
   function seedPreloadedTopicList() {
@@ -2848,8 +2884,6 @@
       return;
     }
     entries.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
-    // 服务端渲染进页面的就是该路由列表的第 1 页
-    state.topicListNextPage.set(topicListRouteKey(), { firstId: entries[0].id, page: 0 });
   }
 
   function managedCards() {
@@ -2874,6 +2908,22 @@
     return managedCards().filter((card) => card.dataset.topicId && card.dataset.authorState === "loading");
   }
 
+  // 站点自己已经为当前列表路由下载过主题数据（无限滚动 / 客户端路由切换），原站模型里就有，
+  // 直接从那里读；读不到的主题（非列表路由、桥接不可用）才退回逐主题请求。
+  async function syncTopicListMetadataFromSite() {
+    const payload = await requestSiteTopicListPayload();
+    if (!payload) {
+      return;
+    }
+    const routeHref = location.href;
+    const entries = topicListEntries(payload);
+    if (!entries.length || location.href !== routeHref) {
+      return;
+    }
+    entries.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
+    applyTopicListMetadataToAll();
+  }
+
   function syncTopicListMetadata() {
     if (isSearchPage()) return;
     if (state.topicListSync) {
@@ -2888,45 +2938,11 @@
         // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次
         seedPreloadedTopicList();
         applyTopicListMetadataToAll();
-        const routeKey = topicListRouteKey();
-        const path = topicListMetadataPath();
-        const search = location.search;
-        if (!state.topicListUnavailable.has(routeKey)) {
-          // 列表首题未变说明还是同一次分页，接着上次的页码往下翻；首题变了（客户端路由回来）就从第 1 页重查
-          const firstId = managedCards()[0]?.dataset.topicId || "";
-          const tracked = state.topicListNextPage.get(routeKey);
-          let page = tracked && tracked.firstId === firstId ? tracked.page + 1 : 0;
-          while (topicListRouteKey() === routeKey && uncoveredTopicCards().length) {
-            let entries;
-            try {
-              entries = await requestTopicListPage(page, routeKey, path, search);
-            } catch (error) {
-              if (error.name === "AbortError") {
-                return;
-              }
-              state.topicListUnavailable.add(routeKey);
-              console.warn("[betterLD] 主题列表元数据请求失败", error);
-              break;
-            }
-            if (topicListRouteKey() !== routeKey) {
-              return;
-            }
-            const cardIds = new Set(managedCards().map((card) => card.dataset.topicId));
-            const matched = entries.filter((entry) => cardIds.has(entry.id));
-            if (!matched.length) {
-              state.topicListUnavailable.add(routeKey);
-              break;
-            }
-            matched.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
-            state.topicListNextPage.set(routeKey, { firstId, page });
-            applyTopicListMetadataToAll();
-            page += 1;
-          }
+        if (uncoveredTopicCards().length) {
+          await syncTopicListMetadataFromSite();
         }
-        // 列表接口覆盖不到的主题（非标准列表路由、创建者缺失等）退回逐主题请求
-        if (topicListRouteKey() === routeKey) {
-          uncoveredTopicCards().forEach(loadAuthor);
-        }
+        // 原站列表数据覆盖不到的主题（非列表路由、创建者缺失等）退回逐主题请求
+        uncoveredTopicCards().forEach(loadAuthor);
       })
       .catch((error) => {
         console.warn("[betterLD] 主题列表元数据同步失败", error);
@@ -3103,14 +3119,26 @@
   }
 
   // 快速滚动时卡片只是一闪而过，给它们请求正文预览既拖慢真正在看的那几张，
-  // 又会把一屏几十个请求打给站点（站点防护会连带把站点自己的分页请求挡成 429），
-  // 所以等卡片在视口里停住一小会儿再请求。
+  // 又会把一屏几十个请求打给站点（站点限速是按 IP 累计的，会连带把站点自己的分页请求挡成 429）。
+  // 所以滚动期间不排队，等页面停住后再为当时可见的卡片请求正文预览。
+  function deferExcerptLoads() {
+    if (!state.excerptVisible.size) return;
+    state.excerptVisible.forEach((card) => cancelExcerpt(card));
+    window.clearTimeout(state.excerptIdleTimer);
+    state.excerptIdleTimer = window.setTimeout(() => {
+      state.excerptVisible.forEach((card) => {
+        if (card.isConnected) scheduleExcerpt(card);
+      });
+    }, config.excerptScrollIdleMs);
+  }
+
   function scheduleExcerpt(card) {
     if (card.dataset.betterldExcerptTimer || card.dataset.excerptState !== "loading") {
       return;
     }
     card.dataset.betterldExcerptTimer = String(window.setTimeout(() => {
       delete card.dataset.betterldExcerptTimer;
+      state.excerptVisible.delete(card);
       loadExcerpt(card);
       state.excerptObserver?.unobserve(card);
     }, config.excerptDwellMs));
@@ -3139,23 +3167,6 @@
       return;
     }
     loadExcerpt(card);
-  }
-
-  function needsAllTopicActivity() {
-    return state.currentSettings.topicFilterEnabled && Number(state.currentSettings.topicFilterMaxAgeDays) > 0;
-  }
-
-  function loadCardMetadata(card) {
-    loadAuthor(card);
-    observeExcerpt(card);
-  }
-
-  function ensureAuthorMetadata(card) {
-    if (needsAllTopicActivity() || !state.cardObserver) {
-      loadAuthor(card);
-      return;
-    }
-    state.cardObserver.observe(card);
   }
 
   function observeCard(card) {
@@ -3628,6 +3639,7 @@
 
   function unobserveGrid(grid) {
     grid.querySelectorAll(".betterld-topic-card").forEach((card) => {
+      state.excerptVisible.delete(card);
       cancelExcerpt(card);
       state.excerptObserver?.unobserve(card);
     });
@@ -3891,8 +3903,6 @@
     state.refreshPromise = scheduleMetadataRequest(() => refreshSitePage(href), () => location.href === href, () => true)
       .then(() => {
         if (location.href !== href) return;
-        state.topicListUnavailable.delete(topicListRouteKey());
-        state.topicListNextPage.delete(topicListRouteKey());
         managedCards().forEach((card) => {
           const authorFailed = card.dataset.authorState === "failed";
           const excerptFailed = card.dataset.excerptState === "failed";
@@ -4194,6 +4204,36 @@
     }
   }
 
+  // 原站 boost 弹层带 closeOnScroll：触发器滚动后弹层会被这次滚动立刻关掉，所以点击必须等滚动事件派发完。
+  // 不用 rAF：它依赖渲染管线，标签页隐藏或渲染停摆时不会触发，点击会静默失效。
+  function afterScrollSettles(callback) {
+    let settled = false;
+    let quietTimer;
+    let limitTimer;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(quietTimer);
+      clearTimeout(limitTimer);
+      window.removeEventListener("scroll", onScroll);
+      callback();
+    };
+    const onScroll = () => {
+      clearTimeout(quietTimer);
+      quietTimer = setTimeout(finish, config.replyTreeScrollSettleMs);
+    };
+    limitTimer = setTimeout(finish, config.replyTreeScrollSettleTimeoutMs);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+  }
+
+  function boostMenuOpened() {
+    const popover = document.querySelector(".discourse-boosts__input-container");
+    if (!popover) return false;
+    const bounds = popover.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0;
+  }
+
   function openNativeReplyAction(tree, post, action) {
     tree.status.textContent = "";
     const postNumber = post.post_number;
@@ -4204,9 +4244,29 @@
     showNativeReply(tree);
     let observer;
     let timer;
+    let attempts = 0;
+    let pending = false;
     const finish = () => {
       observer?.disconnect();
       clearTimeout(timer);
+    };
+    const clickTrigger = () => {
+      const button = nativeReplyAction(postNumber, action);
+      if (!button) {
+        pending = false;
+        return;
+      }
+      attempts += 1;
+      button.click();
+      // 弹层可能被后续滚动事件关掉、也可能随楼层卸载而消失，校验一次再决定是否重试。
+      setTimeout(() => {
+        pending = false;
+        if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;
+        if (action === "boost" && !boostMenuOpened()) {
+          if (attempts < config.replyTreeActionAttempts) activate();
+          else tree.status.textContent = `原站 #${postNumber} 的 Boost 弹层没能打开，请点原帖里的火箭按钮。`;
+        }
+      }, config.replyTreeActionVerifyMs);
     };
     const activate = () => {
       if (topicIdFromPath() !== tree.topicId || state.replyTreeNativeTopicId !== tree.topicId) {
@@ -4214,33 +4274,29 @@
         return;
       }
       const button = nativeReplyAction(postNumber, action);
-      if (!button) return;
+      if (!button || pending) return;
+      pending = true;
       finish();
       button.closest("article")?.scrollIntoView({ block: "center" });
-      // 先滚动再点击：原站 boost 弹层会在滚动时自动关闭，所以点击必须晚于这次滚动事件；
-      // 用定时器而不是 rAF，rAF 依赖渲染管线，标签页隐藏或渲染停摆时不会触发，按钮会静默无响应。
-      setTimeout(() => {
-        const current = nativeReplyAction(postNumber, action);
-        if (current) current.click();
-        else tree.status.textContent = `原站 #${postNumber} 的操作尚未就绪，请返回树状回复后重试。`;
-      }, 0);
+      afterScrollSettles(() => {
+        if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;
+        clickTrigger();
+      });
     };
     if (!nativeReplyAction(postNumber, action)) {
+      // 楼层没在原站渲染时先切到原帖：导航会让 Discourse 载入并渲染该楼，触发器随后出现。
       const link = tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card .betterld-reply-tree__number`);
       link.click();
+      timer = setTimeout(() => {
+        finish();
+        if (state.replyTreeNativeTopicId === tree.topicId && topicIdFromPath() === tree.topicId) {
+          const currentTree = state.replyTree;
+          if (currentTree?.topicId === tree.topicId) currentTree.status.textContent = `原站 #${postNumber} 的操作未载入，请重试。`;
+        }
+      }, config.replyTreeActionTimeoutMs);
     }
     observer = new MutationObserver(activate);
     observer.observe(document.querySelector("#main-outlet"), { childList: true, subtree: true });
-    timer = setTimeout(() => {
-      finish();
-      if (state.replyTreeNativeTopicId === tree.topicId && topicIdFromPath() === tree.topicId) {
-        const currentTree = state.replyTree;
-        if (currentTree?.topicId === tree.topicId) {
-          currentTree.status.textContent = `原站 #${postNumber} 的操作未载入，请重试。`;
-          currentTree.toggle.click();
-        }
-      }
-    }, config.replyTreeActionTimeoutMs);
     activate();
   }
 
@@ -5186,8 +5242,10 @@
     ? new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
+          state.excerptVisible.add(entry.target);
           scheduleExcerpt(entry.target);
         } else {
+          state.excerptVisible.delete(entry.target);
           cancelExcerpt(entry.target);
         }
       });
@@ -5206,6 +5264,11 @@
         ? stored[config.wallpaperRemoteCacheKey]
         : null;
       state.visitedTopics = new Set(Array.isArray(stored[config.visitedTopicStorageKey]) ? stored[config.visitedTopicStorageKey] : []);
+      // 站点限速按 IP 计，上一个页面撞上冷却时新页面要接着等，不能重新起一轮突发请求
+      const storedCooldown = Number(stored[config.topicRequestCooldownStorageKey]);
+      if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) {
+        state.metadataCooldownUntil = storedCooldown;
+      }
       const activeSettings = await getActiveSettings(stored[config.storageKey]);
       applyVisualSettings(activeSettings);
       state.settingsResolved = true;
@@ -5287,7 +5350,10 @@
   const coarsePointerMedia = globalThis.matchMedia?.("(pointer: coarse)");
   coarsePointerMedia?.addEventListener?.("change", applyChromeSettings);
 
-  window.addEventListener("scroll", updateListControlsScrollState, { passive: true });
+  window.addEventListener("scroll", () => {
+    updateListControlsScrollState();
+    deferExcerptLoads();
+  }, { passive: true });
   window.addEventListener("resize", resizeTopicDrawer);
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
