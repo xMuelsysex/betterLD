@@ -4145,13 +4145,16 @@
     tree.toggle.textContent = "返回树状回复";
   }
 
+  // 原站有两个 boost 触发器：没有 boost 时是帖子操作菜单里的 post-action-menu__boost，已有 boost 时是列表末尾的 add 按钮。
   const replyActionSelectors = {
-    boost: ".post-action-menu__boost",
+    boost: ".post-action-menu__boost, .discourse-boosts__add-btn",
     more: ".post-action-menu__show-more"
   };
 
   function nativeReplyAction(postNumber, action) {
-    return document.querySelector(`article#post_${postNumber} .post__menu-area ${replyActionSelectors[action]}`);
+    // 选择器含多个候选项，必须先锁定该楼的操作区，否则逗号后的选择器会逃出作用域（例如命中树自己的按钮）。
+    const menu = document.querySelector(`article#post_${postNumber} .post__menu-area`);
+    return menu?.querySelector(replyActionSelectors[action]) || null;
   }
 
   function promptReplyTreeLogin(tree) {
@@ -4214,11 +4217,13 @@
       if (!button) return;
       finish();
       button.closest("article")?.scrollIntoView({ block: "center" });
-      requestAnimationFrame(() => {
+      // 先滚动再点击：原站 boost 弹层会在滚动时自动关闭，所以点击必须晚于这次滚动事件；
+      // 用定时器而不是 rAF，rAF 依赖渲染管线，标签页隐藏或渲染停摆时不会触发，按钮会静默无响应。
+      setTimeout(() => {
         const current = nativeReplyAction(postNumber, action);
         if (current) current.click();
         else tree.status.textContent = `原站 #${postNumber} 的操作尚未就绪，请返回树状回复后重试。`;
-      });
+      }, 0);
     };
     if (!nativeReplyAction(postNumber, action)) {
       const link = tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card .betterld-reply-tree__number`);
@@ -4498,19 +4503,78 @@
     }
   }
 
+  function replyTreeIcon(name) {
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", `#${name}`);
+    icon.append(use);
+    return icon;
+  }
+
   function replyTreeActionButton(label, iconName, onClick, className = "") {
     const button = createElement("button", `betterld-reply-tree__action ${className}`);
     button.type = "button";
     button.setAttribute("aria-label", label);
     button.title = label;
-    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    icon.setAttribute("aria-hidden", "true");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", `#${iconName}`);
-    icon.append(use);
-    button.append(icon);
+    button.append(replyTreeIcon(iconName));
     button.addEventListener("click", onClick);
     return button;
+  }
+
+  // 原站把 boost 列表放在 .post__menu-area 内、帖子操作栏之后，并且没有任何 boost 时整块不渲染；
+  // 树里沿用同一位置与同一套原站类名，样式直接由原站插件 CSS 与 betterLD 既有气泡材质覆盖提供。
+  function replyTreeBoostSection(tree, post) {
+    const boosts = Array.isArray(post.boosts) ? post.boosts.filter((boost) => boost?.cooked) : [];
+    if (!boosts.length) return null;
+    const wrapper = createElement("div", "discourse-boosts__post-menu betterld-reply-tree__boosts");
+    const list = createElement("div", "discourse-boosts__list");
+    for (const boost of boosts) {
+      const bubble = createElement("span", "discourse-boosts__bubble");
+      const username = cleanText(boost.user?.username);
+      const avatarPath = replyTreeAvatarPath(boost.user?.avatar_template);
+      if (avatarPath) {
+        const avatar = createElement("img", "avatar");
+        avatar.src = avatarPath;
+        avatar.alt = "";
+        avatar.width = 24;
+        avatar.height = 24;
+        avatar.loading = "lazy";
+        const href = userProfileHref(username);
+        if (href) {
+          const link = createElement("a", "trigger-user-card");
+          link.href = href;
+          link.dataset.userCard = username;
+          link.setAttribute("aria-label", `查看 ${cleanText(boost.user?.name) || username} 的个人资料`);
+          link.append(avatar);
+          bubble.append(link);
+        } else {
+          bubble.append(avatar);
+        }
+      }
+      const cooked = createElement("span", "discourse-boosts__cooked");
+      cooked.append(...replyCooked(boost.cooked).childNodes);
+      bubble.append(cooked);
+      list.append(bubble);
+    }
+    if (post.can_boost === true) {
+      // 原站这个按钮就是 Discourse 的图标按钮（.btn.btn-icon + .d-icon），沿用同一套类名以继承原站尺寸与配色。
+      const add = createElement("button", "btn no-text btn-icon btn-flat discourse-boosts__add-btn betterld-reply-tree__boost-add");
+      add.type = "button";
+      add.setAttribute("aria-label", `为 #${post.post_number} 添加 Boost`);
+      add.title = `为 #${post.post_number} 添加 Boost`;
+      const icon = replyTreeIcon("rocket");
+      icon.setAttribute("class", "fa d-icon d-icon-rocket svg-icon");
+      icon.setAttribute("width", "1em");
+      icon.setAttribute("height", "1em");
+      add.append(icon);
+      add.addEventListener("click", () => openNativeReplyAction(tree, post, "boost"));
+      list.append(add);
+    }
+    const group = createElement("div", "discourse-boosts");
+    group.append(list);
+    wrapper.append(group);
+    return wrapper;
   }
 
   function renderReplyTree(tree) {
@@ -4586,7 +4650,7 @@
       const reactionCount = Number(post.reaction_users_count) || Number(post.actions_summary?.find((action) => action.id === 2)?.count) || 0;
       const selected = post.current_user_reaction?.id || post.current_user_reaction;
       const liked = selected === "heart";
-      const label = selected && !liked ? `已回应 ${selected}，点击切换为点赞` : liked ? "取消点赞" : "点赞此帖子";
+      const label = !selected ? "点赞此帖子" : liked ? "取消点赞" : `取消回应 ${selected}`;
       let longPressed = false;
       if (reactionCount > 0) {
         const summary = createElement("button", "betterld-reply-tree__action betterld-reply-tree__reaction-summary");
@@ -4612,12 +4676,13 @@
           return;
         }
         closeReplyReactionPicker(tree);
-        toggleReplyTreeReaction(tree, post, like, "heart");
+        // 原站主回应按钮是开关语义：点已选中的那个回应即取消，切换其他回应走悬停/长按选择器。
+        toggleReplyTreeReaction(tree, post, like, selected || "heart");
       });
       like.setAttribute("aria-pressed", String(Boolean(selected)));
       like.setAttribute("aria-haspopup", "dialog");
       like.setAttribute("aria-expanded", "false");
-      like.title = "点击点赞，悬停或长按选择其他回应";
+      like.title = selected ? "点击取消当前回应，悬停或长按选择其他回应" : "点击点赞，悬停或长按选择其他回应";
       if (selected && !liked) {
         try {
           const icon = createElement("img", "betterld-reply-tree__reaction-image");
@@ -4676,7 +4741,8 @@
         }
       });
       actions.append(copy);
-      if (post.can_boost !== false) {
+      // 原站同一帖子只会有其中一个 rocket 触发器：没有 boost 时在帖子操作菜单里，已有 boost 时在列表末尾。
+      if (post.can_boost !== false && !post.boosts?.length) {
         actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openNativeReplyAction(tree, post, "boost")));
       }
       actions.append(replyTreeActionButton("更多帖子操作", "ellipsis", () => openNativeReplyAction(tree, post, "more")));
@@ -4684,6 +4750,8 @@
       reply.append(createElement("span", "betterld-reply-tree__action-label", "回复"));
       actions.append(reply);
       body.append(actions);
+      const boosts = replyTreeBoostSection(tree, post);
+      if (boosts) body.append(boosts);
       card.append(avatarLink || avatar, body);
       item.append(card);
       const replies = children.get(post.post_number) || [];

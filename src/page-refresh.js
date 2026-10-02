@@ -8,6 +8,8 @@
   let replySignature = "";
   let floorTimeline = null;
   const postFields = ["id", "post_number", "reply_to_post_number", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+  const boostFields = ["id", "cooked", "can_delete", "can_flag"];
+  const boostUserFields = ["id", "username", "name", "avatar_template"];
 
   function jumpReply(postNumber, postId, requestId) {
     document.dispatchEvent(new CustomEvent("betterld:reply-jump", {
@@ -160,7 +162,13 @@
       const data = {
         topicId,
         stream: [...stream.stream],
-        posts: stream.posts.map((post) => Object.fromEntries(postFields.map((key) => [key, post[key]])))
+        posts: stream.posts.map((post) => ({
+          ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
+          boosts: post.boosts?.map((boost) => ({
+            ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
+            user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))
+          }))
+        }))
       };
       const signature = JSON.stringify(data);
       if (signature !== replySignature) {

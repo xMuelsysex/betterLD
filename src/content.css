@@ -4595,6 +4595,10 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
 }
 
+.betterld-reply-tree__boosts {
+  margin-top: 4px;
+}
+
 .betterld-reply-tree .betterld-reply-tree__action {
   display: inline-flex;
   align-items: center;
