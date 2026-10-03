@@ -4668,6 +4668,12 @@
       renderReplyTree(tree);
     });
     updateSubmit();
+    // 整条输入栏都可点：点到头像或空白处也把光标放进文本域。
+    container.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      if (event.target === input) return;
+      focusReplyTreeBoostInput(tree);
+    });
     container.append(input, submit, cancel);
     return container;
   }

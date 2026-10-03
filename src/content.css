@@ -4615,79 +4615,86 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   transition: border-color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard);
 }
 
-.betterld-reply-tree__boost-editor:focus-within {
+.betterld-reply-tree .betterld-reply-tree__boost-editor:focus-within {
   border-color: color-mix(in srgb, var(--betterld-primary) 55%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--betterld-primary) 22%, transparent);
 }
 
-.betterld-reply-tree__boost-editor img.avatar {
+.betterld-reply-tree .betterld-reply-tree__boost-editor img.avatar {
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
   border-radius: 50%;
 }
 
-.betterld-reply-tree__boost-editor .discourse-boosts__input {
+/* 输入框自己的 4px 内边距会让「空字段光标」按 padding 盒兜底定位，比占位符文字偏左上 4px；
+   这里把内边距归零、间距交给容器的 padding 与 gap，光标与文字就共用同一个原点。
+   原站占位符是 display:block 的块盒，空字段里没有行盒给光标依附，改成 inline 让光标落在占位符那一行。 */
+.betterld-reply-tree .betterld-reply-tree__boost-editor .discourse-boosts__input {
   flex: none;
+  padding: 0;
   color: var(--betterld-on-surface);
   caret-color: var(--betterld-primary);
 }
 
-.betterld-reply-tree__boost-editor .discourse-boosts__input:empty::before {
+.betterld-reply-tree .betterld-reply-tree__boost-editor .discourse-boosts__input:empty::before {
+  display: inline;
   color: var(--betterld-on-surface-variant);
 }
 
-/* 原站按钮的色彩全部来自 --d-button-default-* 变量，先归零再上 M3 形态。 */
-.betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel) {
+/* 原站按钮的色彩与尺寸全部来自 `--d-button-default-*` 变量与它自己的声明，后者带 !important
+   （LinuxDo 主题对 .btn-icon-only 等有强制尺寸），所以几何值也必须带 !important 才能生效。 */
+.betterld-reply-tree .betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel) {
   --d-button-default-bg-color: transparent;
   --d-button-default-border: 0;
   --d-button-default-icon-color: var(--betterld-on-surface-variant);
   --d-button-default-bg-color--hover: color-mix(in srgb, var(--betterld-on-surface) 8%, transparent);
   --d-button-default-icon-color--hover: var(--betterld-on-surface);
-  display: grid;
+  display: grid !important;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
   border: 0;
-  border-radius: 50%;
+  border-radius: 50% !important;
   background: transparent;
   color: var(--betterld-on-surface-variant);
   transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard);
 }
 
-.betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel) svg {
+.betterld-reply-tree .betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel) svg {
   width: 18px;
   height: 18px;
 }
 
-.betterld-reply-tree__boost-editor .discourse-boosts__submit {
+.betterld-reply-tree .betterld-reply-tree__boost-editor .discourse-boosts__submit {
   --d-button-default-bg-color: color-mix(in srgb, var(--betterld-primary) 16%, transparent);
   --d-button-default-icon-color: var(--betterld-primary);
   --d-button-default-bg-color--hover: color-mix(in srgb, var(--betterld-primary) 26%, transparent);
   --d-button-default-icon-color--hover: var(--betterld-primary);
-  background: color-mix(in srgb, var(--betterld-primary) 16%, transparent);
-  color: var(--betterld-primary);
+  background: color-mix(in srgb, var(--betterld-primary) 16%, transparent) !important;
+  color: var(--betterld-primary) !important;
 }
 
-.betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):hover {
+.betterld-reply-tree .betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):hover {
   background: color-mix(in srgb, var(--betterld-primary) 26%, transparent);
   color: var(--betterld-primary);
 }
 
-.betterld-reply-tree__boost-editor .discourse-boosts__cancel:hover {
+.betterld-reply-tree .betterld-reply-tree__boost-editor .discourse-boosts__cancel:hover {
   background: color-mix(in srgb, var(--betterld-on-surface) 10%, transparent);
   color: var(--betterld-on-surface);
 }
 
-.betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):focus-visible {
+.betterld-reply-tree .betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):focus-visible {
   outline: 2px solid var(--betterld-primary);
   outline-offset: 2px;
 }
 
 /* 未输入时不可提交：M3 的禁用图标按钮只把内容降到 38%，不再留容器底色。 */
-.betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):disabled {
-  background: transparent;
+.betterld-reply-tree .betterld-reply-tree__boost-editor :is(.discourse-boosts__submit, .discourse-boosts__cancel):disabled {
+  background: transparent !important;
+  color: var(--betterld-on-surface-variant) !important;
   opacity: 0.38;
   cursor: default;
 }
