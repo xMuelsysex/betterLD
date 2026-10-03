@@ -4246,6 +4246,7 @@
     let timer;
     let attempts = 0;
     let pending = false;
+    let scrolled = false;
     const finish = () => {
       observer?.disconnect();
       clearTimeout(timer);
@@ -4277,6 +4278,12 @@
       if (!button || pending) return;
       pending = true;
       finish();
+      // 重试时不再滚动：滚动本身会派发新的滚动事件，把刚打开的弹层又关掉。
+      if (scrolled) {
+        clickTrigger();
+        return;
+      }
+      scrolled = true;
       button.closest("article")?.scrollIntoView({ block: "center" });
       afterScrollSettles(() => {
         if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;

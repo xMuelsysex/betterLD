@@ -66,8 +66,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   replyTreeActionTimeoutMs: 8000,
   replyTreeActionAttempts: 2,
   replyTreeActionVerifyMs: 600,
-  replyTreeScrollSettleMs: 150,
-  replyTreeScrollSettleTimeoutMs: 600,
+  // 原站 boost 弹层带 closeOnScroll，而仓位的滚动事件比 scrollIntoView 晚一拍才派发（实测 ~230ms，
+  // 弹层还会在滚动事件后 ~240ms 才被关掉），所以点击要等在安静期之后。
+  replyTreeScrollSettleMs: 350,
+  replyTreeScrollSettleTimeoutMs: 900,
   replyTreeReactionHoldMs: 500,
   replyTreeReactionHoverMs: 400,
   replyTreeReactionUsersPageSize: 30,
