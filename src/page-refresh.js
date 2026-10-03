@@ -213,6 +213,48 @@
     }
   });
 
+  // Boost 用原站自己的创建流程：它负责乐观写入模型、CSRF 与错误弹窗，模型随后回到同一条同步路径。
+  document.addEventListener("betterld:reply-boost", async (event) => {
+    const { id, topicId, postId, raw } = JSON.parse(event.detail);
+    let boost = null;
+    let error = "";
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      const topic = controller.model;
+      if (String(topic?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新 Boost");
+      const currentUser = owner.lookup("service:current-user");
+      if (!currentUser) throw new Error("请登录后使用 Boost");
+      const post = topic.postStream.findLoadedPost(postId) || await owner.lookup("service:store").find("post", postId);
+      if (!post) throw new Error("目标楼层尚未载入，请重试");
+      if (post.can_boost === false) throw new Error("这层已经 Boost 过了");
+      post.set("topic", topic);
+      // 插件模块不在核心模块命名空间，直接走原站的 ajax（带 CSRF）调同一接口，并按插件自己的方式写回模型。
+      const { ajax } = window.require("discourse/lib/ajax");
+      const created = await ajax(`/discourse-boosts/posts/${post.id}/boosts`, { type: "POST", data: { raw } });
+      if (!created?.id) throw new Error("原站没有返回这条 Boost");
+      // 原站的 boost_added 实时回调也会写模型，所以按插件自己的去重规则（id 或同一用户）合并，不盲目追加。
+      const boosts = post.boosts || [];
+      const existing = boosts.some((boost) => boost.id === created.id || boost.user?.id === created.user?.id);
+      post.set("boosts", existing
+        ? boosts.map((boost) => (boost.id === created.id || boost.user?.id === created.user?.id ? created : boost))
+        : [...boosts, created]);
+      post.set("can_boost", false);
+      boost = {
+        id: created.id,
+        cooked: created.cooked,
+        can_delete: created.can_delete,
+        can_flag: created.can_flag,
+        user: Object.fromEntries(boostUserFields.map((key) => [key, created.user?.[key]]))
+      };
+    } catch (e) {
+      error = e.message || "Boost 提交失败";
+    }
+    document.dispatchEvent(new CustomEvent("betterld:reply-boosted", {
+      detail: JSON.stringify({ id, error, boost })
+    }));
+  });
+
   // 当前列表路由的主题数据就在站点自己的模型里（服务端预载、无限滚动、客户端路由取回的都在），
   // 投影成列表接口的载荷形状，交给内容脚本用同一套映射取值，不再向站点重新请求一遍。
   function isoOrEmpty(value) {

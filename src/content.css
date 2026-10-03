@@ -4599,6 +4599,27 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   margin-top: 4px;
 }
 
+/* 原站 Boost 编辑器挂在 DMenu 浮层里（.discourse-boosts-content .fk-d-menu__inner-content 是胶囊底），
+   树内就地内联，所以在这里把胶囊底、圆角与尺寸补上；尺寸与内部控件全部沿用原站 discourse-boosts CSS。 */
+.betterld-reply-tree__boost-editor {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 2px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: 50px;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.96);
+}
+
+.betterld-reply-tree__boost-editor img.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.betterld-reply-tree__boost-editor .discourse-boosts__input {
+  flex: none;
+}
+
 .betterld-reply-tree .betterld-reply-tree__action {
   display: inline-flex;
   align-items: center;

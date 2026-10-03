@@ -4155,9 +4155,8 @@
     tree.toggle.textContent = "返回树状回复";
   }
 
-  // 原站有两个 boost 触发器：没有 boost 时是帖子操作菜单里的 post-action-menu__boost，已有 boost 时是列表末尾的 add 按钮。
+  // 树里只有「更多帖子操作」还会用原站触发器（Boost 已改为在树内直接写）。
   const replyActionSelectors = {
-    boost: ".post-action-menu__boost, .discourse-boosts__add-btn",
     more: ".post-action-menu__show-more"
   };
 
@@ -4227,10 +4226,10 @@
     onScroll();
   }
 
-  function boostMenuOpened() {
-    const popover = document.querySelector(".discourse-boosts__input-container");
-    if (!popover) return false;
-    const bounds = popover.getBoundingClientRect();
+  function nativeMenuOpened() {
+    const menu = document.querySelector(".fk-d-menu__inner-content");
+    if (!menu) return false;
+    const bounds = menu.getBoundingClientRect();
     return bounds.width > 0 && bounds.height > 0;
   }
 
@@ -4263,9 +4262,9 @@
       setTimeout(() => {
         pending = false;
         if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;
-        if (action === "boost" && !boostMenuOpened()) {
+        if (!nativeMenuOpened()) {
           if (attempts < config.replyTreeActionAttempts) activate();
-          else tree.status.textContent = `原站 #${postNumber} 的 Boost 弹层没能打开，请点原帖里的火箭按钮。`;
+          else tree.status.textContent = `原站 #${postNumber} 的菜单没能打开，请返回树状回复后重试。`;
         }
       }, config.replyTreeActionVerifyMs);
     };
@@ -4587,9 +4586,150 @@
 
   // 原站把 boost 列表放在 .post__menu-area 内、帖子操作栏之后，并且没有任何 boost 时整块不渲染；
   // 树里沿用同一位置与同一套原站类名，样式直接由原站插件 CSS 与 betterLD 既有气泡材质覆盖提供。
+  function closeReplyTreeBoostEditor(tree) {
+    tree.boostEditor = null;
+  }
+
+  function focusReplyTreeBoostInput(tree) {
+    const input = tree.content.querySelector(`[data-post-number="${tree.boostEditor?.postNumber}"] .betterld-reply-tree__boost-editor .discourse-boosts__input`);
+    if (!input) return;
+    input.focus();
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  // 原站编辑器的头像是当前用户的 48px avatar_template（显示尺寸 24px），直接从预载用户数据取，不自造一份。
+  function currentUserAvatarPath() {
+    const source = document.querySelector("#data-preloaded")?.textContent;
+    if (!source) return "";
+    try {
+      const current = JSON.parse(source).currentUser;
+      return replyTreeAvatarPath(current ? JSON.parse(current).avatar_template : "");
+    } catch (error) {
+      console.error("[betterLD] 当前用户头像数据无效", error);
+      return "";
+    }
+  }
+
+  // 原站 Boost 编辑器是挂在触发器旁的 DMenu 浮层（当前用户头像 + 文本域 + 提交/取消按钮）：
+  // 树里把同一套类名与结构内联到该楼的 Boost 行，直接就地写，不再切回原站视图。
+  // 字数与 emoji 上限由原站服务端判定，这里只负责输入与提交，不复制一套计数规则。
+  function replyTreeBoostEditor(tree, post) {
+    const container = createElement("div", "discourse-boosts__input-container betterld-reply-tree__boost-editor");
+    const avatarPath = currentUserAvatarPath();
+    if (avatarPath) {
+      const avatar = createElement("img", "avatar");
+      avatar.src = avatarPath;
+      avatar.alt = "";
+      container.append(avatar);
+    }
+    const input = createElement("div", "discourse-boosts__input");
+    input.contentEditable = "plaintext-only";
+    input.tabIndex = 0;
+    input.dataset.placeholder = `Boost ${cleanText(post.username)}...`;
+    input.setAttribute("role", "textbox");
+    input.setAttribute("aria-label", `为 #${post.post_number} 写一条 Boost`);
+    input.textContent = tree.boostEditor.value;
+    const submit = createElement("button", "btn no-text btn-icon btn-default --success btn-icon-only discourse-boosts__submit");
+    submit.type = "button";
+    submit.setAttribute("aria-label", "提交 Boost");
+    submit.title = "提交 Boost";
+    submit.append(replyTreeIcon("check"));
+    const cancel = createElement("button", "btn no-text btn-icon btn-default --danger btn-icon-only discourse-boosts__cancel");
+    cancel.type = "button";
+    cancel.setAttribute("aria-label", "取消 Boost");
+    cancel.title = "取消 Boost";
+    cancel.append(replyTreeIcon("xmark"));
+    const updateSubmit = () => {
+      submit.disabled = input.textContent.trim().length === 0;
+    };
+    input.addEventListener("input", () => {
+      tree.boostEditor.value = input.textContent;
+      updateSubmit();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (!submit.disabled) submitReplyTreeBoost(tree, post, input, submit);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        closeReplyTreeBoostEditor(tree);
+        renderReplyTree(tree);
+      }
+    });
+    submit.addEventListener("click", () => submitReplyTreeBoost(tree, post, input, submit));
+    cancel.addEventListener("click", () => {
+      closeReplyTreeBoostEditor(tree);
+      renderReplyTree(tree);
+    });
+    updateSubmit();
+    container.append(input, submit, cancel);
+    return container;
+  }
+
+  async function submitReplyTreeBoost(tree, post, input, submit) {
+    const raw = input.textContent.trim();
+    if (!raw) return;
+    tree.status.textContent = "";
+    submit.disabled = true;
+    try {
+      await loadPageRefreshBridge();
+      const result = await new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
+        const finish = (error, payload) => {
+          clearTimeout(timer);
+          document.removeEventListener("betterld:reply-boosted", onResult);
+          if (error) reject(error);
+          else resolve(payload);
+        };
+        const onResult = (event) => {
+          const payload = JSON.parse(event.detail);
+          if (payload.id !== id) return;
+          finish(payload.error ? new Error(payload.error) : null, payload);
+        };
+        const timer = window.setTimeout(() => finish(new Error("提交超时")), config.replyTreeActionTimeoutMs);
+        document.addEventListener("betterld:reply-boosted", onResult);
+        document.dispatchEvent(new CustomEvent("betterld:reply-boost", {
+          detail: JSON.stringify({ id, topicId: tree.topicId, postId: post.id, raw })
+        }));
+      });
+      if (state.replyTree !== tree) return;
+      closeReplyTreeBoostEditor(tree);
+      const current = tree.posts.get(post.id);
+      if (current && result.boost) {
+        tree.posts.set(post.id, {
+          ...current,
+          boosts: [...(current.boosts || []).filter((boost) => boost.id !== result.boost.id), result.boost],
+          can_boost: false
+        });
+      }
+      renderReplyTree(tree);
+      tree.status.textContent = "已发送 Boost";
+    } catch (error) {
+      if (state.replyTree !== tree) return;
+      submit.disabled = false;
+      tree.status.textContent = `Boost 失败：${error.message}`;
+    }
+  }
+
+  function openReplyTreeBoostEditor(tree, post) {
+    closeReplyReactionPicker(tree);
+    tree.status.textContent = "";
+    const same = tree.boostEditor?.postNumber === post.post_number;
+    tree.boostEditor = { postNumber: post.post_number, value: same ? tree.boostEditor.value : "" };
+    renderReplyTree(tree);
+    focusReplyTreeBoostInput(tree);
+  }
+
   function replyTreeBoostSection(tree, post) {
     const boosts = Array.isArray(post.boosts) ? post.boosts.filter((boost) => boost?.cooked) : [];
-    if (!boosts.length) return null;
+    const editing = tree.boostEditor?.postNumber === post.post_number;
+    if (!boosts.length && !editing) return null;
     const wrapper = createElement("div", "discourse-boosts__post-menu betterld-reply-tree__boosts");
     const list = createElement("div", "discourse-boosts__list");
     for (const boost of boosts) {
@@ -4620,7 +4760,7 @@
       bubble.append(cooked);
       list.append(bubble);
     }
-    if (post.can_boost === true) {
+    if (post.can_boost === true && !editing) {
       // 原站这个按钮就是 Discourse 的图标按钮（.btn.btn-icon + .d-icon），沿用同一套类名以继承原站尺寸与配色。
       const add = createElement("button", "btn no-text btn-icon btn-flat discourse-boosts__add-btn");
       add.type = "button";
@@ -4631,11 +4771,13 @@
       icon.setAttribute("width", "1em");
       icon.setAttribute("height", "1em");
       add.append(icon);
-      add.addEventListener("click", () => openNativeReplyAction(tree, post, "boost"));
+      add.addEventListener("click", () => openReplyTreeBoostEditor(tree, post));
       list.append(add);
     }
     const group = createElement("div", "discourse-boosts");
     group.append(list);
+    // 原站编辑器是浮在原位上的，树里改在 boost 行下方另占一行，尺寸与控件保持原站一致。
+    if (editing) group.append(replyTreeBoostEditor(tree, post));
     wrapper.append(group);
     return wrapper;
   }
@@ -4646,6 +4788,7 @@
       return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
     });
     const anchorTop = anchor?.getBoundingClientRect().top;
+    const focusedBoostInput = Boolean(document.activeElement?.closest?.(".betterld-reply-tree__boost-editor"));
     closeReplyReactionPicker(tree);
     const posts = [...tree.posts.values()].sort((a, b) => a.post_number - b.post_number);
     const byNumber = new Map(posts.map((post) => [post.post_number, post]));
@@ -4806,7 +4949,7 @@
       actions.append(copy);
       // 原站同一帖子只会有其中一个 rocket 触发器：没有 boost 时在帖子操作菜单里，已有 boost 时在列表末尾。
       if (post.can_boost !== false && !post.boosts?.length) {
-        actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openNativeReplyAction(tree, post, "boost")));
+        actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openReplyTreeBoostEditor(tree, post)));
       }
       actions.append(replyTreeActionButton("更多帖子操作", "ellipsis", () => openNativeReplyAction(tree, post, "more")));
       const reply = replyTreeActionButton(`回复 #${post.post_number}`, "reply", () => openReplyTreeComposer(tree, post), "betterld-reply-tree__action--reply");
@@ -4846,6 +4989,8 @@
       if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
     }
     tree.panel.hidden = false;
+    // 重渲染会重建编辑器节点，输入焦点与光标位置要恢复，否则同步回流一次就把正在输入的光标顶掉。
+    if (focusedBoostInput && tree.boostEditor) focusReplyTreeBoostInput(tree);
     if (state.replyTreeNativeTopicId !== tree.topicId) {
       tree.streamElement.dataset.betterldReplySource = "true";
       tree.topicContainer.dataset.betterldReplyTreeActive = "true";
@@ -5137,7 +5282,7 @@
     panel.append(toggle, content);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { topicId, panel, toggle, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false };
+    const tree = { topicId, panel, toggle, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
