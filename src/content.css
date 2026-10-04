@@ -744,6 +744,12 @@ body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pil
   outline-offset: -3px;
 }
 
+/* 图标跟随文字颜色：站点只给 .d-icon 设了固定色（选中态用主色），
+   在 betterLD 的主色胶囊上会与背景同色而完全看不见。 */
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a .d-icon {
+  color: currentColor !important;
+}
+
 body.betterld-shell .show-more.has-topics {
   position: static !important;
   inset: auto !important;
