@@ -751,8 +751,11 @@ body.betterld-shell .show-more.has-topics {
   display: flex !important;
   justify-content: center;
   width: 100% !important;
+  /* 与卡片网格共用宽度上限与内缩：超宽屏下居中，左右边缘对齐卡片 */
+  max-width: min(100%, var(--betterld-topic-grid-max-width, 1800px)) !important;
   box-sizing: border-box;
-  margin: 0 0 16px !important;
+  margin: 0 auto 16px !important;
+  padding-inline: var(--betterld-card-side-gutter, 24px);
 }
 
 body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable {
@@ -3107,6 +3110,11 @@ html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
 @media (max-width: 560px) {
   .betterld-topic-grid {
     grid-template-columns: minmax(0, 1fr);
+    padding-inline: 16px;
+  }
+
+  /* 与同一断点下网格的窄屏内缩保持一致 */
+  body.betterld-shell .show-more.has-topics {
     padding-inline: 16px;
   }
 }
