@@ -37,6 +37,7 @@
 ### Adaptive Card Grid
 - **Definition**：首页主题卡片按照可用桌面宽度自动排列的网格，单张卡片目标尺寸约为 350 × 350 像素。
 - **Rules/Invariants**：网格优先保持卡片可读性和稳定比例，再根据可用宽度调整列数。
+- **Rules/Invariants**：卡片网格模式的内部尺寸（标题/作者/元信息字号、内边距与间距、头像、徽标、菜单几何）按卡片自身宽度整体缩放，缩放比例与上下限集中在 `betterld.config.js` 的 `cardScale`，经 `--betterld-card-unit-*` 注入；阅读卡不参与该缩放。
 
 ### Excerpt Failure State
 - **Definition**：首帖正文无法读取时，首页卡片中对正文预览区域的可见替代状态。

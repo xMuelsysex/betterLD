@@ -1040,9 +1040,9 @@
     { key: "topicListLayoutMode", type: "select", label: "主题卡片样式", help: "阅读卡适配核心 Markdown；原生模式恢复原始列表、分页和控制项。" },
     { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "只影响主题页树状回复；默认与原站一样同时显示昵称和用户名。" },
     { key: "topicSortMode", type: "select", label: "话题排序方式", help: "最新回复按 LinuxDo 默认的最后活动时间倒序；发布时间按主题创建时间倒序（Discourse 的 created）。切换后会重新加载当前列表，热门与最高保留各自排序。" },
-    { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题。" },
-    { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者。" },
-    { key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "只调整 betterLD 卡片元信息。" },
+    { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "只调整 betterLD 卡片标题；字号随卡片宽度缩放，小/标准/大只改变相对比例。" },
+    { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "只调整 betterLD 卡片作者；字号随卡片宽度缩放，小/标准/大只改变相对比例。" },
+    { key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "只调整 betterLD 卡片元信息；字号随卡片宽度缩放，小/标准/大只改变相对比例。" },
 
     { key: "topicNavigationAlignment", type: "select", label: "主题导航对齐", help: "保留原始链接和 active 语义。" },
     { key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "与列表控制栏滚动收起协调。" },
