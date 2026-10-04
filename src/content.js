@@ -397,6 +397,7 @@
     root.style.setProperty("--betterld-card-min-size", `${settings.cardMinSize}px`);
     root.style.setProperty("--betterld-card-side-gutter", `${settings.cardSideGutter}px`);
     root.style.setProperty("--betterld-grid-gap", `${settings.gridGap}px`);
+    root.style.setProperty("--betterld-topic-grid-max-width", `${config.topicGridMaxWidthPx}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
     root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);

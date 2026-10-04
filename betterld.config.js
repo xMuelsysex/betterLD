@@ -225,6 +225,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       darkOnPrimary: "#472900"
     }
   ]),
+  // 卡片网格的宽度上限：超过这个宽度后网格居中，两侧留白随视口变宽，避免卡片一直铺到窗口边缘。
+  // 取值与 gridBreakpoints.xxl 一致，但不与断点绑定：断点决定列数，这里只决定内容宽度。
+  topicGridMaxWidthPx: 1800,
   gridBreakpoints: Object.freeze({
     base: 0,
     sm: 560,

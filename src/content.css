@@ -16,6 +16,7 @@
   --betterld-mask-opacity: 0.42;
   --betterld-card-opacity: 0.82;
   --betterld-card-side-gutter: 24px;
+  --betterld-topic-grid-max-width: 1800px;
   --betterld-grid-gap: 16px;
   --betterld-radius-sm: 12px;
   --betterld-radius-md: 16px;
@@ -2335,12 +2336,12 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   position: relative;
   z-index: 1;
   inline-size: 100%;
-  max-inline-size: 100%;
   display: grid !important;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--betterld-card-min-size, 280px)), 1fr));
   gap: var(--betterld-grid-gap, 16px);
   width: 100%;
-  max-width: none;
+  /* 超宽屏下网格居中，两侧留白随视口变宽；窄屏仍由 100% 与内缩决定 */
+  max-width: min(100%, var(--betterld-topic-grid-max-width, 1800px));
   margin: 20px auto 32px;
   padding: 0 var(--betterld-card-side-gutter, 24px);
   box-sizing: border-box;
