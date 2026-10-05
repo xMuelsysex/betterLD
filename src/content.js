@@ -4513,6 +4513,137 @@
     if (replyQuotePending.size) scheduleReplyQuoteCollapseMeasure(0);
   }
 
+  // ---- 引用展开（复刻原站 quote-toggle 语义）----
+  // 原站给每个引用都配「展开」按钮（shouldDisplayToggleButton 只看被引用帖能否定位，与引用长度无关），
+  // 点开用被引用帖全文替换引用片段，再点恢复。所以这里不做任何高度阈值过滤。
+  const replyQuoteExpandFailPrefix = "引用展开失败";
+
+  function replyQuoteTreeStatus(aside) {
+    return aside.closest(".betterld-reply-tree")?.querySelector(".betterld-reply-tree__status") || null;
+  }
+
+  function replyQuoteIconClass(expanded) {
+    return `fa d-icon d-icon-chevron-${expanded ? "up" : "down"} svg-icon fa-width-auto svg-string`;
+  }
+
+  // 复用现有请求封装与冷却（CF 挑战 / 429 的停发逻辑都在里面），只在用户点击时才发。
+  async function fetchReplyQuotedPost(topicId, postNumber, isNeeded) {
+    if (!/^\d+$/.test(topicId) || !/^\d+$/.test(postNumber)) {
+      throw new Error("引用的被引用帖地址不完整");
+    }
+    const endpoint = new URL(`/posts/by_number/${topicId}/${postNumber}.json`, location.origin);
+    const data = await requestTopicResponse(endpoint.href, isNeeded);
+    const cooked = data?.cooked;
+    if (typeof cooked !== "string" || !cooked.trim()) throw new Error("被引用帖没有可显示的正文");
+    return cooked;
+  }
+
+  function enhanceQuotes(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll("aside.quote[data-topic][data-post]").forEach((aside) => {
+      // 幂等：已挂过按钮（含旧的折叠按钮）就跳过，不重复挂。
+      if (aside.querySelector(".quote-toggle")) return;
+      const block = replyQuoteBlockquote(aside);
+      const title = aside.querySelector(".title");
+      if (!block || !title) return;
+      if (!block.id) block.id = `betterld-quote-${crypto.randomUUID()}`;
+      title.setAttribute("data-can-toggle-quote", "true");
+      title.setAttribute("data-has-quote-controls", "true");
+      let controls = title.querySelector(".quote-controls");
+      if (!controls) {
+        controls = doc.createElement("div");
+        controls.className = "quote-controls";
+        title.append(controls);
+      }
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "btn no-text btn-flat quote-toggle";
+      button.setAttribute("aria-controls", block.id);
+      button.append(replyIconElement(doc, "chevron-down", replyQuoteIconClass(false)));
+      controls.append(button);
+
+      let expanded = false;
+      let busy = false;
+      let snapshot = null;
+      let statusText = "";
+
+      const setState = (next) => {
+        expanded = next;
+        aside.setAttribute("data-expanded", String(next));
+        button.setAttribute("aria-expanded", String(next));
+        const label = next ? config.replyTreeQuoteExpandLabels.collapse : config.replyTreeQuoteExpandLabels.expand;
+        button.setAttribute("aria-label", label);
+        button.title = label;
+        const svg = button.querySelector("svg");
+        if (svg) svg.setAttribute("class", replyQuoteIconClass(next));
+        const use = button.querySelector("use");
+        if (use) use.setAttribute("href", `#${next ? "chevron-up" : "chevron-down"}`);
+      };
+
+      // 只在状态行还停在本功能写的那一句话时清理，避免盖掉树的加载提示。
+      const setStatus = (text) => {
+        const status = replyQuoteTreeStatus(aside);
+        if (!status) return;
+        if (!text && status.textContent !== statusText) return;
+        status.textContent = text;
+        statusText = text;
+      };
+
+      const toggle = async () => {
+        if (busy) return;
+        // 收起：还原展开前保存的原始内容（存的是节点本身，各增强器的事件监听一起留住）。
+        if (expanded) {
+          block.replaceChildren(...snapshot);
+          setState(false);
+          return;
+        }
+        busy = true;
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        button.setAttribute("aria-label", config.replyTreeQuoteExpandLabels.busy);
+        button.title = config.replyTreeQuoteExpandLabels.busy;
+        const source = [...block.childNodes];
+        try {
+          const cooked = await fetchReplyQuotedPost(aside.dataset.topic, aside.dataset.post, () => aside.isConnected);
+          if (!aside.isConnected) return;
+          snapshot = source;
+          // 走完整 cooked 增强链：被引用帖里的图片 / 代码块 / 嵌套引用照样可用。
+          block.replaceChildren(...replyCooked(cooked).childNodes);
+          setState(true);
+          setStatus("");
+        } catch (error) {
+          // 不静默：按钮转成「重试」文案，状态行写清原因，内容保持原样、状态仍是收起。
+          console.warn("[betterLD] 展开引用失败", error);
+          if (!aside.isConnected) return;
+          button.setAttribute("aria-label", config.replyTreeQuoteExpandLabels.failed);
+          button.title = config.replyTreeQuoteExpandLabels.failed;
+          setStatus(`${replyQuoteExpandFailPrefix}：${error.message}`);
+        } finally {
+          busy = false;
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+        }
+      };
+      const activate = () => {
+        toggle().catch((error) => console.warn("[betterLD] 展开引用失败", error));
+      };
+
+      button.addEventListener("click", (event) => {
+        // 原站主世界对 .quote-toggle 也有委托处理，这里拦住，避免它去动原站 DOM。
+        event.preventDefault();
+        event.stopPropagation();
+        activate();
+      });
+      title.addEventListener("click", (event) => {
+        // 对齐原站 onClickTitle：点链接或 .quote-controls 内部不切换。
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || target.closest("a") || target.closest(".quote-controls")) return;
+        activate();
+      });
+      setState(false);
+    });
+  }
+
   function enhanceReplyContent(root) {
     if (!root) return root;
     enhanceCallouts(root);
@@ -4520,6 +4651,8 @@
     enhanceHashtags(root);
     enhanceCodeBlocks(root);
     enhanceLightboxes(root);
+    // 展开按钮先挂（原站语义是每个引用都有）；旧的按高度折叠只补没有按钮的引用，自然让位给展开。
+    enhanceQuotes(root);
     trackReplyQuoteCollapse(root);
     return root;
   }

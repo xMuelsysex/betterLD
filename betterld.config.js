@@ -107,6 +107,14 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     expand: "展开",
     collapse: "收起"
   }),
+  // 引用展开（复刻原站 quote-toggle：点击加载被引用帖全文替换引用片段，再点恢复）。
+  // 与上面的「引用折叠」是两套互不影响的功能，文案独立。
+  replyTreeQuoteExpandLabels: Object.freeze({
+    expand: "展开",
+    collapse: "收起",
+    busy: "正在展开",
+    failed: "展开失败，点击重试"
+  }),
   pageRefreshMinIntervalMs: 3000,
   pageRefreshTimeoutMs: 30000,
   topicRequestCooldownMs: 15000,
