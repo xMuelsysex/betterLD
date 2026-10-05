@@ -37,9 +37,9 @@
 ### Adaptive Card Grid
 - **Definition**：首页阅读卡按照可用桌面宽度自动排列的网格，网格最小列宽由设置 `cardMinSize` 控制；网格相关设置同样作用于阅读卡：`gridMode`（自适应列数，或按断点使用固定列数）、`gridGap`、`cardSideGutter`。
 - **Rules/Invariants**：网格优先保持卡片可读性和稳定比例，再根据可用宽度调整列数。
-- **Rules/Invariants**：`cardMinSize` 有三处耦合：① 网格 track 下限（阅读网格与搜索网格的 `minmax` 下限都用它）；② 基类 `.betterld-topic-card` 的 `min-height` 回退（默认 280px，阅读卡自身覆盖为 210px）；③ 浏览器不支持容器查询单位时缩放单位的回退值（`ratioPerWidth × cardMinSize`，不经过 clamp）。
-- **Rules/Invariants**：阅读卡内部尺寸（标题 / 作者 / 元信息字号、内边距与间距、头像、徽标、菜单定位与触发按钮几何）按卡片自身内容盒宽度整体缩放（卡片 `container-type: inline-size`）：缩放单位 `--betterld-card-unit = clamp(12px, 0.0459 × 卡片内容盒宽, 22px)`（现有卡宽下内容盒约 305px ≈ 14px，与改前固定尺寸逐项一致），每个尺寸 = 单位 × N（N = 改前固定 px ÷ 14）；比例与上下限集中在 `betterld.config.js` 的 `cardScale`（`ratioPerWidth` / `minPx` / `maxPx`），经 `--betterld-card-unit-ratio`、`--betterld-card-unit-min`、`--betterld-card-unit-max` 注入。
-- **Rules/Invariants**（例外：窄屏横幅分支）：`@media (max-width: 900px)` 下阅读卡高度固定为 `cardScale.narrowHeightPx`（经 `--betterld-reading-narrow-height` 注入，默认 250px）；该分支没有可用于缩放的宽度维度，内部单位改用固定值 `--betterld-reading-narrow-unit`（`cardScale.narrowUnitPx`，默认 14px）。该媒体块里的单列网格只对 `gridMode=auto` 成立，`gridMode=fixed` 与搜索页在该断点仍可能多列、卡片可宽至约 860px，但高度固定。
+- **Rules/Invariants**：`cardMinSize` 有三处耦合：① 网格 track 下限（阅读网格与搜索网格的 `minmax` 下限都用它）；② 基类 `.betterld-topic-card` 的 `min-height` 回退（默认 280px，阅读卡自身覆盖为 210px）；③ 浏览器不支持容器查询单位时缩放单位的回退值（`ratioPerWidth × cardMinSize`，不经过上限）。
+- **Rules/Invariants**：阅读卡内部尺寸（标题 / 作者 / 元信息字号、内边距与间距、头像、徽标、菜单定位与触发按钮几何）按卡片自身内容盒宽度整体缩放（卡片 `container-type: inline-size`）：缩放单位 `--betterld-card-unit = min(0.0459 × 卡片内容盒宽, 22px)`，只有上限、无下限：卡片变窄时内容按比例缩小（现有卡宽下内容盒约 305px ≈ 14px，与改前固定尺寸逐项一致），每个尺寸 = 单位 × N（N = 改前固定 px ÷ 14）；比例与上限集中在 `betterld.config.js` 的 `cardScale`（`ratioPerWidth` / `maxPx`），经 `--betterld-card-unit-ratio`、`--betterld-card-unit-max` 注入。
+- **Rules/Invariants**（例外：窄屏横幅分支）：`@media (max-width: 900px)` 下阅读卡高度固定为 `cardScale.narrowHeightPx`（经 `--betterld-reading-narrow-height` 注入，默认 250px）；内部单位 = `min(0.0459 × 卡片内容盒宽, 14px)`，上限为 `--betterld-reading-narrow-unit`（`cardScale.narrowUnitPx`，默认 14px = 改前该分支字号），卡片更宽也不超过 14px、更窄时同样按比例缩小。该媒体块里的单列网格只对 `gridMode=auto` 成立，`gridMode=fixed` 与搜索页在该断点仍可能多列、卡片可宽至约 860px，但高度固定。
 - **Rules/Invariants**（例外：菜单）：阅读卡的菜单定位与触发按钮随卡缩放——top / right 0.857 单位、触发按钮宽高 2.571 单位、字号 1.571 单位；菜单弹层（panel / item）是浮层，保持固定 Material 3 尺寸（min-width 176px、item 最小高度 36px）。
 - **Rules/Invariants**：标题 / 作者 / 元信息三条字号设置作用于阅读卡，在缩放单位基础上乘档位系数：标题 响应式 1.0（默认，不写规则）/ 小 0.86 / 标准 1.14 / 大 1.43；作者 小 0.857 / 标准 1.0（默认）/ 大 1.143；元信息 小 0.909 / 标准 1.0（默认）/ 大 1.091。
 
@@ -81,7 +81,7 @@
 
 ### Reading Topic Card
 - **Definition**：首页主题卡片默认且唯一的 betterLD 展示形式，以略长的桌面端圆角矩形集中呈现标题、作者、头像、标签、Markdown 正文预览、互动数据和详情入口。
-- **Rules/Invariants**：常规视口下为 1:√2 竖版卡（宽高比 0.7071 / 1），内部尺寸按卡片内容盒宽度整体缩放（缩放单位见 Adaptive Card Grid）；≤900px 视口走固定高度的横幅分支，使用该分支的固定单位。
+- **Rules/Invariants**：常规视口下为 1:√2 竖版卡（宽高比 0.7071 / 1），内部尺寸按卡片内容盒宽度整体缩放（缩放单位见 Adaptive Card Grid）；≤900px 视口走高度固定 250px 的横幅分支，使用该分支的上限单位（`--betterld-reading-narrow-unit`，卡片更窄时同样按比例缩小）。
 - **Rules/Invariants**：它与原生主题列表共享帖子语义、作者身份和原帖导航；`topicListLayoutMode` 的另一个取值是原生列表（`native`），不再提供其它卡片形式；新安装或恢复默认时使用此形式。
 
 ### Markdown Opening Preview

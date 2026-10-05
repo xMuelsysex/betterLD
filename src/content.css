@@ -16,9 +16,8 @@
   --betterld-mask-opacity: 0.42;
   --betterld-card-opacity: 0.82;
   --betterld-card-side-gutter: 24px;
-  /* 卡片内部尺寸缩放单位：卡宽 × ratio，夹在 min/max 之间（与 betterld.config.js 的 cardScale 对应） */
+  /* 卡片内部尺寸缩放单位：卡宽 × ratio，只设上限 max（与 betterld.config.js 的 cardScale 对应） */
   --betterld-card-unit-ratio: 0.0459;
-  --betterld-card-unit-min: 12px;
   --betterld-card-unit-max: 22px;
   --betterld-topic-grid-max-width: 1800px;
   --betterld-grid-gap: 16px;
@@ -2551,8 +2550,9 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 }
 
 /* 卡片内部尺寸的缩放单位（阅读卡专用）：
-   单位 = 卡宽 × 比例（比例默认 0.0459；内容盒 ≈305px 时 14px），并夹在配置的上下限之间（下限 12px / 上限 22px）。
-   比例与上下限来自 betterld.config.js 的 cardScale，由 content.js 注入 root。
+   单位 = 卡宽 × 比例（比例默认 0.0459；内容盒 ≈305px 时 14px），只设上限（默认 22px）、不设下限，
+   卡片变窄时单位按比例缩小。
+   比例与上限来自 betterld.config.js 的 cardScale，由 content.js 注入 root。
    定义点必须在卡片的子元素上：容器自身的 100cqw 会落到外层容器/视口，而不是自身。 */
 .betterld-topic-card--reading .betterld-topic-card__reading-shell,
 .betterld-topic-card--reading .betterld-topic-card__menu {
@@ -2563,7 +2563,7 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 @supports (font-size: 1cqw) {
   .betterld-topic-card--reading .betterld-topic-card__reading-shell,
   .betterld-topic-card--reading .betterld-topic-card__menu {
-    --betterld-card-unit: clamp(var(--betterld-card-unit-min, 12px), calc(var(--betterld-card-unit-ratio, 0.0459) * 100cqw), var(--betterld-card-unit-max, 22px));
+    --betterld-card-unit: min(calc(var(--betterld-card-unit-ratio, 0.0459) * 100cqw), var(--betterld-card-unit-max, 22px));
   }
 }
 
@@ -4203,13 +4203,14 @@ html[data-betterld-topic-meta-size="large"] .betterld-topic-card__reading-detail
   }
 
   /* 该媒体块同时涵盖「网格单列（仅 auto 模式）」与「卡片横幅化」。
-     注意 fixed 模式按 gridColumns 保持多列、搜索页用 auto-fill，此断点下并非单列，卡片可能很宽
-     （≤900px 视口下约 860px），但高度固定为 --betterld-reading-narrow-height，该分支没有可用的
-     宽度缩放维度，所以缩放单位用固定值：config.cardScale.narrowUnitPx
-     （14px，与改前阅读卡在该分支下的实际字号一致，保证窄屏观感不降级）。 */
+     横幅分支高度固定为 --betterld-reading-narrow-height，所以缩放单位上限是
+     config.cardScale.narrowUnitPx（14px = 改前阅读卡在该分支下的字号，卡变宽也不再变大）；
+     但卡片变窄时单位跟着按比例变窄。
+     注意 fixed 模式按 gridColumns 保持多列、搜索页用 auto-fill，此断点下并非单列，卡宽会变化，
+     单位跟随卡宽缩放。 */
   .betterld-topic-card--reading .betterld-topic-card__reading-shell,
   .betterld-topic-card--reading .betterld-topic-card__menu {
-    --betterld-card-unit: var(--betterld-reading-narrow-unit, 14px);
+    --betterld-card-unit: min(calc(var(--betterld-card-unit-ratio, 0.0459) * 100cqw), var(--betterld-reading-narrow-unit, 14px));
   }
 
   .betterld-topic-card--reading {

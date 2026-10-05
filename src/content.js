@@ -395,7 +395,6 @@
     root.style.setProperty("--betterld-card-active-opacity", String(config.topicCardMotion.activeOpacity));
     root.style.setProperty("--betterld-card-min-size", `${settings.cardMinSize}px`);
     root.style.setProperty("--betterld-card-unit-ratio", String(config.cardScale.ratioPerWidth));
-    root.style.setProperty("--betterld-card-unit-min", `${config.cardScale.minPx}px`);
     root.style.setProperty("--betterld-card-unit-max", `${config.cardScale.maxPx}px`);
     root.style.setProperty("--betterld-reading-narrow-height", `${config.cardScale.narrowHeightPx}px`);
     root.style.setProperty("--betterld-reading-narrow-unit", `${config.cardScale.narrowUnitPx}px`);
