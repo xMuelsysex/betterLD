@@ -4109,18 +4109,12 @@
     return `/t/topic/${topicId}/${postNumber}`;
   }
 
+  // 与原站保持一致：cooked 由 Discourse 服务端生成并 sanitize，这里不再做客户端清理，
+  // 否则 iframe（B 站播放器等）、内联 SVG、表单、帖子自带样式等内容会与原站不符。
   function replyCooked(markup) {
     const doc = new DOMParser().parseFromString(String(markup || ""), "text/html");
-    doc.body.querySelectorAll("script, style, iframe, object, embed, form, svg, base, link, meta").forEach((node) => node.remove());
-    doc.body.querySelectorAll("*").forEach((node) => {
-      [...node.attributes].forEach((attribute) => {
-        const name = attribute.name.toLowerCase();
-        const urlAllowed = /^https?:|^\/|^#/.test(attribute.value) || (name === "href" && /^(mailto|tel):/.test(attribute.value));
-        if (name.startsWith("on") || name === "srcdoc" || (["href", "src"].includes(name) && !urlAllowed)) {
-          node.removeAttribute(attribute.name);
-        }
-      });
-      if (node.tagName === "IMG") node.loading = "lazy";
+    doc.body.querySelectorAll("img").forEach((node) => {
+      node.loading = "lazy";
     });
     return doc.body;
   }
