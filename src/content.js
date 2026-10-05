@@ -22,7 +22,6 @@
   // 操作栏布局按钮的循环顺序与提示文案；取值本身以 config.settingsEnums.topicListLayoutMode 为准
   const topicListLayoutLabels = Object.freeze({
     reading: "阅读卡",
-    cards: "Material 3 卡片",
     native: "原生主题列表"
   });
 
@@ -398,6 +397,8 @@
     root.style.setProperty("--betterld-card-unit-ratio", String(config.cardScale.ratioPerWidth));
     root.style.setProperty("--betterld-card-unit-min", `${config.cardScale.minPx}px`);
     root.style.setProperty("--betterld-card-unit-max", `${config.cardScale.maxPx}px`);
+    root.style.setProperty("--betterld-reading-narrow-height", `${config.cardScale.narrowHeightPx}px`);
+    root.style.setProperty("--betterld-reading-narrow-unit", `${config.cardScale.narrowUnitPx}px`);
     root.style.setProperty("--betterld-card-side-gutter", `${settings.cardSideGutter}px`);
     root.style.setProperty("--betterld-grid-gap", `${settings.gridGap}px`);
     root.style.setProperty("--betterld-topic-grid-max-width", `${config.topicGridMaxWidthPx}px`);
@@ -1830,16 +1831,13 @@
       return null;
     }
 
-    const isReadingCard = cardLayoutMode() === "reading";
     const author = topic.id ? authorName(item) : config.authorPlaceholder;
     const category = categoryInfo(item);
-    const card = createElement("article", isReadingCard ? "betterld-topic-card betterld-topic-card--reading" : "betterld-topic-card");
-    const link = isReadingCard ? null : createElement("a", "betterld-topic-card__link");
-    const preview = isReadingCard ? null : createElement("span", "betterld-topic-card__preview");
+    const card = createElement("article", "betterld-topic-card betterld-topic-card--reading");
     const badges = createElement("span", "betterld-topic-card__badges");
-    const title = createElement(isReadingCard ? "a" : "span", isReadingCard ? "betterld-topic-card__link betterld-topic-card__title betterld-topic-card__reading-title" : "betterld-topic-card__title", topic.title);
-    const excerpt = createElement(isReadingCard ? "div" : "span", "betterld-topic-card__excerpt", topic.id ? config.excerptLoadingLabel : config.excerptPlaceholder);
-    const identity = createElement("span", "betterld-topic-card__identity");
+    // 标题必须保留 __link：抽屉关闭后的焦点回归依赖 content.js 的 openTopicDrawer 查询
+    const title = createElement("a", "betterld-topic-card__link betterld-topic-card__title betterld-topic-card__reading-title", topic.title);
+    const excerpt = createElement("div", "betterld-topic-card__excerpt", topic.id ? config.excerptLoadingLabel : config.excerptPlaceholder);
     const authorElement = createElement("a", "betterld-topic-card__author");
     authorElement.addEventListener("click", (event) => {
       if (authorElement.hasAttribute("href")) {
@@ -1860,18 +1858,11 @@
       meta.append(element);
     });
 
-    if (isReadingCard) {
-      title.href = topic.href;
-      title.setAttribute("aria-label", topic.title);
-      title.addEventListener("click", (event) => handleTopicCardClick(event, card, topic.href));
-    } else {
-      link.href = topic.href;
-      link.setAttribute("aria-label", topic.title);
-      link.addEventListener("click", (event) => handleTopicCardClick(event, card, topic.href));
-    }
+    title.href = topic.href;
+    title.setAttribute("aria-label", topic.title);
+    title.addEventListener("click", (event) => handleTopicCardClick(event, card, topic.href));
     card.dataset.topicHref = topic.href;
     card.dataset.topicId = topic.id;
-    card.dataset.betterldCardStyle = isReadingCard ? "reading" : "cards";
     card.dataset.filterTitle = topic.title;
     card.dataset.filterCategory = category.name;
     card.dataset.filterTags = topicTags(item, category.name).join(" ");
@@ -1910,47 +1901,37 @@
     }
 
     const menu = createCardMenu(card, item, topic);
-    if (isReadingCard) {
-      const shell = createElement("div", "betterld-topic-card__reading-shell");
-      const header = createElement("div", "betterld-topic-card__reading-header");
-      const infoRow = createElement("div", "betterld-topic-card__reading-info-row");
-      const readingIdentity = createElement("span", "betterld-topic-card__reading-identity");
-      const readingAvatar = avatarElement(item);
-      const readingDetails = createElement("span", "betterld-topic-card__reading-details");
-      const participants = createElement("span", "betterld-topic-card__participants");
-      const tags = createElement("div", "betterld-topic-card__tags");
-      const stats = createElement("span", "betterld-topic-card__reading-stats");
-      const readingFooter = createElement("div", "betterld-topic-card__reading-footer");
-      const action = createElement("a", "betterld-topic-card__reading-action", "View details");
+    const shell = createElement("div", "betterld-topic-card__reading-shell");
+    const header = createElement("div", "betterld-topic-card__reading-header");
+    const infoRow = createElement("div", "betterld-topic-card__reading-info-row");
+    const readingIdentity = createElement("span", "betterld-topic-card__reading-identity");
+    const readingAvatar = avatarElement(item);
+    const readingDetails = createElement("span", "betterld-topic-card__reading-details");
+    const participants = createElement("span", "betterld-topic-card__participants");
+    const tags = createElement("div", "betterld-topic-card__tags");
+    const stats = createElement("span", "betterld-topic-card__reading-stats");
+    const readingFooter = createElement("div", "betterld-topic-card__reading-footer");
+    const action = createElement("a", "betterld-topic-card__reading-action", "View details");
 
-      readingAvatar.classList.add("betterld-topic-card__reading-avatar");
-      readingDetails.append(authorElement, chip, meta);
-      readingIdentity.append(readingAvatar, readingDetails);
-      participants.dataset.betterldReadingParticipants = "true";
-      participants.hidden = true;
-      tags.append(...topicTags(item, category.name).map((tag) => createElement("span", "betterld-topic-card__tag", `#${tag}`)));
-      tags.hidden = !tags.childElementCount;
-      stats.dataset.betterldReadingStats = "true";
-      stats.hidden = true;
-      action.href = topic.href;
-      action.setAttribute("aria-label", `View details: ${topic.title}`);
-      action.addEventListener("click", (event) => handleTopicCardClick(event, card, topic.href));
-      meta.hidden = !cleanText(meta.textContent);
-      infoRow.append(readingIdentity, participants);
-      readingFooter.append(stats, action);
-      header.append(badges, title, infoRow);
-      shell.append(header, tags, excerpt, readingFooter);
-      card.append(shell, menu);
-      if (item.matches(".fps-result")) updateSearchCard(card, item);
-      return card;
-    }
-
-    const footer = createElement("span", "betterld-topic-card__footer");
-    preview.append(badges, title, excerpt);
-    identity.append(authorElement, chip);
-    footer.append(avatarElement(item), identity, meta);
-    link.append(preview, footer);
-    card.append(link, menu);
+    readingAvatar.classList.add("betterld-topic-card__reading-avatar");
+    readingDetails.append(authorElement, chip, meta);
+    readingIdentity.append(readingAvatar, readingDetails);
+    participants.dataset.betterldReadingParticipants = "true";
+    participants.hidden = true;
+    tags.append(...topicTags(item, category.name).map((tag) => createElement("span", "betterld-topic-card__tag", `#${tag}`)));
+    tags.hidden = !tags.childElementCount;
+    stats.dataset.betterldReadingStats = "true";
+    stats.hidden = true;
+    action.href = topic.href;
+    action.setAttribute("aria-label", `View details: ${topic.title}`);
+    action.addEventListener("click", (event) => handleTopicCardClick(event, card, topic.href));
+    meta.hidden = !cleanText(meta.textContent);
+    infoRow.append(readingIdentity, participants);
+    readingFooter.append(stats, action);
+    header.append(badges, title, infoRow);
+    shell.append(header, tags, excerpt, readingFooter);
+    card.append(shell, menu);
+    if (item.matches(".fps-result")) updateSearchCard(card, item);
     return card;
   }
 
@@ -2936,7 +2917,7 @@
     }
     state.topicListSync = Promise.resolve()
       .then(async () => {
-        if (!isTopicListPage() || !["cards", "reading"].includes(state.currentSettings.topicListLayoutMode)) {
+        if (!isTopicListPage() || state.currentSettings.topicListLayoutMode !== "reading") {
           return;
         }
         // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次
@@ -3032,7 +3013,7 @@
     if (!excerpt) {
       return;
     }
-    if (stateName === "ready" && card.dataset.betterldCardStyle === "reading") {
+    if (stateName === "ready") {
       markdownApi.render(excerpt, markdown || text);
     } else {
       excerpt.textContent = text;
@@ -3159,7 +3140,8 @@
 
   function observeExcerpt(card) {
     if (card.dataset.betterldSearchResult === "true") return;
-    const needsReadingMetadata = card.dataset.betterldCardStyle === "reading" && state.currentSettings.showTopicMeta;
+    // 阅读卡统计与参与者头像的装载与「主题元信息」开关耦合：关闭时不发元数据请求
+    const needsReadingMetadata = state.currentSettings.showTopicMeta;
     if ((!state.currentSettings.showTopicExcerpt && !needsReadingMetadata)
       || card.hidden
       || card.dataset.filterState === "hidden"
@@ -3206,10 +3188,6 @@
     document.querySelectorAll(".betterld-topic-card[data-filter-override]").forEach((card) => {
       delete card.dataset.filterOverride;
     });
-  }
-
-  function cardLayoutMode() {
-    return isSearchPage() ? "reading" : state.currentSettings.topicListLayoutMode;
   }
 
   function updateSearchCard(card, item) {
@@ -3997,7 +3975,7 @@
 
   function syncContainer(container, items) {
     const grid = managedGrid(container);
-    if (grid?.isConnected && grid.dataset.betterldCardStyle === cardLayoutMode()) {
+    if (grid?.isConnected) {
       finishListRefresh(syncCards(grid, items));
       return;
     }
@@ -4018,7 +3996,6 @@
 
     const grid = createElement("div", "betterld-topic-grid");
     grid.dataset.betterldGrid = "true";
-    grid.dataset.betterldCardStyle = cardLayoutMode();
     grid.setAttribute("aria-label", "LinuxDo 主题");
 
     syncCards(grid, items);
@@ -4046,7 +4023,7 @@
 
   function syncHomepage() {
     const searchCards = isSearchPage() && state.currentSettings.searchMode === "cards";
-    if (!searchCards && (!isTopicListPage() || !["cards", "reading"].includes(state.currentSettings.topicListLayoutMode))) {
+    if (!searchCards && (!isTopicListPage() || state.currentSettings.topicListLayoutMode !== "reading")) {
       restoreAll();
       applyListControlsScrollState();
       return;

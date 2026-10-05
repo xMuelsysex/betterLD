@@ -228,11 +228,16 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   // 卡片网格的宽度上限：超过这个宽度后网格居中，两侧留白随视口变宽，避免卡片一直铺到窗口边缘。
   // 取值与 gridBreakpoints.xxl 一致，但不与断点绑定：断点决定列数，这里只决定内容宽度。
   topicGridMaxWidthPx: 1800,
-  // 卡片内部尺寸按卡片自身宽度缩放：基准尺寸 = 卡宽 × 该比例（280px 卡 ≈ 14px），再夹在下面的上下限内。
+  // 卡片内部尺寸按卡片自身内容盒宽度缩放：缩放单位 = 卡片内容宽 × ratioPerWidth，
+  // 现有卡宽（内容盒约 305px）下为 14px，与改前阅读卡的固定尺寸逐项一致；再夹在 minPx–maxPx 之间。
+  // ≤900px 视口下阅读卡高度固定为 narrowHeightPx（250px，现在只负责高度）；该窄屏分支卡片可很宽
+  // 但没有可用的卡宽缩放维度，因此缩放单位改用固定值 narrowUnitPx（14px，与改前阅读卡在该分支下的实际字号一致）。
   cardScale: Object.freeze({
-    ratioPerWidth: 0.05,
+    ratioPerWidth: 0.0459,
     minPx: 12,
-    maxPx: 22
+    maxPx: 22,
+    narrowHeightPx: 250,
+    narrowUnitPx: 14
   }),
   gridBreakpoints: Object.freeze({
     base: 0,
@@ -274,7 +279,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     fontScope: Object.freeze(["own", "managed"]),
     shadowMode: Object.freeze(["default", "none", "custom"]),
     gridMode: Object.freeze(["auto", "fixed"]),
-    topicListLayoutMode: Object.freeze(["reading", "cards", "native"]),
+    topicListLayoutMode: Object.freeze(["reading", "native"]),
     replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),

@@ -618,7 +618,7 @@ function buildInjection(port) {
   attachPreviewFrame();
 
   return {
-    cards: document.querySelectorAll(".betterld-topic-card").length,
+    topicCards: document.querySelectorAll(".betterld-topic-card").length,
     grids: document.querySelectorAll(".betterld-topic-grid").length,
     home: document.body?.classList.contains("betterld-home") || false,
     tagsPage: document.body?.classList.contains("betterld-tags-page") || false,
