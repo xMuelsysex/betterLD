@@ -402,6 +402,7 @@
     root.style.setProperty("--betterld-grid-gap", `${settings.gridGap}px`);
     root.style.setProperty("--betterld-topic-grid-max-width", `${config.topicGridMaxWidthPx}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
+    root.style.setProperty("--betterld-reply-quote-collapse-height", `${config.replyTreeQuoteCollapseHeightPx}px`);
     root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);
     root.style.setProperty("--betterld-shadow-level-2-hover", `0 ${4 * settings.shadowHeight}px 10px rgb(var(--betterld-shadow-color) / 0.12), 0 ${18 * settings.shadowHeight}px 36px rgb(var(--betterld-shadow-color) / 0.20)`);
@@ -4116,7 +4117,411 @@
     doc.body.querySelectorAll("img").forEach((node) => {
       node.loading = "lazy";
     });
-    return doc.body;
+    return enhanceReplyContent(doc.body);
+  }
+
+  // 原站的 callout / 剧透 / hashtag 由 Discourse 客户端 JS 增强，服务端 cooked 里没有对应结构，
+  // 树里也就拿不到原站的交互与样式。这里按原站 DOM 复刻（类名、data 属性、图标 sprite 照抄）。
+  const replySvgNamespace = "http://www.w3.org/2000/svg";
+  const replyCalloutPattern = /^\[!([A-Za-z]+)\]([+-]?)\s*(.*)$/s;
+
+  // 元素在游离状态下绑定事件，随 cooked 一起进树；树重建时会重新解析 → 自动重新绑定。
+  function replyIconElement(doc, icon, className) {
+    const svg = doc.createElementNS(replySvgNamespace, "svg");
+    svg.setAttribute("class", className);
+    svg.setAttribute("width", "1em");
+    svg.setAttribute("height", "1em");
+    svg.setAttribute("aria-hidden", "true");
+    const use = doc.createElementNS(replySvgNamespace, "use");
+    use.setAttribute("href", `#${icon}`);
+    svg.append(use);
+    return svg;
+  }
+
+  function replyCalloutType(name) {
+    const key = String(name || "").toLowerCase();
+    const types = config.replyTreeCalloutTypes;
+    if (types[key]) return key;
+    return Object.keys(types).find((type) => types[type].aliases.includes(key)) || "";
+  }
+
+  // #086ddd → rgba(8, 109, 221, 0.1)：原站把类型色按 10% 不透明度铺在引用块背景上。
+  function replyCalloutBackground(hex) {
+    const digits = String(hex).replace(/^#/, "");
+    const expanded = digits.length === 3 ? digits.replace(/./g, (digit) => digit + digit) : digits;
+    const value = Number.parseInt(expanded, 16) || 0;
+    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, 0.1)`;
+  }
+
+  function enhanceCallouts(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll("blockquote:not([data-callout-type])").forEach((block) => {
+      const lead = block.firstElementChild;
+      if (!lead || lead.tagName !== "P") return;
+      const match = replyCalloutPattern.exec(lead.textContent);
+      const type = match && replyCalloutType(match[1]);
+      if (!type) return;
+      const meta = config.replyTreeCalloutTypes[type];
+      const lines = String(match[3]).split("\n");
+      const title = lines[0].trim() || type.charAt(0).toUpperCase() + type.slice(1);
+      const rest = lines.slice(1).join("\n").trim();
+      // 首行 p 被消费：整段都是标题时删掉，标题后还有内容时留下剩余文本。
+      if (rest) lead.textContent = rest; else lead.remove();
+      const collapsed = match[2] === "-";
+      const header = doc.createElement("div");
+      header.className = "callout-title";
+      header.style.color = meta.color;
+      header.setAttribute("role", "button");
+      header.setAttribute("tabindex", "0");
+      const icon = doc.createElement("span");
+      icon.className = "callout-icon";
+      icon.append(replyIconElement(doc, meta.icon, `fa d-icon d-icon-${meta.icon} svg-icon fa-width-auto svg-string`));
+      const inner = doc.createElement("span");
+      inner.className = "callout-title-inner";
+      inner.textContent = title;
+      const fold = doc.createElement("span");
+      fold.className = collapsed ? "callout-fold is-collapsed" : "callout-fold";
+      fold.append(replyIconElement(doc, "chevron-down", "fa d-icon d-icon-chevron-down svg-icon fa-width-auto svg-string"));
+      header.append(icon, inner, fold);
+      const content = doc.createElement("div");
+      content.className = "callout-content";
+      content.append(...block.childNodes);
+      block.className = collapsed ? "callout is-collapsible is-collapsed" : "callout is-collapsible";
+      block.setAttribute("dir", "auto");
+      block.setAttribute("data-callout-type", type);
+      block.style.backgroundColor = replyCalloutBackground(meta.color);
+      block.append(header, content);
+      const setCollapsed = (value) => {
+        block.classList.toggle("is-collapsed", value);
+        fold.classList.toggle("is-collapsed", value);
+      };
+      header.addEventListener("click", () => setCollapsed(!block.classList.contains("is-collapsed")));
+      header.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        setCollapsed(!block.classList.contains("is-collapsed"));
+      });
+    });
+  }
+
+  function replySpoilerSetState(node, revealed) {
+    node.classList.toggle("spoiler-blurred", !revealed);
+    node.setAttribute("data-spoiler-state", revealed ? "revealed" : "blurred");
+    node.setAttribute("aria-expanded", String(revealed));
+    node.setAttribute("aria-label", revealed ? config.replyTreeSpoilerLabels.revealed : config.replyTreeSpoilerLabels.blurred);
+    [...node.children].forEach((child) => {
+      if (revealed) child.removeAttribute("aria-hidden"); else child.setAttribute("aria-hidden", "true");
+    });
+  }
+
+  function enhanceSpoilers(root) {
+    root.querySelectorAll("div.spoiler:not([data-spoiler-state])").forEach((node) => {
+      // 原站也移除了 spoiler 类，模糊只由 .spoiler-blurred 提供。
+      node.classList.remove("spoiler");
+      node.classList.add("spoiled", "spoiler-blurred");
+      node.setAttribute("dir", "auto");
+      node.setAttribute("role", "button");
+      node.setAttribute("tabindex", "0");
+      node.setAttribute("aria-live", "polite");
+      replySpoilerSetState(node, false);
+      const toggle = () => replySpoilerSetState(node, node.getAttribute("data-spoiler-state") !== "revealed");
+      node.addEventListener("click", toggle);
+      node.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle();
+      });
+    });
+  }
+
+  function enhanceHashtags(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll("a.hashtag-cooked[data-icon]").forEach((link) => {
+      const placeholder = link.querySelector(".hashtag-icon-placeholder");
+      if (!placeholder) return;
+      const icon = String(link.getAttribute("data-icon") || "").trim();
+      const name = /^[a-z0-9-]+$/i.test(icon) ? icon : "tag";
+      placeholder.replaceWith(replyIconElement(doc, name, `fa d-icon d-icon-${name} svg-icon`));
+    });
+  }
+
+  // ---- 浮层工厂（代码全屏 / 图片灯箱共用）----
+  // 浮层必须挂在真实 document.body 上（cooked 元素游离于 DOMParser 文档），关闭时整体移除。
+  function openReplyOverlay(className, ariaLabel, build) {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overlay = document.createElement("div");
+    overlay.className = `betterld-reply-overlay ${className}`;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", ariaLabel);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "betterld-reply-overlay__close";
+    close.setAttribute("aria-label", "关闭");
+    close.textContent = "✕";
+    const content = document.createElement("div");
+    content.className = "betterld-reply-overlay__content";
+    let closed = false;
+    const closeOverlay = () => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      overlay.remove();
+      if (opener && opener.isConnected) opener.focus();
+    };
+    const onKeydown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeOverlay();
+    };
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay || event.target === content) closeOverlay();
+    });
+    close.addEventListener("click", closeOverlay);
+    document.addEventListener("keydown", onKeydown, true);
+    overlay.append(close, content);
+    document.body.append(overlay);
+    build(content, closeOverlay);
+    close.focus();
+    return overlay;
+  }
+
+  // ---- 代码块按钮（照抄原站 DOM：wrapper + 复制 / 全屏）----
+  const replyCodeCopyLabel = "将代码复制到剪贴板";
+  const replyCodeFullscreenLabel = "全屏显示代码";
+  const replyCodeCopiedLabel = "已复制";
+  const replyCodeCopiedMs = 2000;
+
+  function replyCodeLanguage(code) {
+    const found = [...code.classList].find((name) => name.startsWith("lang-"));
+    return found ? found.slice(5) : "plaintext";
+  }
+
+  function replyCodeButton(doc, icon, className, label, onClick) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = `btn nohighlight ${className} btn-flat`;
+    button.setAttribute("aria-label", label);
+    button.append(replyIconElement(doc, icon, `fa d-icon d-icon-${icon} svg-icon fa-width-auto svg-string`));
+    button.addEventListener("click", onClick);
+    return button;
+  }
+
+  async function copyReplyCode(code, button, label) {
+    try {
+      await navigator.clipboard.writeText(code.textContent);
+    } catch (error) {
+      console.warn("[betterLD] 复制代码失败", error);
+      return;
+    }
+    button.setAttribute("aria-label", replyCodeCopiedLabel);
+    button.setAttribute("title", replyCodeCopiedLabel);
+    window.setTimeout(() => {
+      button.setAttribute("aria-label", label);
+      button.removeAttribute("title");
+    }, replyCodeCopiedMs);
+  }
+
+  function openReplyCodeFullscreen(code) {
+    openReplyOverlay("betterld-reply-overlay--code", replyCodeFullscreenLabel, (content) => {
+      const pre = document.createElement("pre");
+      pre.className = "betterld-reply-code-fullscreen__code";
+      const clone = document.createElement("code");
+      clone.textContent = code.textContent;
+      pre.append(clone);
+      content.append(pre);
+    });
+  }
+
+  // 高亮交给主世界桥接（页面全局没有 hljs）；pending 属性既是判重也是给桥接的选择器。
+  let replyHighlightTimer = 0;
+  let replyHighlightWarned = false;
+
+  function requestReplyHighlight() {
+    if (replyHighlightTimer) return;
+    replyHighlightTimer = window.setTimeout(() => {
+      replyHighlightTimer = 0;
+      flushReplyHighlight();
+    }, 100);
+  }
+
+  async function flushReplyHighlight() {
+    if (!document.querySelector("[data-betterld-highlight-pending]")) return;
+    try {
+      await loadPageRefreshBridge();
+    } catch (error) {
+      if (!replyHighlightWarned) {
+        replyHighlightWarned = true;
+        console.warn("[betterLD] 代码高亮桥接不可用", error);
+      }
+      return;
+    }
+    document.dispatchEvent(new CustomEvent("betterld:highlight-code", {
+      detail: JSON.stringify({ id: crypto.randomUUID() })
+    }));
+  }
+
+  function enhanceCodeBlocks(root) {
+    const doc = root.ownerDocument;
+    root.querySelectorAll("pre > code").forEach((code) => {
+      const pre = code.parentElement;
+      if (!pre || pre.classList.contains("codeblock-buttons")) return;
+      const language = replyCodeLanguage(code);
+      pre.classList.add("codeblock-buttons");
+      code.classList.add("hljs", `language-${language}`);
+      code.setAttribute("data-highlighted", "yes");
+      code.setAttribute("data-betterld-highlight-pending", "yes");
+      const wrapper = doc.createElement("div");
+      wrapper.className = "codeblock-button-wrapper";
+      wrapper.style.right = "0px";
+      const copyButton = replyCodeButton(doc, "copy", "copy-cmd", replyCodeCopyLabel, () => copyReplyCode(code, copyButton, replyCodeCopyLabel));
+      const fullscreenButton = replyCodeButton(doc, "discourse-expand", "fullscreen-cmd", replyCodeFullscreenLabel, () => openReplyCodeFullscreen(code));
+      wrapper.append(copyButton, fullscreenButton);
+      pre.prepend(wrapper);
+    });
+    requestReplyHighlight();
+  }
+
+  // ---- 图片灯箱（复用浮层工厂；原站 PhotoSwipe 绑在原站容器上，树里的点击不会触发）----
+  const replyLightboxClassName = "betterld-reply-overlay--image";
+  const replyLightboxLabel = "图片预览";
+  const replyLightboxErrorText = "图片加载失败";
+
+  function openReplyLightbox(anchor) {
+    const source = anchor.querySelector("img");
+    openReplyOverlay(replyLightboxClassName, replyLightboxLabel, (content, close) => {
+      const image = document.createElement("img");
+      image.className = "betterld-reply-lightbox__image";
+      image.src = anchor.href;
+      image.alt = (source && source.alt) || anchor.title || "";
+      image.addEventListener("error", () => {
+        // 不静默：加载失败时用一行文本替换内容，浮层仍可关闭。
+        const failure = document.createElement("p");
+        failure.className = "betterld-reply-lightbox__error";
+        failure.setAttribute("role", "alert");
+        failure.textContent = replyLightboxErrorText;
+        content.replaceChildren(failure);
+        close.focus();
+      });
+      content.replaceChildren(image);
+    });
+  }
+
+  function enhanceLightboxes(root) {
+    root.querySelectorAll("a.lightbox").forEach((anchor) => {
+      if (anchor.hasAttribute("data-betterld-lightbox")) return;
+      const href = anchor.getAttribute("href");
+      if (!href) return;
+      anchor.setAttribute("data-betterld-lightbox", "1");
+      anchor.addEventListener("click", (event) => {
+        // 修饰键与非左键保持浏览器原生行为（新标签页、下载、菜单）。
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        openReplyLightbox(anchor);
+      });
+    });
+  }
+
+  // ---- 引用折叠 ----
+  // cooked 阶段元素游离于 DOMParser 文档（offsetHeight 恒为 0），只能在挂载后量高度，
+  // 所以这里登记待测 aside，由定时器在挂载后补测（不改挂载点代码，侵入最小）。
+  const replyQuotePending = new Set();
+  const replyQuoteMeasureWindowMs = 5000;
+  const replyQuoteMeasureIntervalMs = 200;
+  let replyQuoteMeasureTimer = 0;
+  let replyQuoteMeasureDeadline = 0;
+
+  function replyQuoteBlockquote(aside) {
+    return [...aside.children].find((child) => child.tagName === "BLOCKQUOTE") || null;
+  }
+
+  function replyQuoteToggle(aside, block) {
+    const doc = aside.ownerDocument;
+    if (!block.id) block.id = `betterld-quote-${crypto.randomUUID()}`;
+    const host = aside.querySelector(".title") || aside;
+    host.setAttribute("data-can-toggle-quote", "true");
+    host.setAttribute("data-has-quote-controls", "true");
+    let controls = host.querySelector(".quote-controls");
+    if (!controls) {
+      controls = doc.createElement("div");
+      controls.className = "quote-controls";
+      host.append(controls);
+    }
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "btn no-text btn-flat quote-toggle";
+    button.setAttribute("aria-controls", block.id);
+    button.append(replyIconElement(doc, "chevron-down", "fa d-icon d-icon-chevron-down svg-icon fa-width-auto svg-string"));
+    aside.setAttribute("role", "none");
+    // 按钮属性沿用原站 quote-toggle 的写法（展开态 aria-expanded=false + 标签「展开」），
+    // 真实的收放状态同时用 aside 上的 data-expanded 显式表达。
+    const setCollapsed = (collapsed) => {
+      if (collapsed) aside.setAttribute("data-betterld-quote-collapsed", "true");
+      else aside.removeAttribute("data-betterld-quote-collapsed");
+      aside.setAttribute("data-expanded", String(!collapsed));
+      button.setAttribute("aria-expanded", String(!collapsed));
+      const label = collapsed ? config.replyTreeQuoteToggleLabels.expand : config.replyTreeQuoteToggleLabels.collapse;
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    };
+    button.addEventListener("click", (event) => {
+      // 原站主世界对 .quote-toggle 也有委托处理，这里拦住，避免它去动原站 DOM。
+      event.preventDefault();
+      event.stopPropagation();
+      setCollapsed(!aside.hasAttribute("data-betterld-quote-collapsed"));
+    });
+    setCollapsed(false);
+    controls.append(button);
+  }
+
+  function measureReplyQuoteCollapse() {
+    replyQuoteMeasureTimer = 0;
+    replyQuotePending.forEach((aside) => {
+      if (!aside.isConnected) return;
+      const block = replyQuoteBlockquote(aside);
+      replyQuotePending.delete(aside);
+      if (!block) return;
+      // 已带折叠态或已有原站按钮 → 跳过（幂等）。
+      if (aside.hasAttribute("data-betterld-quote-collapsed") || aside.querySelector(".quote-toggle")) return;
+      if (block.offsetHeight > config.replyTreeQuoteCollapseHeightPx) replyQuoteToggle(aside, block);
+    });
+    if (!replyQuotePending.size) {
+      replyQuoteMeasureDeadline = 0;
+      return;
+    }
+    scheduleReplyQuoteCollapseMeasure(replyQuoteMeasureIntervalMs);
+  }
+
+  function scheduleReplyQuoteCollapseMeasure(delay) {
+    if (replyQuoteMeasureTimer) return;
+    if (!replyQuoteMeasureDeadline) replyQuoteMeasureDeadline = Date.now() + replyQuoteMeasureWindowMs;
+    if (Date.now() >= replyQuoteMeasureDeadline) {
+      // 超过测量窗口（例如容器一直隐藏、高度恒为 0）就放弃，不挂按钮。
+      replyQuotePending.clear();
+      replyQuoteMeasureDeadline = 0;
+      return;
+    }
+    replyQuoteMeasureTimer = window.setTimeout(measureReplyQuoteCollapse, delay);
+  }
+
+  function trackReplyQuoteCollapse(root) {
+    root.querySelectorAll("aside.quote").forEach((aside) => {
+      if (aside.hasAttribute("data-betterld-quote-collapsed") || aside.querySelector(".quote-toggle")) return;
+      replyQuotePending.add(aside);
+    });
+    if (replyQuotePending.size) scheduleReplyQuoteCollapseMeasure(0);
+  }
+
+  function enhanceReplyContent(root) {
+    if (!root) return root;
+    enhanceCallouts(root);
+    enhanceSpoilers(root);
+    enhanceHashtags(root);
+    enhanceCodeBlocks(root);
+    enhanceLightboxes(root);
+    trackReplyQuoteCollapse(root);
+    return root;
   }
 
   function showNativeReply(tree) {

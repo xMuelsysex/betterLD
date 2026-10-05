@@ -341,4 +341,46 @@
       }));
     }
   });
+  // 原站把 highlight.js 打在 Discourse bundle 里，页面全局没有 hljs，只能走模块加载器。
+  // 上下文传过来的代码块带 data-betterld-highlight-pending，逐个着色后由本函数移除。
+  let highlightJsInstance = null;
+
+  async function resolveHighlightJs() {
+    if (highlightJsInstance) return highlightJsInstance;
+    if (typeof window.require !== "function") return null;
+    const mod = window.require("discourse/lib/highlight-syntax");
+    const ensure = mod?.ensureHighlightJs || mod?.default?.ensureHighlightJs;
+    if (typeof ensure !== "function") return null;
+    const instance = await ensure.call(mod.default ?? mod);
+    const hljs = instance?.default ?? instance;
+    if (hljs && typeof hljs.highlightElement === "function") highlightJsInstance = hljs;
+    return highlightJsInstance;
+  }
+
+  document.addEventListener("betterld:highlight-code", async (event) => {
+    const { id } = JSON.parse(event.detail);
+    const pending = [...document.querySelectorAll("[data-betterld-highlight-pending]")];
+    let error = "";
+    try {
+      const hljs = await resolveHighlightJs();
+      if (!hljs) throw new Error("原站 highlight.js 不可用");
+      pending.forEach((code) => {
+        // hljs 见到 data-highlighted 会直接跳过，先摘掉再着色，最后保证标记仍在。
+        code.removeAttribute("data-highlighted");
+        try {
+          hljs.highlightElement(code);
+        } catch (failure) {
+          console.warn("[betterLD] 代码块高亮失败", failure);
+        }
+        if (code.getAttribute("data-highlighted") !== "yes") code.setAttribute("data-highlighted", "yes");
+      });
+    } catch (failure) {
+      error = failure?.message || "代码高亮失败";
+      console.warn("[betterLD] 代码高亮失败", failure);
+    }
+    pending.forEach((code) => code.removeAttribute("data-betterld-highlight-pending"));
+    document.dispatchEvent(new CustomEvent("betterld:highlighted", {
+      detail: JSON.stringify({ id, count: pending.length, error })
+    }));
+  });
 })();

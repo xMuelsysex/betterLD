@@ -4447,6 +4447,49 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   height: auto;
 }
 
+/* 长引用折叠（原站折叠行为未能复刻，这里是自建方案）：高度超过
+   betterld.config.js 的 replyTreeQuoteCollapseHeightPx 才由内容脚本补按钮。 */
+.betterld-reply-tree__cooked aside.quote .quote-controls {
+  float: right;
+  margin-left: 8px;
+}
+
+.betterld-reply-tree__cooked aside.quote .quote-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.betterld-reply-tree__cooked aside.quote .quote-toggle:hover,
+.betterld-reply-tree__cooked aside.quote .quote-toggle:focus-visible {
+  opacity: 1;
+  background: color-mix(in srgb, var(--betterld-on-surface) 10%, transparent);
+}
+
+.betterld-reply-tree__cooked aside.quote[data-betterld-quote-collapsed="true"] > blockquote {
+  position: relative;
+  max-height: var(--betterld-reply-quote-collapse-height, 420px);
+  overflow: hidden;
+}
+
+.betterld-reply-tree__cooked aside.quote[data-betterld-quote-collapsed="true"] > blockquote::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 72px;
+  background: linear-gradient(transparent, rgb(var(--betterld-surface-rgb) / 0.92));
+  pointer-events: none;
+}
+
 .betterld-reply-tree__actions {
   display: flex;
   align-items: center;
@@ -4879,4 +4922,98 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     border-color: CanvasText;
   }
+}
+
+/* 回复树 · 浮层（代码全屏 / 图片灯箱共用）：挂在 body 上，样式作用域独立于树 */
+.betterld-reply-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.66);
+}
+
+.betterld-reply-overlay__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.16);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--betterld-motion-fast);
+}
+
+.betterld-reply-overlay__close:hover {
+  background: rgb(255 255 255 / 0.28);
+}
+
+.betterld-reply-overlay__close:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.betterld-reply-overlay__content {
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+}
+
+.betterld-reply-overlay--code .betterld-reply-overlay__content {
+  width: min(1100px, 100%);
+  overflow: auto;
+  border-radius: var(--betterld-radius-md);
+  background: rgb(var(--betterld-surface-container-rgb));
+  box-shadow: var(--betterld-shadow-raised);
+}
+
+.betterld-reply-overlay .betterld-reply-code-fullscreen__code {
+  margin: 0;
+  padding: 20px 24px;
+  overflow: auto;
+  background: transparent;
+  color: var(--betterld-on-surface);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.betterld-reply-overlay .betterld-reply-code-fullscreen__code code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
+}
+
+/* 图片灯箱：内容容器复用浮层工厂的 .betterld-reply-overlay__content。 */
+.betterld-reply-lightbox__image {
+  display: block;
+  max-width: min(1600px, 100%);
+  max-height: calc(100vh - 96px);
+  border-radius: var(--betterld-radius-sm);
+  object-fit: contain;
+  box-shadow: var(--betterld-shadow-raised);
+}
+
+.betterld-reply-lightbox__error {
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-surface-container-rgb));
+  color: var(--betterld-on-surface);
+  font-size: 14px;
 }
