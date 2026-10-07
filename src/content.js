@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  if (window !== window.top && !window.frameElement?.classList.contains("betterld-topic-drawer__frame")) {
+  if (window !== window.top) {
     return;
   }
 
@@ -70,6 +70,11 @@
     excerptObserver: null,
     excerptVisible: new Set(),
     excerptIdleTimer: 0,
+    excerptPrefetchTimer: 0,
+  excerptThrottleRetryTimer: 0,
+    excerptLastScrollAt: 0,
+    // 立发预算属于「一次列表重建 / 一次路由切换」，同一次里多次同步不再重复吃突发额度。
+    excerptPrimeBudget: config.excerptPrimeCount,
     searchLoadMoreBusy: false,
     undoRefreshSnapshot: null,
     refreshScrollTopSince: 0,
@@ -80,6 +85,8 @@
     scrollDistance: 0,
     openMenu: null,
     drawerTrigger: null,
+    // 抽屉触发卡的正文请求在 showModal() 之前就会进队列，标志位让这段窗口里也判定为「需要」。
+    drawerRequestPending: false,
     drawerRequest: 0,
     topicDrawer: null,
     settingsDialog: null,
@@ -2357,13 +2364,15 @@
     header.append(title, close);
     title.id = "betterld-topic-preview-title";
     dialog.setAttribute("aria-labelledby", title.id);
-    const frame = document.createElement("iframe");
-    frame.className = "betterld-topic-drawer__frame";
-    frame.title = "原帖网页预览";
-    frame.sandbox.add("allow-same-origin");
+    const body = createElement("div", "betterld-topic-drawer__body");
+    body.tabIndex = 0;
+    const meta = createElement("div", "betterld-topic-drawer__meta");
+    meta.hidden = true;
+    const content = createElement("article", "cooked betterld-topic-drawer__cooked");
+    body.append(meta, content);
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
-    dialog.append(header, frame, openLink);
+    dialog.append(header, body, openLink);
     dialog.addEventListener("click", (event) => {
       const bounds = dialog.getBoundingClientRect();
       if (event.target === dialog && state.currentSettings.drawerCloseOnOverlay
@@ -2378,9 +2387,15 @@
       }
     });
     dialog.addEventListener("close", () => {
+      // close 事件是异步派发的，且用户自己关（Esc/遮罩/requestClose）也会走到这里：
+      // 只能看 dialog.open —— 它仍为真说明已经开了新的一轮（刚关又开），迟到的这次 close 不能清掉新内容与触发卡；
+      // 为假就是真的关上了，按当前状态清理。这样调用方不需要记得同步任何代次。
+      if (dialog.open) {
+        return;
+      }
       state.drawerRequest += 1;
-      resetTopicDrawerFrame(state.topicDrawer);
-      state.topicDrawer.frameDocument = null;
+      releaseTopicDrawer(dialog);
+      clearTopicDrawerContent(state.topicDrawer);
       const trigger = state.drawerTrigger;
       state.drawerTrigger = null;
       if (trigger?.isConnected) {
@@ -2388,30 +2403,88 @@
       }
     });
     document.body.append(dialog);
-    state.topicDrawer = { dialog, title, frame, openLink, close };
+    state.topicDrawer = { dialog, title, body, meta, content, openLink, close };
     return state.topicDrawer;
   }
 
-  function syncTopicDrawerDocument() {
-    const drawer = state.topicDrawer;
-    if (!drawer?.dialog.open) return;
-    const frameDocument = drawer.frame.contentDocument;
-    if (!frameDocument || frameDocument === drawer.frameDocument) return;
-    drawer.frameDocument = frameDocument;
-    // 复用路由轮询，在图片尚未加载完时也能关闭；键盘事件不跨 iframe 冒泡。
-    frameDocument.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && state.currentSettings.drawerCloseOnEscape) {
-        event.preventDefault();
-        closeTopicDrawer();
-      }
-    }, true);
+  // 抽屉关闭（用户 Esc/遮罩、路由切换、程序化关闭）的统一收尾：迟到的正文预览回调不该再留下 pending 痕迹
+  // （留着会让触发卡继续被当成「正在被读」而排队），从抽屉内容打开的灯箱/代码全屏也要跟着一起收掉。
+  function releaseTopicDrawer(dialog) {
+    state.drawerRequestPending = false;
+    closeReplyOverlaysOwnedBy(dialog);
   }
 
-  function resetTopicDrawerFrame(drawer) {
-    clearTimeout(drawer.loadTimer);
-    drawer.frame.onload = null;
-    drawer.frame.removeAttribute("src");
-    drawer.frame.removeAttribute("srcdoc");
+  function clearTopicDrawerContent(drawer) {
+    if (!drawer) {
+      return;
+    }
+    drawer.meta.replaceChildren();
+    drawer.meta.hidden = true;
+    drawer.content.replaceChildren();
+  }
+
+  // 作者、活动时间与统计都来自列表载荷（零请求）；缺字段就不渲染对应项，不写「加载中」占位。
+  function renderTopicDrawerMeta(drawer, metadata) {
+    const parts = [];
+    const author = cleanText(metadata?.author);
+    if (author) {
+      parts.push(createElement("span", "betterld-topic-drawer__author", author));
+    }
+    const activityAt = String(metadata?.activityAt || "");
+    const activityTime = activityAt ? new Date(activityAt) : null;
+    if (activityTime && !Number.isNaN(activityTime.getTime())) {
+      const time = createElement("time", "betterld-topic-drawer__time", activityTime.toLocaleString());
+      time.dateTime = activityAt;
+      parts.push(time);
+    }
+    const stats = Array.isArray(metadata?.stats) ? metadata.stats : [];
+    if (stats.length) {
+      const list = createElement("span", "betterld-topic-drawer__stats");
+      list.append(...stats.map((stat) => {
+        const item = createElement("span", "betterld-topic-drawer__stat", `${stat.label} ${stat.value}`);
+        item.dataset.betterldStat = stat.key;
+        return item;
+      }));
+      parts.push(list);
+    }
+    drawer.meta.replaceChildren(...parts);
+    drawer.meta.hidden = !parts.length;
+  }
+
+  // 列表载荷给出作者/活动时间/统计，正文请求只补它缺的部分
+  // （纯文本端点没有这些字段，不能把已经渲染的列表元信息顶掉）。
+  // 列表载荷是最新的站点列表数据（作者/活动时间/统计/参与者），优先用它；
+  // 正文请求返回的同名字段只在列表缺该项时兜底（它的缓存可能比列表旧）。缺字段不写占位假值。
+  function drawerMetadata(topicId, metadata) {
+    const list = state.topicListMetadata.get(topicId) || {};
+    if (!metadata) {
+      return list;
+    }
+    return {
+      author: list.author || metadata.author,
+      activityAt: list.activityAt || metadata.activityAt,
+      stats: list.stats?.length ? list.stats : metadata.stats,
+      participants: list.participants?.length ? list.participants : metadata.participants
+    };
+  }
+
+  // 抽屉触发卡在抽屉打开期间（含 showModal 之前的那一小段）都算「正在被读」：
+  // 队列可能在 showModal() 之前就同步出队并判定 isNeeded()，只看 dialog.open 会把请求当成不再需要而拒掉。
+  function drawerHoldsCard(card) {
+    return Boolean(state.drawerTrigger?.closest(".betterld-topic-card") === card
+      && (state.topicDrawer?.dialog.open || state.drawerRequestPending));
+  }
+
+  function setTopicDrawerContent(drawer, metadata) {
+    if (metadata.cooked) {
+      // 与回复树、Boost 共用同一条 cooked 渲染路径（callout/剧透/hashtag/代码块复制/灯箱/引用展开），不另写一套。
+      drawer.content.replaceChildren(...replyCooked(metadata.cooked).childNodes);
+    } else if (metadata.markdown) {
+      // 纯文本端点没有 cooked，改用同一套 Markdown 渲染器把首帖排成 DOM。
+      markdownApi.render(drawer.content, metadata.markdown);
+    } else {
+      drawer.content.textContent = metadata.text;
+    }
   }
 
   function closeTopicDrawer() {
@@ -2420,7 +2493,8 @@
       return;
     }
     state.drawerRequest += 1;
-    resetTopicDrawerFrame(drawer);
+    releaseTopicDrawer(drawer.dialog);
+    clearTopicDrawerContent(drawer);
     if (drawer.dialog.open && typeof drawer.dialog.close === "function") {
       drawer.dialog.close();
     } else {
@@ -2444,15 +2518,6 @@
     dialog.style.height = `${width / aspectRatio}px`;
   }
 
-  function topicPreviewDocument(content) {
-    const dark = document.documentElement.dataset.betterldMode === "dark";
-    const background = dark ? "#211f26" : "#fffbfe";
-    const foreground = dark ? "#e6e1e5" : "#1c1b1f";
-    const surface = dark ? "#2b2930" : "#f3edf7";
-    const accent = dark ? "#d0bcff" : "#6750a4";
-    return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><base href="${location.origin}/"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{color-scheme:${dark ? "dark" : "light"}}body{margin:0;padding:20px;background:${background};color:${foreground};font:15px/1.65 system-ui,sans-serif;overflow-wrap:anywhere}img,video{max-width:100%;height:auto}pre{max-width:100%;overflow:auto;padding:12px;border-radius:12px;background:${surface}}code{font-family:ui-monospace,monospace}a{color:${accent}}blockquote{margin-inline:0;padding-inline:16px;border-inline-start:3px solid ${accent}}table{display:block;max-width:100%;overflow-x:auto}</style></head><body>${content}</body></html>`;
-  }
-
   function openTopicDrawer(card) {
     const drawer = ensureTopicDrawer();
     if (!drawer) {
@@ -2466,10 +2531,53 @@
     }
     closeCardMenus();
     const requestId = ++state.drawerRequest;
-    resetTopicDrawerFrame(drawer);
+    const topicId = card.dataset.topicId;
     state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
     drawer.title.textContent = card.querySelector(".betterld-topic-card__title")?.textContent || "原帖预览";
     drawer.openLink.href = topicUrl;
+    renderTopicDrawerMeta(drawer, drawerMetadata(topicId));
+    const cached = state.excerptCache.get(topicId);
+    // 只有带完整 cooked 的条目才算能直接渲染：长帖的 cooked 超过存储上限时条目只剩截断的 markdown，
+    // 这时走下面的请求分支，优先插队拿完整正文再渲染。
+    if (cached?.state === "ready" && cached.cooked) {
+      // 已经拿到的正文直接渲染，抽屉不再为一个整页 iframe 等几秒。
+      renderTopicDrawerMeta(drawer, drawerMetadata(topicId, cached));
+      setTopicDrawerContent(drawer, cached);
+    } else if (state.metadataCooldownUntil > Date.now()) {
+      drawer.content.textContent = config.excerptThrottledLabel;
+    } else {
+      drawer.content.textContent = config.excerptLoadingLabel;
+      if (cached?.state === "failed") {
+        state.excerptCache.delete(topicId);
+      }
+      // 抽屉触发卡本身就是预览队列里的最高优先级，这个请求会插到其它预览前面。
+      // 标志位必须在请求之前设置：队列可能在这里同步出队并判定 isNeeded()，那时 showModal() 还没轮到。
+      state.drawerRequestPending = true;
+      requestTopicMetadata(topicId, false, true)
+        .then((metadata) => {
+          // 代次不匹配说明这条回调已经过期（关掉后又开了别的主题）：整段丢弃，
+          // 否则旧回调会清掉新一轮的 pending，抽屉永远停在「正在读取正文预览…」。
+          if (state.drawerRequest !== requestId) return;
+          state.drawerRequestPending = false;
+          if (!drawer.dialog.open) return;
+          renderTopicDrawerMeta(drawer, drawerMetadata(topicId, metadata));
+          setTopicDrawerContent(drawer, metadata);
+        })
+        .catch((error) => {
+          if (state.drawerRequest !== requestId) return;
+          state.drawerRequestPending = false;
+          console.warn("[betterLD] topic preview unavailable", error);
+          // 冷却期间被拒的请求与卡片用同一份原因文案（name 比 message 稳定）。
+          if (error.name === "RateLimitError") {
+            drawer.content.textContent = config.excerptThrottledLabel;
+            return;
+          }
+          const blocked = /challenge|403|429/.test(error.message);
+          drawer.content.textContent = blocked
+            ? "站点验证阻止了原帖请求，请在当前页打开完整主题。"
+            : "原帖正文加载失败，请在当前页打开完整主题。";
+        });
+    }
     if (typeof drawer.dialog.showModal === "function") {
       if (!drawer.dialog.open) {
         drawer.dialog.showModal();
@@ -2479,48 +2587,6 @@
     }
     resizeTopicDrawer();
     window.requestAnimationFrame(() => drawer.close.focus());
-
-    const showFallback = () => {
-      if (state.drawerRequest !== requestId || !drawer.dialog.open) return;
-      resetTopicDrawerFrame(drawer);
-      drawer.frame.setAttribute("sandbox", "allow-same-origin");
-      drawer.frame.srcdoc = topicPreviewDocument("<p>完整网页在预览中无法加载，以下为原帖正文。可在当前页打开完整主题。</p><p>正在读取原帖正文…</p>");
-      if (state.metadataCooldownUntil > Date.now()) {
-        drawer.frame.srcdoc = topicPreviewDocument("<p>站点正在限制正文请求，请稍后再试或打开完整主题。</p>");
-        return;
-      }
-      const topicId = card.dataset.topicId;
-      if (state.excerptCache.get(topicId)?.state === "failed") state.excerptCache.delete(topicId);
-      requestTopicMetadata(topicId)
-        .then((metadata) => {
-          if (state.drawerRequest !== requestId) return;
-          const cooked = metadata.cooked;
-          if (!cooked) throw new Error("topic opening post content unavailable");
-          drawer.frame.srcdoc = topicPreviewDocument(`<p>完整网页在预览中无法加载，以下为原帖正文。</p><article class="cooked">${cooked}</article>`);
-        })
-        .catch((error) => {
-          if (state.drawerRequest !== requestId) return;
-          console.warn("[betterLD] topic preview unavailable", error);
-          const blocked = /challenge|403|429/.test(error.message);
-          drawer.frame.srcdoc = topicPreviewDocument(blocked
-            ? "<p>站点验证阻止了原帖请求，请在当前页打开完整主题。</p>"
-            : "<p>原帖正文加载失败，请在当前页打开完整主题。</p>");
-        });
-    };
-    drawer.frame.onload = () => {
-      if (state.drawerRequest !== requestId || !drawer.dialog.open) return;
-      const page = drawer.frame.contentDocument;
-      if (page?.querySelector("#challenge-stage") || /just a moment|请稍候/i.test(page?.title || "")) {
-        showFallback();
-      }
-    };
-    drawer.loadTimer = window.setTimeout(() => {
-      if (state.drawerRequest === requestId && !drawer.frame.contentDocument?.querySelector("#main-outlet-wrapper")) {
-        showFallback();
-      }
-    }, config.topicPreview.loadTimeoutMs);
-    drawer.frame.removeAttribute("sandbox");
-    drawer.frame.src = topicUrl;
   }
 
   function plainText(markup) {
@@ -2572,9 +2638,9 @@
   // 等上一请求完成再放行，确保挑战/限流响应先更新冷却时间，并给原站分页留出请求余量。
   // 正文预览属于批量流量（一屏卡片一次），单独走更慢的节奏与配额，
   // 不然它会占满队列、把回复加载这种阅读必需的请求一起拖住。
-  function scheduleMetadataRequest(task, isNeeded, isPriority, isExcerpt = false) {
+  function scheduleMetadataRequest(task, isNeeded, isPriority, isExcerpt = false, score = () => 0) {
     return new Promise((resolve, reject) => {
-      state.metadataQueue.push({ task, isNeeded, isPriority, isExcerpt, resolve, reject });
+      state.metadataQueue.push({ task, isNeeded, isPriority, isExcerpt, score, resolve, reject });
       drainMetadataQueue();
     });
   }
@@ -2602,6 +2668,29 @@
     return state.excerptTokens >= 1 ? 0 : state.excerptTokensAt + config.excerptRequestRefillMs;
   }
 
+  // 选件顺序：悬停/聚焦/抽屉触发卡最优先；其次非正文的元数据请求（回复加载等）按先来先服务，
+  // 不被预览挤位；最后才是正文预览，按阅读位置（视口内越靠上越先）取分最小者。
+  function nextMetadataIndex() {
+    const priorityIndex = state.metadataQueue.findIndex((entry) => entry.isPriority());
+    if (priorityIndex >= 0) {
+      return priorityIndex;
+    }
+    const plainIndex = state.metadataQueue.findIndex((entry) => !entry.isExcerpt);
+    if (plainIndex >= 0) {
+      return plainIndex;
+    }
+    let bestIndex = 0;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < state.metadataQueue.length; index += 1) {
+      const score = state.metadataQueue[index].score();
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+    return bestIndex;
+  }
+
   async function drainMetadataQueue() {
     if (state.metadataRunning) {
       return;
@@ -2609,10 +2698,24 @@
     state.metadataRunning = true;
     try {
       while (state.metadataQueue.length) {
+        // 站点在拦（挑战/429 冷却）期间一个请求都不发。正文预览是批量流量，留在队列里只会无限期挂起，
+        // 卡片永远停在加载文案；这里把预览条目以可识别的错误拒绝，让卡片显示真实原因并在冷却到期后重排。
+        // 其它请求（回复加载等）维持原有等待语义，冷却结束照常发出。
+        if (state.metadataCooldownUntil > Date.now()) {
+          for (let index = state.metadataQueue.length - 1; index >= 0; index -= 1) {
+            const entry = state.metadataQueue[index];
+            if (!entry.isExcerpt) {
+              continue;
+            }
+            state.metadataQueue.splice(index, 1);
+            entry.reject(topicThrottleError());
+          }
+          if (!state.metadataQueue.length) {
+            break;
+          }
+        }
         while (true) {
-          const priorityIndex = state.metadataQueue.findIndex((entry) => entry.isPriority());
-          const index = priorityIndex < 0 ? 0 : priorityIndex;
-          const entry = state.metadataQueue[index];
+          const entry = state.metadataQueue[nextMetadataIndex()];
           const now = Date.now();
           const wait = Math.max(
             state.metadataNextAt,
@@ -2626,8 +2729,7 @@
           await new Promise((resolve) => window.setTimeout(resolve, wait));
         }
         // 到真正发请求时再按当前关注位置排序，悬停不会绕过限速或冷却。
-        const priorityIndex = state.metadataQueue.findIndex((entry) => entry.isPriority());
-        const [entry] = state.metadataQueue.splice(priorityIndex < 0 ? 0 : priorityIndex, 1);
+        const [entry] = state.metadataQueue.splice(nextMetadataIndex(), 1);
         if (!entry.isNeeded()) {
           entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
           continue;
@@ -2647,7 +2749,20 @@
       }
     } finally {
       state.metadataRunning = false;
+      // 队列排空就是空闲窗口：等页面停住、令牌桶有令牌时把视口下方的卡提前排上
+      // （prefetchExcerpts 自己会在条件不满足时重排，不在这里直接发）。
+      if (!state.metadataQueue.length) {
+        scheduleExcerptPrefetch();
+      }
     }
+  }
+
+  // 冷却期间被拒绝的正文预览请求：卡片据此显示站点限制文案、并在冷却到期后重排一次，
+  // 而不是永远停在加载文案上。用 name 而不是 message 识别，文案可自由调整。
+  function topicThrottleError() {
+    const error = new Error("topic excerpt requests are blocked by the site cooldown");
+    error.name = "RateLimitError";
+    return error;
   }
 
   // 冷却时间写进 storage.local：站点限速是按 IP 计的，同一窗口里再打开/切换页面时
@@ -2656,6 +2771,31 @@
     state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil, until);
     storageSet({ [config.topicRequestCooldownStorageKey]: state.metadataCooldownUntil })
       .catch((error) => console.warn("[betterLD] 请求冷却时间写入失败", error));
+    // 冷却刚武装：当时还没出正文的卡（含尚未请求过的）先换上真实原因，不留在加载文案上。
+    applyExcerptThrottleNoticeToAll();
+    // 同时排定到期重排：不能依赖「刚好有卡被拒」——页面加载时就带着 storage 里的冷却、
+    // 冷却只由抽屉或其它请求触发时，都没有卡片走到被拒那条路。
+    scheduleExcerptThrottleRetry();
+  }
+
+  // 站点在拦（冷却中）时正文请求发不出去：把还没出正文的卡的正文区换成真实原因文案，
+  // 而不是 createCard 写死的「正在读取正文预览…」（那既不是加载中也不是失败，而是一直不会动）。
+  // 状态仍是 loading：冷却到期后 retryThrottledExcerpts 按视口重排，滚动进视口的卡照常走 loadExcerpt。
+  function applyExcerptThrottleNotice(card) {
+    if (card.dataset.excerptState !== "loading") {
+      return;
+    }
+    const excerpt = card.querySelector(".betterld-topic-card__excerpt");
+    if (excerpt?.dataset.state === "loading") {
+      excerpt.textContent = config.excerptThrottledLabel;
+    }
+  }
+
+  function applyExcerptThrottleNoticeToAll() {
+    if (!state.currentSettings.showTopicExcerpt || state.metadataCooldownUntil <= Date.now()) {
+      return;
+    }
+    managedCards().forEach(applyExcerptThrottleNotice);
   }
 
   // 站点前面的 Cloudflare 会对不像站点自身 ajax 的 JSON 请求直接返回挑战页，
@@ -2669,13 +2809,13 @@
       config.topicChallengeCooldownMs));
   }
 
-  function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false, isExcerpt = false) {
+  function requestTopicResponse(url, isNeeded = () => true, isPriority = () => false, isExcerpt = false, score = () => 0, read = (response) => response.json()) {
     const existing = state.responseRequests.get(url);
     if (existing) {
-      existing.consumers.push({ isNeeded, isPriority });
+      existing.consumers.push({ isNeeded, isPriority, score });
       return existing.promise;
     }
-    const consumers = [{ isNeeded, isPriority }];
+    const consumers = [{ isNeeded, isPriority, score }];
     const promise = scheduleMetadataRequest(async () => {
       const response = await fetch(url, {
         credentials: "same-origin",
@@ -2693,9 +2833,11 @@
       if (!response.ok) {
         throw new Error(`topic request failed with ${response.status}`);
       }
-      return response.json();
+      return read(response);
     }, () => consumers.some((consumer) => consumer.isNeeded()),
-    () => consumers.some((consumer) => consumer.isNeeded() && consumer.isPriority()), isExcerpt)
+    () => consumers.some((consumer) => consumer.isNeeded() && consumer.isPriority()),
+    isExcerpt,
+    () => consumers.reduce((best, consumer) => Math.min(best, consumer.score()), Number.POSITIVE_INFINITY))
       .finally(() => state.responseRequests.delete(url));
     state.responseRequests.set(url, { promise, consumers });
     return promise;
@@ -2707,20 +2849,29 @@
     return post;
   }
 
-  async function fetchTopicMetadata(topicId) {
+  // 正文端点集中在这里：`/t/{id}.json?include_raw=1` 返回 JSON（cooked + raw），
+  // `/raw/{id}/1` 返回纯文本（首帖 markdown，体积小得多）。换端点只改这个函数的 url 与 read。
+  function topicContentRequest(topicId) {
     const endpoint = new URL(`/t/${topicId}.json`, location.origin);
     endpoint.searchParams.set("include_raw", "1");
-    const data = await requestTopicResponse(endpoint.href, () => managedCards().some((card) => {
-      if (card.dataset.topicId !== topicId) {
-        return false;
-      }
-      const rect = card.getBoundingClientRect();
-      return card.dataset.authorState === "loading"
-        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card)
-        || (!card.hidden && rect.bottom > 0 && rect.top < window.innerHeight);
-    }), () => managedCards().some((card) => card.dataset.topicId === topicId
-      && (card.matches(":hover, :focus-within")
-        || (state.topicDrawer?.dialog.open && state.drawerTrigger?.closest(".betterld-topic-card") === card))), true);
+    return { url: endpoint.href, read: (response) => response.json() };
+  }
+
+  // 两种响应形态归一成同一份 metadata：对象形态带 cooked；文本形态只有 markdown（抽屉按 markdown 渲染）。
+  function topicMetadataFromResponse(data) {
+    if (typeof data === "string") {
+      const markdown = data.trim().slice(0, config.excerptMaxCharacters);
+      return {
+        text: markdown ? plainText(markdown) : config.excerptEmptyLabel,
+        markdown,
+        cooked: "",
+        contentState: markdown ? "ready" : "empty",
+        author: "",
+        activityAt: "",
+        stats: [],
+        participants: []
+      };
+    }
     const post = openingPost(data);
     const raw = String(post?.raw || "").trim().slice(0, config.excerptMaxCharacters);
     const cooked = String(post?.cooked || "").trim();
@@ -2739,9 +2890,49 @@
     };
   }
 
-  function requestTopicMetadata(topicId) {
+  async function fetchTopicMetadata(topicId) {
+    const request = topicContentRequest(topicId);
+    const data = await requestTopicResponse(request.url, () => managedCards().some((card) => {
+      if (card.dataset.topicId !== topicId) {
+        return false;
+      }
+      const rect = card.getBoundingClientRect();
+      return card.dataset.authorState === "loading"
+        || drawerHoldsCard(card)
+        || prefetchNeeded(card)
+        || (excerptLoadable(card) && rect.bottom > 0 && rect.top < window.innerHeight);
+    }), () => managedCards().some((card) => card.dataset.topicId === topicId
+      && (card.matches(":hover, :focus-within") || drawerHoldsCard(card))),
+    true, () => excerptScore(topicId), request.read);
+    return topicMetadataFromResponse(data);
+  }
+
+  // 阅读位置分（只用于正文预览请求之间的排序）：悬停/聚焦/抽屉触发卡最优先（0），
+  // 视口内用 rect.top（越靠上越小），视口外整体排在视口之后。
+  const excerptOutOfViewScore = 1e6;
+
+  function excerptScore(topicId) {
+    let score = Number.POSITIVE_INFINITY;
+    managedCards().forEach((card) => {
+      if (card.dataset.topicId !== topicId) {
+        return;
+      }
+      const focused = card.matches(":hover, :focus-within") || drawerHoldsCard(card);
+      const rect = card.getBoundingClientRect();
+      const value = focused ? 0
+        : !card.hidden && rect.bottom > 0 && rect.top < window.innerHeight ? rect.top : rect.top + excerptOutOfViewScore;
+      score = Math.min(score, value);
+    });
+    return score;
+  }
+
+  // requireAuthor：作者回退只在缓存条目确实带 author 时才算命中 —— storage 回填的正文条目没有作者，
+  // 不能让它把作者请求挡掉（否则卡片直接显示作者不可用，不再走网络）。
+  // requireCooked：抽屉要的是完整首帖；只有截断 markdown 的条目（长帖的 cooked 超过存储上限
+  // 或老条目没存 cooked）不算命中，必须再发一次请求拿完整 cooked。
+  function requestTopicMetadata(topicId, requireAuthor = false, requireCooked = false) {
     const cached = state.excerptCache.get(topicId);
-    if (cached?.state === "ready") {
+    if (cached?.state === "ready" && (!requireAuthor || cached.author) && (!requireCooked || cached.cooked)) {
       return Promise.resolve(cached);
     }
     if (cached?.state === "failed") {
@@ -2776,9 +2967,27 @@
     const key = `${config.excerptStoragePrefix}${location.hostname}.${topicId}`;
     try {
       const stored = (await storageGet([key]))[key];
-      if (stored && Date.now() - stored.savedAt < config.excerptCacheTtlMs
+      // 异常条目按未命中处理：savedAt 超前（时钟不对，会让 TTL 看起来永远没过期）；
+      // 标成 ready 却连 text 与 markdown 都是空的（正常写入不会产生这种条目）。
+      const savedAt = Number(stored?.savedAt);
+      const savedAtValid = Number.isFinite(savedAt) && savedAt <= Date.now() + config.excerptSavedAtSkewMs;
+      const contentValid = !(stored?.contentState === "ready" && !stored.text && !stored.markdown);
+      if (stored && savedAtValid && contentValid
+        && Date.now() - savedAt < config.excerptCacheTtlMs
         && typeof stored.markdown === "string" && typeof stored.text === "string"
         && ["ready", "empty"].includes(stored.contentState)) {
+        // 抽屉只查内存 Map：storage 命中且内存里还没有该主题条目时回填（字段与网络路径一致）；
+        // 只有写入时确实存下 cooked 的条目才有可用 cooked（老条目没有 cookedStored，按「无 cooked」处理，
+        // 抽屉为此再请求一次拿完整正文）。已有条目不动，避免降级覆盖。
+        if (!state.excerptCache.has(topicId)) {
+          state.excerptCache.set(topicId, {
+            state: "ready",
+            text: stored.text,
+            markdown: stored.markdown,
+            contentState: stored.contentState,
+            cooked: stored.cookedStored === true && typeof stored.cooked === "string" ? stored.cooked : ""
+          });
+        }
         return stored;
       }
     } catch (error) {
@@ -2786,20 +2995,69 @@
     }
     const metadata = await requestTopicMetadata(topicId);
     // 只持久化正文，缓存命中不能替代作者、活动时间或互动元数据。
-    const { text, markdown, contentState } = metadata;
+    const { text, markdown, contentState, cooked } = metadata;
     state.excerptStorageChain = state.excerptStorageChain.then(async () => {
-      await storageSet({ [key]: { text, markdown, contentState, savedAt: Date.now() } });
-      const stored = await storageGet(null);
-      const entries = Object.entries(stored)
-        .filter(([name]) => name.startsWith(config.excerptStoragePrefix))
-        .sort((a, b) => b[1].savedAt - a[1].savedAt);
-      const expired = entries.filter(([, value], index) => index >= config.excerptCacheMaxEntries
-        || Date.now() - value.savedAt >= config.excerptCacheTtlMs).map(([name]) => name);
-      if (expired.length) {
-        await storageRemove(expired);
+      const entry = { text, markdown, contentState, savedAt: Date.now() };
+      // cooked 是原站生成并 sanitize 的 HTML，抽屉靠它保住图片/表格/details 等保真；太大就只留 markdown。
+      // 存没存下 cooked 都显式记在条目上：抽屉据此判断要不要为完整正文再请求一次。
+      if (cooked && cooked.length <= config.excerptCookedStorageLimit) {
+        entry.cooked = cooked;
+      }
+      entry.cookedStored = typeof entry.cooked === "string";
+      // 先淘汰再写入：配额满时写入会直接抛 QUOTA_BYTES，旧顺序（先写后淘汰）等于一次都没淘汰，
+      // 新条目全丢、错误只进 console。淘汰的口径要含这条待写条目（名额与字节），否则写完就超上限。
+      const entryBytes = utf8ByteLength(key) + utf8ByteLength(JSON.stringify(entry));
+      await evictExcerptCache(key, entryBytes);
+      try {
+        await storageSet({ [key]: entry });
+      } catch (error) {
+        // 还是写不进（配额满/异常）就再淘汰一批重试一次，仍失败就只留内存，不把错误抛给调用方。
+        // 追加淘汰按实际条目数丢最旧的一批：只下调条数上限时，条目少但体积大的缓存一个都删不掉，重试等于没做。
+        console.warn("[betterLD] excerpt cache write retry", error);
+        await evictExcerptCache(key, entryBytes, 0.25).catch(() => {});
+        try {
+          await storageSet({ [key]: entry });
+        } catch (retryError) {
+          console.warn("[betterLD] excerpt cache kept in memory only", retryError);
+        }
       }
     }).catch((error) => console.error("[betterLD] excerpt cache write failed", error));
     return metadata;
+  }
+
+  // storage 配额按 UTF-8 字节计，而 String.length 数的是 UTF-16 码元：中文条目实际占用约为它的 3 倍，
+  // 预算按 .length 算会让缓存实际超出配额。
+  function utf8ByteLength(text) {
+    return new TextEncoder().encode(text).length;
+  }
+
+  // 正文缓存的淘汰：按 savedAt 从新到旧保留，超出条数上限、超出字节预算或已过 TTL 的条目删掉。
+  // reserveKey/reserveBytes 是即将写入的那一条：它同样占一个名额与一份字节，先记进预算，写完才不会超上限。
+  // 被淘汰条目的字节不计入保留预算，否则一个大项会连坐把它后面的健康小条目也一起删掉。
+  // extraRatio 是写入失败后的追加淘汰比例：按实际条目数丢掉最旧的这一比例（条数上限式淘汰对
+  // 「条目少但体积大」的缓存零作用，配额失败后必须有真正减少条目的动作）。
+  async function evictExcerptCache(reserveKey = "", reserveBytes = 0, extraRatio = 0) {
+    const stored = await storageGet(null);
+    const entries = Object.entries(stored)
+      .filter(([name]) => name.startsWith(config.excerptStoragePrefix) && name !== reserveKey)
+      .sort((a, b) => (b[1]?.savedAt ?? 0) - (a[1]?.savedAt ?? 0));
+    const quotaKeep = Math.max(config.excerptCacheMaxEntries - 1, 0);
+    const ratioKeep = extraRatio > 0 ? Math.floor(entries.length * (1 - extraRatio)) : quotaKeep;
+    const keepEntries = Math.min(quotaKeep, ratioKeep);
+    let bytes = reserveBytes;
+    const evicted = [];
+    entries.forEach(([name, value], index) => {
+      const size = utf8ByteLength(name) + utf8ByteLength(JSON.stringify(value));
+      if (index >= keepEntries || bytes + size > config.excerptCacheByteBudget
+        || Date.now() - (value?.savedAt ?? 0) >= config.excerptCacheTtlMs) {
+        evicted.push(name);
+        return;
+      }
+      bytes += size;
+    });
+    if (evicted.length) {
+      await storageRemove(evicted);
+    }
   }
 
   // 逐主题请求 /t/{id}.json 一屏就是几十个请求，会触发站点防护并连带把站点自己的分页请求挡成 429，
@@ -2809,17 +3067,40 @@
   // 原站列表模型里的主题自带 creator（BasicUser）与活动时间；服务端预载的列表接口载荷没有这个字段，
   // 用 posters[0] + users 映射：Discourse 的 TopicPostersSummary 只把最新发帖人挪到末尾，所以 posters[0] 恒为创建者，
   // users 数组给出该 user_id 的 username，与 /t/{id}.json 的 details.created_by.username 同源。
-  // 两条数据路径都在这里映射成同一份条目。
+  // 列表载荷里的统计字段与 /t/{id}.json 同构（posts_count/reply_count/like_count/views），直接复用 topicStats；
+  // 参与者只能由 posters + users 合成（列表模型没有 details.participants），头像保留原样的 {size} 占位，
+  // 由 setReadingParticipants 自己替换尺寸并做同源校验。
+  // 列表里的正文文本实测普遍缺失（预载 0/30、路由模型 0/30），有则先用纯文本充数，没有就跳过。
   function topicListEntries(payload) {
-    const usernames = new Map(
-      (Array.isArray(payload?.users) ? payload.users : []).map((user) => [user.id, cleanText(user.username)])
+    const users = new Map(
+      (Array.isArray(payload?.users) ? payload.users : []).map((user) => [user.id, user])
     );
-    return (Array.isArray(payload?.topic_list?.topics) ? payload.topic_list.topics : []).map((topic) => ({
-      id: String(topic.id),
-      author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
-        || usernames.get(topic.posters?.[0]?.user_id) || "",
-      activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at)
-    }));
+    return (Array.isArray(payload?.topic_list?.topics) ? payload.topic_list.topics : []).map((topic) => {
+      const posters = Array.isArray(topic.posters) ? topic.posters : [];
+      const seen = new Set();
+      return {
+        id: String(topic.id),
+        author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
+          || cleanText(users.get(posters[0]?.user_id)?.username),
+        activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at),
+        excerpt: cleanText(topic.excerpt),
+        stats: topicStats(topic),
+        participants: posters
+          .map((poster) => users.get(poster.user_id))
+          .filter(Boolean)
+          .map((user) => ({
+            username: cleanText(user.username),
+            avatarTemplate: String(user.avatar_template || "").trim()
+          }))
+          .filter((entry) => {
+            if (!entry.avatarTemplate || seen.has(entry.avatarTemplate)) return false;
+            seen.add(entry.avatarTemplate);
+            return true;
+          })
+          .slice(0, 4),
+        thumbnails: Array.isArray(topic.thumbnails) ? topic.thumbnails : []
+      };
+    });
   }
 
   function requestSiteTopicListPayload() {
@@ -2877,12 +3158,36 @@
 
   function applyTopicListMetadata(card) {
     const metadata = state.topicListMetadata.get(card.dataset.topicId);
-    if (!metadata?.author) {
+    if (!metadata) {
       return false;
     }
-    setAuthor(card, metadata.author, "ready");
-    setTopicActivity(card, metadata.activityAt);
-    return true;
+    let applied = false;
+    if (metadata.author) {
+      setAuthor(card, metadata.author, "ready");
+      applied = true;
+    }
+    // 活动时间与作者是否可用无关：缺作者但有 activityAt 时也要写入过滤用的数据集。
+    if (metadata.activityAt) {
+      setTopicActivity(card, metadata.activityAt);
+      applied = true;
+    }
+    // 列表摘要只是先行层：先出纯文本，完整 Markdown 稍后按阅读优先级升级（setExcerpt 保证不降级）。
+    if (metadata.excerpt) {
+      setExcerpt(card, metadata.excerpt, "list");
+      applied = true;
+    }
+    // 统计与参与者与作者是否可用无关；显示开关全关时不再填（与正文请求的闸口同一套开关）。
+    if (state.currentSettings.showTopicExcerpt || state.currentSettings.showTopicMeta) {
+      if (metadata.stats?.length) {
+        setReadingStats(card, metadata.stats);
+        applied = true;
+      }
+      if (metadata.participants?.length) {
+        setReadingParticipants(card, metadata.participants);
+        applied = true;
+      }
+    }
+    return applied;
   }
 
   function applyTopicListMetadataToAll() {
@@ -2941,6 +3246,13 @@
       });
   }
 
+  // aria-busy 只反映真正在飞的请求：正文预览关闭时不会再有正文请求，卡片不该停在 busy。
+  function cardBusy(card, excerptState) {
+    const excerptName = excerptState ?? card.dataset.excerptState;
+    return String(card.dataset.authorState === "loading"
+      || (excerptName === "loading" && state.currentSettings.showTopicExcerpt));
+  }
+
   function setTopicActivity(card, activityAt) {
     const timestamp = activityAt ? Date.parse(activityAt) : Number.NaN;
     card.dataset.filterActivity = Number.isFinite(timestamp) ? String(timestamp) : "";
@@ -2960,7 +3272,7 @@
     if (fallback && author && stateName === "ready") {
       fallback.textContent = author.slice(0, 1).toUpperCase();
     }
-    card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || card.dataset.excerptState === "loading"));
+    card.setAttribute("aria-busy", cardBusy(card));
   }
 
   function setReadingStats(card, stats) {
@@ -3013,6 +3325,10 @@
     if (!excerpt) {
       return;
     }
+    // 正文状态单向前进（loading → list → ready）：已经升级到 Markdown 的卡片不再被列表摘要覆盖。
+    if (stateName === "list" && card.dataset.excerptState !== "loading") {
+      return;
+    }
     if (stateName === "ready") {
       markdownApi.render(excerpt, markdown || text);
     } else {
@@ -3020,10 +3336,11 @@
     }
     excerpt.dataset.state = stateName;
     card.dataset.excerptState = stateName;
-    card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || stateName === "loading"));
+    card.setAttribute("aria-busy", cardBusy(card, stateName));
   }
 
-  function scheduleTopicMetadataRecovery(card) {
+  // delayMs 默认是普通失败的重试间隔；站点在拦时的重排要等到冷却到期（传 0 表示冷却已到期、立刻重排）。
+  function scheduleTopicMetadataRecovery(card, delayMs = config.topicRequestRecoveryDelayMs) {
     const recoveryCount = Number(card.dataset.topicRecoveryCount || 0);
     if (recoveryCount >= config.topicRequestRecoveryCount || !card.isConnected) {
       return;
@@ -3051,7 +3368,77 @@
       if (excerptFailed) {
         loadExcerpt(card);
       }
-    }, config.topicRequestRecoveryDelayMs);
+    }, delayMs);
+  }
+
+  // 站点在拦时正文预览请求被拒（RateLimitError）：冷却期间不发任何新请求，
+  // 到冷却到期时刻把当时视口内仍未出正文的卡重排一次。
+  // 被拒过的卡走 scheduleTopicMetadataRecovery 的同一份重试计数，不会无限重试。
+  function scheduleExcerptThrottleRetry() {
+    if (state.excerptThrottleRetryTimer) {
+      return;
+    }
+    const remaining = state.metadataCooldownUntil - Date.now();
+    if (remaining > 0) {
+      armExcerptThrottleRetry(remaining);
+    }
+  }
+
+  function armExcerptThrottleRetry(delayMs) {
+    state.excerptThrottleRetryTimer = window.setTimeout(() => {
+      state.excerptThrottleRetryTimer = 0;
+      retryThrottledExcerpts();
+    }, delayMs);
+  }
+
+  // 冷却到期：把因限速停在限速/失败文案上的卡整批复位，并重排一遍。
+  // 限速不是普通失败：失败状态与失败缓存一并清掉，也不受 topicRequestRecoveryCount 配额限制
+  // （否则一张在限速前已经普通失败过一次的卡会永久停在限速文案上）；每轮冷却只重排一次，天然有节流。
+  // 立即排队的只有视口内与视口下方一屏（与空闲预取同一范围）的卡，其余只复位状态，
+  // 滚动进视口时由 observeExcerpt 照常加载 —— 冷却结束后不会一次性把整页请求打给站点。
+  function retryThrottledExcerpts() {
+    // 冷却被延长（又撞了一次挑战），或定时器比到期时刻早了一拍落地（Date.now() 还没跨过到期时刻）：
+    // 都不在冷却里重发，也不丢掉这次重排 —— 按剩余冷却（至少 1ms）再排一次。
+    const remaining = state.metadataCooldownUntil - Date.now();
+    if (remaining > 0) {
+      armExcerptThrottleRetry(remaining + 1);
+      return;
+    }
+    if (!state.currentSettings.showTopicExcerpt) {
+      return;
+    }
+    managedCards().forEach((card) => {
+      if (!excerptLoadable(card)) {
+        return;
+      }
+      const excerptState = card.dataset.excerptState;
+      const authorFailed = card.dataset.authorState === "failed";
+      // 只有正文本身没拿到（loading / failed）才重取；list 是升级到完整 Markdown，也进队列。
+      const excerptRetry = excerptState === "failed" || excerptState === "loading";
+      const excerptUpgrade = excerptState === "list";
+      if (!excerptRetry && !excerptUpgrade && !authorFailed) {
+        return;
+      }
+      // 限速不是普通失败：冷却到期是一轮全新机会，把普通失败的重试配额一起清零。
+      // 否则一张在限速前普通失败过的卡（配额 topicRequestRecoveryCount=1 已耗尽）到期后
+      // 既可能被 scheduleTopicMetadataRecovery 挡在门外，也会在下次普通失败时直接停在占位/限速文案上。
+      delete card.dataset.topicRecoveryCount;
+      // 正文已经就绪的卡（含只有作者失败）不能被打回加载中：失败缓存只在正文要重取时清。
+      if (excerptRetry) {
+        state.excerptCache.delete(card.dataset.topicId);
+        setExcerpt(card, config.excerptLoadingLabel, "loading");
+      }
+      if (authorFailed) {
+        setAuthor(card, config.authorLoadingLabel, "loading");
+      }
+      const rect = card.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight * 2) {
+        return;
+      }
+      // 两个加载函数自带状态守卫（作者只在 loading、正文只在 loading/list），不需要在这里再判一次。
+      loadAuthor(card);
+      loadExcerpt(card);
+    });
   }
 
   function loadAuthor(card) {
@@ -3060,7 +3447,7 @@
     }
 
     const topicId = card.dataset.topicId;
-    requestTopicMetadata(topicId)
+    requestTopicMetadata(topicId, true)
       .then((metadata) => {
         if (!metadata.author) {
           throw new Error("topic creator username unavailable");
@@ -3072,14 +3459,23 @@
         if (error.name === "AbortError") {
           return;
         }
+        if (error.name === "RateLimitError" || state.metadataCooldownUntil > Date.now()) {
+          // 站点在拦：作者回退与正文预览共用 /t/ 端点，同样不烧重试预算，
+          // 由正文预览那条路在冷却到期时统一重排（author + excerpt 一起）。
+          // 触发挑战的那一张卡的错误来自请求本身，用冷却状态一并识别。
+          setAuthor(card, config.authorPlaceholder, "failed");
+          scheduleExcerptThrottleRetry();
+          return;
+        }
         console.warn(`[betterLD] topic creator unavailable for topic ${topicId}`, error);
         setAuthor(card, config.authorPlaceholder, "failed");
         scheduleTopicMetadataRecovery(card);
       });
   }
 
+  // 正文预览关闭后不再发任何正文请求；元信息（统计/参与者）已由列表载荷零请求补齐。
   function loadExcerpt(card) {
-    if (card.dataset.excerptState !== "loading" || !card.dataset.topicId) {
+    if (!state.currentSettings.showTopicExcerpt || !excerptPending(card) || !card.dataset.topicId) {
       return;
     }
 
@@ -3087,8 +3483,9 @@
     requestExcerpt(topicId)
       .then((metadata) => {
         setExcerpt(card, metadata.text, metadata.contentState, metadata.markdown);
-        if (metadata.stats) setReadingStats(card, metadata.stats);
-        if (metadata.participants) setReadingParticipants(card, metadata.participants);
+        // 纯文本端点不带统计/参与者，空集合不能把列表载荷已经填好的内容清掉。
+        if (metadata.stats?.length) setReadingStats(card, metadata.stats);
+        if (metadata.participants?.length) setReadingParticipants(card, metadata.participants);
       })
       .catch((error) => {
         if (error.name === "AbortError") {
@@ -3097,9 +3494,19 @@
           }
           return;
         }
+        if (error.name === "RateLimitError" || state.metadataCooldownUntil > Date.now()) {
+          // 站点在拦：冷却期间不发新请求，显示真实原因，并安排在冷却到期时重排一次。
+          // 触发挑战的那一张卡的错误来自请求本身（不是队列拒绝），用冷却状态一并识别。
+          setExcerpt(card, config.excerptThrottledLabel, "failed");
+          scheduleExcerptThrottleRetry();
+          return;
+        }
         console.warn(`[betterLD] topic excerpt unavailable for topic ${topicId}`, error);
         setExcerpt(card, config.excerptPlaceholder, "failed");
         scheduleTopicMetadataRecovery(card);
+      })
+      .finally(() => {
+        delete card.dataset.betterldExcerptPrefetch;
       });
   }
 
@@ -3117,8 +3524,101 @@
     }, config.excerptScrollIdleMs);
   }
 
+  function scheduleExcerptPrefetch(delayMs = config.excerptPrefetchIdleMs) {
+    window.clearTimeout(state.excerptPrefetchTimer);
+    state.excerptPrefetchTimer = window.setTimeout(prefetchExcerpts, delayMs);
+  }
+
+  // 令牌桶有额度却空转等于白等：页面已经停住、队列里又没有视口内的预览请求时，
+  // 把视口下方一屏内的卡片提前排上 —— 总量不变，只是把接下来要读的那几张提前发出去。
+  // 因令牌桶/队列条件而放弃时要再排一次，否则没有滚动事件的页面（或排空瞬间恰好没令牌）就再也等不到预取。
+  function prefetchExcerpts() {
+    state.excerptPrefetchTimer = 0;
+    if (!state.currentSettings.showTopicExcerpt || state.metadataCooldownUntil > Date.now()) {
+      return;
+    }
+    if (Date.now() - state.excerptLastScrollAt < config.excerptPrefetchIdleMs) {
+      return;
+    }
+    const candidates = managedCards()
+      .filter((card) => card.dataset.excerptState === "loading" && excerptLoadable(card))
+      .map((card) => ({ card, top: card.getBoundingClientRect().top }))
+      .filter(({ top }) => top >= window.innerHeight && top < window.innerHeight * 2)
+      .sort((a, b) => a.top - b.top)
+      .slice(0, config.excerptPrefetchCount);
+    // 没有可预取的卡就直接停，不再排下一次（否则变成每 2.5s 空扫一遍）。
+    if (!candidates.length) {
+      return;
+    }
+    if (state.metadataQueue.some((entry) => entry.isExcerpt && entry.score() < excerptOutOfViewScore)) {
+      scheduleExcerptPrefetch();
+      return;
+    }
+    if (state.excerptTokens < 1) {
+      // 令牌只在出队时补充：这里主动补算一次，并把下一次预取对齐到令牌可用时刻，而不是固定 2.5s 空转。
+      const wait = excerptTokenWait(Date.now());
+      if (wait > 0) {
+        scheduleExcerptPrefetch(Math.max(wait - Date.now(), 0));
+        return;
+      }
+    }
+    candidates.forEach(({ card }) => {
+      card.dataset.betterldExcerptPrefetch = "true";
+      loadExcerpt(card);
+    });
+  }
+
+  // 正文还没有最终正文（loading）或只有列表摘要（list）时都还需要一次升级请求。
+  function excerptPending(card) {
+    const stateName = card.dataset.excerptState;
+    return stateName === "loading" || stateName === "list";
+  }
+
+  // 搜索卡、隐藏卡与过滤掉的卡不请求正文（与 observeExcerpt 同一套条件）。
+  function excerptLoadable(card) {
+    return card.dataset.betterldSearchResult !== "true"
+      && !card.hidden
+      && card.dataset.filterState !== "hidden"
+      && card.dataset.filterState !== "pending";
+  }
+
+  // 预取的卡在出队时用同一条「还是预取候选」标准重新判定（不能复用只认视口内那套）：
+  // 设置仍开、卡仍待补正文、没被过滤/隐藏（与 excerptLoadable 同一套条件，不另写一份）、
+  // 并且仍在「视口下方一屏内」；滚进视口后由 isNeeded 的视口分支接管。
+  function prefetchNeeded(card) {
+    if (card.dataset.betterldExcerptPrefetch !== "true" || !state.currentSettings.showTopicExcerpt) {
+      return false;
+    }
+    if (!excerptLoadable(card)) {
+      return false;
+    }
+    const rect = card.getBoundingClientRect();
+    return excerptPending(card) && rect.top >= window.innerHeight && rect.top < window.innerHeight * 2;
+  }
+
+  // 首屏最上面的几张卡几乎必然正在被读：卡片建好后不等滚动停住门（excerptScrollIdleMs / excerptDwellMs），
+  // 直接占用突发额度先发请求。预算按「一次列表重建 / 一次路由切换」重置，不是每卡一次性标记。
+  function primeExcerpts() {
+    if (!state.currentSettings.showTopicExcerpt || state.excerptPrimeBudget <= 0) {
+      return;
+    }
+    const primed = managedCards()
+      .filter((card) => !card.dataset.betterldExcerptPrimed
+        && card.dataset.excerptState === "loading"
+        && excerptLoadable(card))
+      .map((card) => ({ card, rect: card.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.bottom > 0 && rect.top < window.innerHeight)
+      .sort((a, b) => a.rect.top - b.rect.top)
+      .slice(0, state.excerptPrimeBudget);
+    state.excerptPrimeBudget -= primed.length;
+    primed.forEach(({ card }) => {
+      card.dataset.betterldExcerptPrimed = "true";
+      loadExcerpt(card);
+    });
+  }
+
   function scheduleExcerpt(card) {
-    if (card.dataset.betterldExcerptTimer || card.dataset.excerptState !== "loading") {
+    if (card.dataset.betterldExcerptTimer || !excerptPending(card)) {
       return;
     }
     card.dataset.betterldExcerptTimer = String(window.setTimeout(() => {
@@ -3139,14 +3639,27 @@
   }
 
   function observeExcerpt(card) {
-    if (card.dataset.betterldSearchResult === "true") return;
-    // 阅读卡统计与参与者头像的装载与「主题元信息」开关耦合：关闭时不发元数据请求
-    const needsReadingMetadata = state.currentSettings.showTopicMeta;
-    if ((!state.currentSettings.showTopicExcerpt && !needsReadingMetadata)
-      || card.hidden
-      || card.dataset.filterState === "hidden"
-      || card.dataset.filterState === "pending") {
+    // 列表载荷已经给出作者/统计/参与者，正文预览不再为元信息发请求；
+    // 关闭正文预览时整条正文通路不启动，列表页也就不再发 /t/*.json 预览请求。
+    // 但 createCard 写死的加载文案不能留在正文区：这里清空它、撤掉观察与待发计时（状态仍是 loading，
+    // 不是失败），等开关重新打开时由 syncManagedCardContent → observeExcerpt 重新排队。
+    if (!state.currentSettings.showTopicExcerpt) {
+      cancelExcerpt(card);
+      state.excerptObserver?.unobserve(card);
+      state.excerptVisible.delete(card);
+      const excerpt = card.querySelector(".betterld-topic-card__excerpt");
+      if (card.dataset.excerptState === "loading" && excerpt?.dataset.state === "loading") {
+        excerpt.textContent = "";
+      }
       return;
+    }
+    if (!excerptLoadable(card)) {
+      return;
+    }
+    // 站点在拦：请求发不出去（队列里也会被拒），先直接显示真实原因，不排队、不假加载。
+    // 仍登记观察：冷却到期后由 retryThrottledExcerpts 重排，滚动进视口的卡也照常走 loadExcerpt。
+    if (state.metadataCooldownUntil > Date.now()) {
+      applyExcerptThrottleNotice(card);
     }
     if (state.excerptObserver) {
       state.excerptObserver.observe(card);
@@ -3217,7 +3730,7 @@
         applyTopicListMetadata(card);
         observeExcerpt(card);
       }
-      card.setAttribute("aria-busy", String(card.dataset.authorState === "loading" || card.dataset.excerptState === "loading"));
+      card.setAttribute("aria-busy", cardBusy(card));
     });
     document.querySelectorAll('[data-betterld-grid="true"]').forEach(syncFilterEmptyState);
     syncTopicListMetadata();
@@ -3998,6 +4511,8 @@
     grid.dataset.betterldGrid = "true";
     grid.setAttribute("aria-label", "LinuxDo 主题");
 
+    // 列表重建 = 新一轮立发预算。
+    state.excerptPrimeBudget = config.excerptPrimeCount;
     syncCards(grid, items);
 
     if (!grid.childElementCount && state.currentSettings.topicFilterEnabled && items.length) {
@@ -4060,6 +4575,8 @@
     }
     applyListControlsScrollState();
     syncTopicListMetadata();
+    // 每次重建/路由切换后只为最靠上的几张卡立刻发请求，后续交给观察器与空闲预取。
+    primeExcerpts();
   }
 
   function scheduleSync() {
@@ -4075,6 +4592,10 @@
   function updateRouteState() {
     state.lastScrollY = pageScrollTop();
     state.listControlsCollapsed = false;
+    // 路由切换 = 新一轮立发预算。
+    state.excerptPrimeBudget = config.excerptPrimeCount;
+    // 路由切换后原卡片会被重建/移除，抽屉留着会指向失效的触发卡：复用同一套关闭逻辑收掉。
+    closeTopicDrawer();
     state.scrollDirection = 0;
     state.scrollDistance = 0;
     applyListControlsScrollState();
@@ -4246,13 +4767,24 @@
   }
 
   // ---- 浮层工厂（代码全屏 / 图片灯箱共用）----
-  // 浮层必须挂在真实 document.body 上（cooked 元素游离于 DOMParser 文档），关闭时整体移除。
-  function openReplyOverlay(className, ariaLabel, build) {
+  // 浮层自己就是一个 <dialog>：打开时 showModal() 进 top layer，在抽屉（同为 modal dialog）之上覆盖整屏，
+  // 不再需要猜「哪一个 open dialog 在最上层」；遮罩交给 ::backdrop（仅 modal 生效）。
+  // 只有不支持 showModal 的老 Firefox 退回固定定位 + 自绘遮罩（.betterld-reply-overlay--fallback）。
+  // owner 是浮层所属的宿主 dialog（回复树在页面里时为 null）：宿主关闭时一并收掉，不留悬空浮层。
+  const replyOverlays = new Set();
+
+  function closeReplyOverlaysOwnedBy(owner) {
+    [...replyOverlays].forEach((record) => {
+      if (record.owner === owner) {
+        record.close();
+      }
+    });
+  }
+
+  function openReplyOverlay(className, ariaLabel, build, owner = null) {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overlay = document.createElement("div");
+    const overlay = document.createElement("dialog");
     overlay.className = `betterld-reply-overlay ${className}`;
-    overlay.setAttribute("role", "dialog");
-    overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", ariaLabel);
     const close = document.createElement("button");
     close.type = "button";
@@ -4261,28 +4793,53 @@
     close.textContent = "✕";
     const content = document.createElement("div");
     content.className = "betterld-reply-overlay__content";
+    const modal = typeof overlay.showModal === "function";
     let closed = false;
-    const closeOverlay = () => {
-      if (closed) return;
-      closed = true;
-      document.removeEventListener("keydown", onKeydown, true);
-      overlay.remove();
-      if (opener && opener.isConnected) opener.focus();
-    };
+    // modal dialog 的 Esc 由浏览器派发给最上层这一个（下面的抽屉收不到），只有非 modal 的老路径要自己接。
     const onKeydown = (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       closeOverlay();
     };
+    const finishClose = () => {
+      // 幂等：close 事件与同步收尾路径可能都走到这里，remove/focus 只跑一次。
+      if (closed) return;
+      closed = true;
+      replyOverlays.delete(record);
+      document.removeEventListener("keydown", onKeydown, true);
+      overlay.remove();
+      if (opener && opener.isConnected) {
+        opener.focus();
+      }
+    };
+    // 幂等：Esc、点遮罩、宿主一起关闭等路径重复触发时只收一次；close 事件（modal 的 Esc 也会走到）统一收尾。
+    const closeOverlay = () => {
+      if (closed) return;
+      if (modal && overlay.open) {
+        overlay.close();
+        return;
+      }
+      overlay.removeAttribute("open");
+      finishClose();
+    };
+    const record = { overlay, owner, close: closeOverlay };
+    replyOverlays.add(record);
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay || event.target === content) closeOverlay();
     });
+    overlay.addEventListener("close", finishClose);
     close.addEventListener("click", closeOverlay);
-    document.addEventListener("keydown", onKeydown, true);
     overlay.append(close, content);
     document.body.append(overlay);
-    build(content, closeOverlay);
+    if (modal) {
+      overlay.showModal();
+    } else {
+      overlay.classList.add("betterld-reply-overlay--fallback");
+      overlay.setAttribute("open", "");
+      document.addEventListener("keydown", onKeydown, true);
+    }
+    build(content, closeOverlay, close);
     close.focus();
     return overlay;
   }
@@ -4331,7 +4888,7 @@
       clone.textContent = code.textContent;
       pre.append(clone);
       content.append(pre);
-    });
+    }, code.closest("dialog"));
   }
 
   // 高亮交给主世界桥接（页面全局没有 hljs）；pending 属性既是判重也是给桥接的选择器。
@@ -4390,22 +4947,22 @@
 
   function openReplyLightbox(anchor) {
     const source = anchor.querySelector("img");
-    openReplyOverlay(replyLightboxClassName, replyLightboxLabel, (content, close) => {
+    openReplyOverlay(replyLightboxClassName, replyLightboxLabel, (content, closeOverlay, closeButton) => {
       const image = document.createElement("img");
       image.className = "betterld-reply-lightbox__image";
       image.src = anchor.href;
       image.alt = (source && source.alt) || anchor.title || "";
       image.addEventListener("error", () => {
-        // 不静默：加载失败时用一行文本替换内容，浮层仍可关闭。
+        // 不静默：加载失败时用一行文本替换内容，浮层仍可关闭（焦点交给关闭按钮）。
         const failure = document.createElement("p");
         failure.className = "betterld-reply-lightbox__error";
         failure.setAttribute("role", "alert");
         failure.textContent = replyLightboxErrorText;
         content.replaceChildren(failure);
-        close.focus();
+        closeButton.focus();
       });
       content.replaceChildren(image);
-    });
+    }, anchor.closest("dialog"));
   }
 
   function enhanceLightboxes(root) {
@@ -5413,7 +5970,7 @@
           icon.src = replyTreeReactionIcon(tree, selected);
           icon.alt = "";
           like.querySelector("svg").replaceWith(icon);
-        } catch (error) {
+        } catch {
           like.append(createElement("span", "betterld-reply-tree__reaction-name", selected));
         }
       }
@@ -5849,7 +6406,6 @@
 
   // 必须在 href 变化判断之前：设置窗口关闭后 URL 没变，但排序要立刻落下去
   function checkRoute() {
-    syncTopicDrawerDocument();
     checkDailyWallpaper();
     recordVisitedTopic();
     syncReplyTree();
@@ -5938,6 +6494,8 @@
       const storedCooldown = Number(stored[config.topicRequestCooldownStorageKey]);
       if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) {
         state.metadataCooldownUntil = storedCooldown;
+        // 这一页从加载起就处在冷却里：照样排定到期重排，否则整页卡片会一直停在限速文案上。
+        scheduleExcerptThrottleRetry();
       }
       const activeSettings = await getActiveSettings(stored[config.storageKey]);
       applyVisualSettings(activeSettings);
@@ -6023,6 +6581,8 @@
   window.addEventListener("scroll", () => {
     updateListControlsScrollState();
     deferExcerptLoads();
+    state.excerptLastScrollAt = Date.now();
+    scheduleExcerptPrefetch();
   }, { passive: true });
   window.addEventListener("resize", resizeTopicDrawer);
   window.addEventListener("popstate", checkRoute);

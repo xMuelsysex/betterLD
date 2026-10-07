@@ -40,12 +40,27 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   excerptDwellMs: 400,
   // 滚动中不请求正文预览；页面停住这么久之后才为当时可见的卡片排队，一闪而过的卡片不占用站点请求额度。
   excerptScrollIdleMs: 500,
+  // 首屏最上面的几张卡几乎必然正在被阅读：卡片建好后不等滚动停住门，直接占用突发额度先发请求。
+  excerptPrimeCount: 2,
+  // 页面停住这么久、队列里又没有视口内的预览请求时，为视口下方一屏内的卡片提前排队（令牌桶有令牌才发）。
+  excerptPrefetchIdleMs: 2500,
+  excerptPrefetchCount: 2,
   excerptStoragePrefix: "betterld.excerpt.v1.",
   excerptCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
   excerptCacheMaxEntries: 500,
+  // storage.local 的总配额有限（Chrome/Firefox 默认 10MB，设置与用户壁纸的 data URL 也在这份配额里）：
+  // 正文缓存按「条数」与「字节」双重上限淘汰，且写入前先淘汰 —— 否则配额满时新条目一条都写不进去。
+  excerptCacheByteBudget: 3 * 1024 * 1024,
   excerptMaxCharacters: 2400,
+  // cooked 超过这个长度就不进 storage（避免膨胀）；该条目只存 markdown，抽屉会再请求一次拿完整正文。
+  excerptCookedStorageLimit: 32768,
+  // savedAt 比当前时间还靠后的条目按时钟不可信处理（允许这一点点时钟偏差）；
+  // 只要它不超前太多就仍然按正常时间判断 TTL。
+  excerptSavedAtSkewMs: 60 * 1000,
   excerptLoadingLabel: "正在读取正文预览…",
   excerptPlaceholder: "正文预览暂不可用",
+  // 站点在拦（Cloudflare 挑战/429）时正文预览被拒的提示：与抽屉共用同一份原因文案。
+  excerptThrottledLabel: "站点正在限制正文请求，稍后自动重试",
   excerptEmptyLabel: "正文为空",
   authorLoadingLabel: "作者信息加载中…",
   authorPlaceholder: "作者信息暂不可用",
@@ -54,8 +69,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestMaxPerWindow: 10,
   // 正文预览（每张卡一份）与回复加载分开配额：预览慢一点没关系，
   // 但预览不能占满队列、把正在阅读的回复拖住。
-  // 实测：同一 IP 以 2s 间隔单独打这批 URL，30 次/分钟连续 4 分钟不触发防护；
-  // 但短时间内的突发更容易触发，所以突发额度只留 2 张，之后按 4s 一张（15 次/分钟）匀速补。
+  // 实测：同一 IP 以 2s 间隔“单发”这些 URL，30 次/分钟连续 4 分钟不触发防护；
+  // 但页面加载时成串发（实测开头 15.6s 内 8 条 ≈ 31 次/分钟）会立刻撞 429 + Cloudflare 挑战，
+  // 之后连站点自己的分页也被挡 10 分钟。回到 4s 一张（15 次/分钟）在同一环境不触发。
+  // 所以突发额度只留 2 张，之后按 4s 一张匀速补。
   excerptRequestMinIntervalMs: 1500,
   excerptRequestBurst: 2,
   excerptRequestRefillMs: 4000,
@@ -145,8 +162,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicPreview: Object.freeze({
     aspectRatio: 4 / 3,
     viewportArea: 0.7,
-    marginPx: 16,
-    loadTimeoutMs: 8000
+    marginPx: 16
   }),
   storageKey: "betterld.settings",
   syncMetadataKey: "betterld.sync-meta",

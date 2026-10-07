@@ -263,6 +263,21 @@
     return typeof value === "string" ? value : "";
   }
 
+  // 原站模型里没有的字段一律留空，消费端按缺字段处理，不写占位假值。
+  function numberOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? Math.floor(number) : null;
+  }
+
+  function stringOrEmpty(value) {
+    return typeof value === "string" ? value : "";
+  }
+
+  function arrayOrEmpty(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
   function currentTopicListPayload() {
     const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
     const name = owner.lookup("service:router")?.currentRouteName;
@@ -274,14 +289,28 @@
     const users = Array.isArray(list?.users) ? list.users
       : Array.isArray(model?.users) ? model.users : [];
     return {
-      users: users.map((user) => ({ id: user.id, username: user.username })),
+      // 参与者头像要原样的 avatar_template（含 {size} 占位），消费端自己替换尺寸并校验同源。
+      users: users.map((user) => ({
+        id: user.id,
+        username: user.username,
+        avatar_template: stringOrEmpty(user.avatar_template ?? user.avatarTemplate)
+      })),
       topic_list: {
         topics: topics.map((topic) => ({
           id: String(topic.id),
           creator: topic.creator?.username || "",
-          posters: (Array.isArray(topic.posters) ? topic.posters : []).map((poster) => ({
-            user_id: poster.user_id ?? poster.userId
+          excerpt: stringOrEmpty(topic.excerpt),
+          posters: arrayOrEmpty(topic.posters).map((poster) => ({
+            user_id: poster.user_id ?? poster.userId,
+            description: stringOrEmpty(poster.description)
           })),
+          posts_count: numberOrNull(topic.posts_count ?? topic.postsCount),
+          reply_count: numberOrNull(topic.reply_count ?? topic.replyCount),
+          like_count: numberOrNull(topic.like_count ?? topic.likeCount),
+          views: numberOrNull(topic.views),
+          image_url: stringOrEmpty(topic.image_url ?? topic.imageUrl),
+          thumbnails: arrayOrEmpty(topic.thumbnails),
+          tags: arrayOrEmpty(topic.tags).filter((tag) => typeof tag === "string"),
           last_posted_at: isoOrEmpty(topic.last_posted_at ?? topic.lastPostedAt),
           bumped_at: isoOrEmpty(topic.bumped_at ?? topic.bumpedAt),
           created_at: isoOrEmpty(topic.created_at ?? topic.createdAt)

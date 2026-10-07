@@ -39,6 +39,8 @@
   --betterld-shadow-active: 0 2px 6px rgb(31 29 35 / 0.10);
   --betterld-shadow-level-2: 0 2px 6px rgb(31 29 35 / 0.10), 0 12px 28px rgb(31 29 35 / 0.16);
   --betterld-shadow-level-2-hover: 0 4px 10px rgb(31 29 35 / 0.12), 0 18px 36px rgb(31 29 35 / 0.20);
+  /* 模态层（原帖预览抽屉、用户卡）比 level-2 再抬一级：投影更远、更实。 */
+  --betterld-shadow-level-3: 0 4px 12px rgb(31 29 35 / 0.14), 0 18px 40px rgb(31 29 35 / 0.22);
   --betterld-shadow-raised: 0 8px 24px rgb(31 29 35 / 0.20);
   --betterld-default-wallpaper: radial-gradient(circle at 18% 12%, rgb(143 113 206 / 0.42), transparent 32%), radial-gradient(circle at 86% 84%, rgb(87 145 194 / 0.36), transparent 36%), linear-gradient(135deg, #d9d2ed 0%, #e9eaf7 48%, #c8dce9 100%);
 }
@@ -61,6 +63,7 @@ html[data-betterld-mode="dark"] {
   --betterld-shadow-active: 0 2px 6px rgb(0 0 0 / 0.32);
   --betterld-shadow-level-2: 0 2px 6px rgb(0 0 0 / 0.32), 0 12px 28px rgb(0 0 0 / 0.28);
   --betterld-shadow-level-2-hover: 0 4px 10px rgb(0 0 0 / 0.36), 0 18px 36px rgb(0 0 0 / 0.32);
+  --betterld-shadow-level-3: 0 4px 12px rgb(0 0 0 / 0.40), 0 18px 40px rgb(0 0 0 / 0.44);
   --betterld-shadow-raised: 0 8px 24px rgb(0 0 0 / 0.40);
   --betterld-default-wallpaper: radial-gradient(circle at 16% 12%, rgb(112 76 174 / 0.62), transparent 34%), radial-gradient(circle at 86% 84%, rgb(33 104 153 / 0.52), transparent 38%), linear-gradient(135deg, #19132e 0%, #171b31 50%, #102733 100%);
 }
@@ -2868,18 +2871,176 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 
 .betterld-topic-drawer[open] {
   display: grid;
+  /* 标题的 nowrap（保留省略号语义）会把隐式列轨道的 min-content 顶到约 690px；
+     列宽必须能收缩到容器宽度，否则窄视口下抽屉横向溢出、右侧的关闭按钮被 overflow:hidden 裁掉。 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
+  /* max-height:none 关掉了 dialog 的 UA 夹取；这里给未设 inline 尺寸的回退上限，
+     让内容经 __body 内部滚动可达。resizeTopicDrawer 的真实高度 ≤ 视口高−2×marginPx（config 里 marginPx=16），
+     恒小于该上限，所以正常路径不受影响；用视口百分比当上限会反夹住真实路径。 */
+  max-height: 100vh;
 }
 
-.betterld-topic-drawer__frame {
-  width: 100%;
-  height: 100%;
+/* 抽屉正文是站内 DOM（cooked / Markdown）而不是整页 iframe：body 负责滚动，内容元素按原站语义排版。 */
+.betterld-topic-drawer__body {
   min-height: 0;
-  max-height: none !important;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.16);
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-background-rgb));
+  color: var(--betterld-on-surface);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.betterld-topic-drawer__body:focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: var(--betterld-focus-offset);
+}
+
+/* 作者、活动时间与统计来自列表载荷；没有对应数据时整块不渲染。 */
+.betterld-topic-drawer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 14px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid rgb(var(--betterld-outline-rgb) / 0.18);
+  color: var(--betterld-on-surface-variant);
+  font-size: 13px;
+}
+
+.betterld-topic-drawer__meta[hidden] {
+  display: none !important;
+}
+
+.betterld-topic-drawer__author {
+  color: var(--betterld-on-surface);
+  font-weight: 700;
+}
+
+.betterld-topic-drawer__stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.betterld-topic-drawer__stat {
+  display: inline-flex;
+  align-items: center;
+}
+
+html[data-betterld-show-topic-author="false"] .betterld-topic-drawer__author,
+html[data-betterld-show-topic-meta="false"] .betterld-topic-drawer__time,
+html[data-betterld-show-topic-meta="false"] .betterld-topic-drawer__stats {
+  display: none;
+}
+
+html[data-betterld-show-topic-replies="false"] .betterld-topic-drawer__stat[data-betterld-stat="replies"],
+html[data-betterld-show-topic-likes="false"] .betterld-topic-drawer__stat[data-betterld-stat="likes"],
+html[data-betterld-show-topic-views="false"] .betterld-topic-drawer__stat[data-betterld-stat="views"] {
+  display: none;
+}
+
+.betterld-topic-drawer__cooked > :first-child {
+  margin-top: 0;
+}
+
+.betterld-topic-drawer__cooked > :last-child {
+  margin-bottom: 0;
+}
+
+.betterld-topic-drawer__cooked :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.2em 0 0.6em;
+  color: var(--betterld-on-surface);
+  line-height: 1.35;
+}
+
+.betterld-topic-drawer__cooked p {
+  margin: 0 0 0.8em;
+}
+
+.betterld-topic-drawer__cooked :is(ul, ol) {
+  margin: 0 0 0.8em;
+  padding-inline-start: 1.6em;
+}
+
+.betterld-topic-drawer__cooked li + li {
+  margin-top: 0.2em;
+}
+
+.betterld-topic-drawer__cooked blockquote {
+  margin: 0 0 0.8em;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--betterld-primary);
+  border-radius: 0 var(--betterld-radius-sm) var(--betterld-radius-sm) 0;
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+
+.betterld-topic-drawer__cooked :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgb(var(--betterld-outline-rgb) / 0.14);
+  color: var(--betterld-on-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.betterld-topic-drawer__cooked pre {
+  max-width: 100%;
+  margin: 0 0 0.8em;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(19 27 43 / 0.92);
+  color: #e5edf8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.betterld-topic-drawer__cooked pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+}
+
+.betterld-topic-drawer__cooked a {
+  color: var(--betterld-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.betterld-topic-drawer__cooked img,
+.betterld-topic-drawer__cooked video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* cooked 里的嵌入（播放器/地图等）可能自带上千像素宽度与高度，不限制会撑出横向滚动。
+   只夹宽与绝对高度、不按比例缩放：宽度必须夹住（否则撑破抽屉）；高度按原站给的值渲染，
+   嵌入自身比例失真与否由原站属性决定，这里不代它做 aspect-ratio 换算。 */
+.betterld-topic-drawer__cooked iframe {
+  max-width: 100%;
+  max-height: 70vh;
   border: 0;
-  border-radius: 12px;
-  background: var(--betterld-background);
+  border-radius: 8px;
+}
+
+.betterld-topic-drawer__cooked table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
 }
 
 .betterld-topic-drawer__header {
@@ -3510,6 +3671,10 @@ html[data-betterld-navigation-counts="false"] body.betterld-shell #navigation-ba
     padding: 12px;
     border-radius: 20px;
   }
+
+  .betterld-topic-drawer__body {
+    padding: 12px;
+  }
 }
 
 body.betterld-unmanaged-page #main-container,
@@ -3533,7 +3698,7 @@ html[data-betterld-font-scope="managed"] body:is(.betterld-home, .betterld-topic
   font-family: var(--betterld-font-family, inherit);
 }
 
-html[data-betterld-remove-punctuation-indent="true"] :is(.betterld-topic-card, .betterld-topic-drawer) :is(.betterld-topic-card__title, .betterld-topic-card__excerpt, .betterld-topic-drawer__excerpt) {
+html[data-betterld-remove-punctuation-indent="true"] :is(.betterld-topic-card, .betterld-topic-drawer) :is(.betterld-topic-card__title, .betterld-topic-card__excerpt, .betterld-topic-drawer__cooked) {
   text-indent: 0 !important;
 }
 
@@ -4449,12 +4614,12 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 /* 长引用折叠（原站折叠行为未能复刻，这里是自建方案）：高度超过
    betterld.config.js 的 replyTreeQuoteCollapseHeightPx 才由内容脚本补按钮。 */
-.betterld-reply-tree__cooked aside.quote .quote-controls {
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote .quote-controls {
   float: right;
   margin-left: 8px;
 }
 
-.betterld-reply-tree__cooked aside.quote .quote-toggle {
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote .quote-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4469,19 +4634,19 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   opacity: 0.7;
 }
 
-.betterld-reply-tree__cooked aside.quote .quote-toggle:hover,
-.betterld-reply-tree__cooked aside.quote .quote-toggle:focus-visible {
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote .quote-toggle:hover,
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote .quote-toggle:focus-visible {
   opacity: 1;
   background: color-mix(in srgb, var(--betterld-on-surface) 10%, transparent);
 }
 
-.betterld-reply-tree__cooked aside.quote[data-betterld-quote-collapsed="true"] > blockquote {
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote[data-betterld-quote-collapsed="true"] > blockquote {
   position: relative;
   max-height: var(--betterld-reply-quote-collapse-height, 420px);
   overflow: hidden;
 }
 
-.betterld-reply-tree__cooked aside.quote[data-betterld-quote-collapsed="true"] > blockquote::after {
+:is(.betterld-reply-tree__cooked, .betterld-topic-drawer__cooked) aside.quote[data-betterld-quote-collapsed="true"] > blockquote::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
@@ -4924,15 +5089,31 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   }
 }
 
-/* 回复树 · 浮层（代码全屏 / 图片灯箱共用）：挂在 body 上，样式作用域独立于树 */
+/* 回复树 · 浮层（代码全屏 / 图片灯箱共用）：浮层自身是 <dialog>，showModal() 后位于抽屉（同为 modal dialog）之上；遮罩用 ::backdrop。 */
 .betterld-reply-overlay {
   position: fixed;
   inset: 0;
+  /* dialog 的 UA 默认是 fit-content + margin:auto，这里必须显式还原成「由 inset 决定的整屏盒子」 */
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: none;
+  background: transparent;
   z-index: 2147483000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+}
+
+.betterld-reply-overlay::backdrop {
+  background: rgb(0 0 0 / 0.66);
+}
+
+/* showModal 不可用（老 Firefox，没有 top layer）：遮罩回到浮层自身。 */
+.betterld-reply-overlay--fallback {
   background: rgb(0 0 0 / 0.66);
 }
 
