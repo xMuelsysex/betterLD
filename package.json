@@ -1,6 +1,6 @@
 {
   "name": "betterld",
-  "version": "0.1.51",
+  "version": "0.1.52",
   "private": true,
   "description": "A dependency-free Manifest V3 browser extension for LinuxDo.",
   "scripts": {

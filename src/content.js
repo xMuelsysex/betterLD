@@ -3372,8 +3372,8 @@
   }
 
   // 站点在拦时正文预览请求被拒（RateLimitError）：冷却期间不发任何新请求，
-  // 到冷却到期时刻把当时视口内仍未出正文的卡重排一次。
-  // 被拒过的卡走 scheduleTopicMetadataRecovery 的同一份重试计数，不会无限重试。
+  // 到冷却到期时刻把当时视口内与视口下方一屏的卡重排一次；这条重排不走普通失败的重试配额，
+  // 每轮冷却只排一次，其余卡滚动进视口时由观察者照常加载，不会无限重试。
   function scheduleExcerptThrottleRetry() {
     if (state.excerptThrottleRetryTimer) {
       return;
@@ -3392,10 +3392,8 @@
   }
 
   // 冷却到期：把因限速停在限速/失败文案上的卡整批复位，并重排一遍。
-  // 限速不是普通失败：失败状态与失败缓存一并清掉，也不受 topicRequestRecoveryCount 配额限制
-  // （否则一张在限速前已经普通失败过一次的卡会永久停在限速文案上）；每轮冷却只重排一次，天然有节流。
-  // 立即排队的只有视口内与视口下方一屏（与空闲预取同一范围）的卡，其余只复位状态，
-  // 滚动进视口时由 observeExcerpt 照常加载 —— 冷却结束后不会一次性把整页请求打给站点。
+  // 限速不是普通失败：只清掉冷却期间留在缓存里的失败条目，正文复位也不受 topicRequestRecoveryCount 配额限制；
+  // 每轮冷却只重排一次，天然有节流。立即排队的只有视口内与视口下方一屏，其余只复位状态并重新登记视口观察。
   function retryThrottledExcerpts() {
     // 冷却被延长（又撞了一次挑战），或定时器比到期时刻早了一拍落地（Date.now() 还没跨过到期时刻）：
     // 都不在冷却里重发，也不丢掉这次重排 —— 按剩余冷却（至少 1ms）再排一次。
@@ -3408,7 +3406,8 @@
       return;
     }
     managedCards().forEach((card) => {
-      if (!excerptLoadable(card)) {
+      // 搜索卡永不被纳管（excerptLoadable 里唯一与滚动位置无关的一条）。
+      if (card.dataset.betterldSearchResult === "true") {
         return;
       }
       const excerptState = card.dataset.excerptState;
@@ -3419,21 +3418,40 @@
       if (!excerptRetry && !excerptUpgrade && !authorFailed) {
         return;
       }
-      // 限速不是普通失败：冷却到期是一轮全新机会，把普通失败的重试配额一起清零。
-      // 否则一张在限速前普通失败过的卡（配额 topicRequestRecoveryCount=1 已耗尽）到期后
-      // 既可能被 scheduleTopicMetadataRecovery 挡在门外，也会在下次普通失败时直接停在占位/限速文案上。
-      delete card.dataset.topicRecoveryCount;
-      // 正文已经就绪的卡（含只有作者失败）不能被打回加载中：失败缓存只在正文要重取时清。
-      if (excerptRetry) {
+      // 冷却期间被拒的请求会在缓存里留下失败条目，不删的话重排会被缓存立刻拒绝；
+      // ready 与 pending 条目保留（前者零请求命中，后者请求还在飞，删了会重复发）。
+      if (state.excerptCache.get(card.dataset.topicId)?.state === "failed") {
         state.excerptCache.delete(card.dataset.topicId);
+      }
+      // 正文已经就绪的卡（含只有作者失败）不能被打回加载中：正文复位只对没拿到正文的 failed/loading 执行。
+      if (excerptRetry) {
         setExcerpt(card, config.excerptLoadingLabel, "loading");
       }
       if (authorFailed) {
         setAuthor(card, config.authorLoadingLabel, "loading");
       }
+      if (!excerptLoadable(card)) {
+        // 被过滤掉的卡（隐藏 / 过滤待定）只复位状态：不排队、不登记观察。
+        // 复位必须发生在这一层之前，否则冷却期间的 failed 会留在卡上，过滤解除时 observeExcerpt 不认 failed，卡永久停在文案上。
+        // 待定筛选（作者规则命中但作者未知）必须有作者才能判定可见性：这里只把刚复位的失败作者放回作者队列，
+        // 正文、搜索卡、无作者失败的卡与已确定 hidden 的卡都不受影响。
+        if (authorFailed && card.dataset.filterState === "pending") {
+          loadAuthor(card);
+        }
+        return;
+      }
       const rect = card.getBoundingClientRect();
       if (rect.bottom <= 0 || rect.top >= window.innerHeight * 2) {
+        // 加载完成后观察会被撤掉，不复登记的话这些卡滚回视口也不会再加载；这里只登记观察，不发请求。
+        // 作者失败的卡正文可能已经就绪（excerptPending 为假），作者恢复同样只能靠观察者：滚回视口时由 scheduleExcerpt 补发。
+        if (excerptPending(card) || card.dataset.authorState === "loading") {
+          state.excerptObserver?.observe(card);
+        }
         return;
+      }
+      // 下一屏的卡不在视口内，出队守卫只认预取候选，不标标记会被当成过期请求中止（标记由 finally 摘掉）。
+      if (rect.top >= window.innerHeight && excerptPending(card)) {
+        card.dataset.betterldExcerptPrefetch = "true";
       }
       // 两个加载函数自带状态守卫（作者只在 loading、正文只在 loading/list），不需要在这里再判一次。
       loadAuthor(card);
@@ -3495,9 +3513,12 @@
           return;
         }
         if (error.name === "RateLimitError" || state.metadataCooldownUntil > Date.now()) {
-          // 站点在拦：冷却期间不发新请求，显示真实原因，并安排在冷却到期时重排一次。
+          // 站点在拦：冷却期间不发新请求，并安排在冷却到期时重排一次。
           // 触发挑战的那一张卡的错误来自请求本身（不是队列拒绝），用冷却状态一并识别。
-          setExcerpt(card, config.excerptThrottledLabel, "failed");
+          // 已有列表摘要的卡保留自己的文字与状态：升级失败不该把看得见的摘要换成限速文案。
+          if (card.dataset.excerptState !== "list") {
+            setExcerpt(card, config.excerptThrottledLabel, "failed");
+          }
           scheduleExcerptThrottleRetry();
           return;
         }
@@ -3617,13 +3638,17 @@
     });
   }
 
+  // 正文待补（loading/list）或作者仍在加载的卡都还需要一次请求：
+  // 作者恢复没有独立的观察通路，靠这条视口路径在滚回时补发（两个加载函数各自守着自己的状态）。
   function scheduleExcerpt(card) {
-    if (card.dataset.betterldExcerptTimer || !excerptPending(card)) {
+    if (card.dataset.betterldExcerptTimer
+      || (!excerptPending(card) && card.dataset.authorState !== "loading")) {
       return;
     }
     card.dataset.betterldExcerptTimer = String(window.setTimeout(() => {
       delete card.dataset.betterldExcerptTimer;
       state.excerptVisible.delete(card);
+      loadAuthor(card);
       loadExcerpt(card);
       state.excerptObserver?.unobserve(card);
     }, config.excerptDwellMs));
