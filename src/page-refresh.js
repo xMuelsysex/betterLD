@@ -299,6 +299,7 @@
         topics: topics.map((topic) => ({
           id: String(topic.id),
           creator: topic.creator?.username || "",
+          creator_avatar_template: stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate),
           excerpt: stringOrEmpty(topic.excerpt),
           posters: arrayOrEmpty(topic.posters).map((poster) => ({
             user_id: poster.user_id ?? poster.userId,

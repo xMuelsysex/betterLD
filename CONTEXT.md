@@ -11,23 +11,20 @@
 - **Rules/Invariants**：两种浏览器的桌面端都属于首版交付范围；移动端不属于首版精确适配范围。
 
 ### LinuxDo Homepage
-- **Definition**：用户打开 LinuxDo 后看到的论坛首页信息流区域，是首版改造的主要页面。
-- **Rules/Invariants**：首页主题条目整体改造成响应式卡片网格；其他页面不自动视为首版同等范围。
+- **Definition**：论坛首页及最新、分类、标签等主题列表。
+- **Rules/Invariants**：保留 Discourse 原生主题行、排序、分页和链接；在行内补充紧凑信息栏，用 Material 3 表面和状态层美化。
 
 ### Homepage Topic Card
-- **Definition**：首页信息流中展示一个帖子的可视化条目，包含内容预览、作者身份和帖子归属信息。
-- **Rules/Invariants**：卡片保留帖子作者的 ID 和头像作为身份识别信息；回复数、最后活动时间等现有元信息以紧凑形式保留。
-- **Rules/Invariants**：作者、活动时间、回复 / 点赞 / 浏览统计与参与者头像都取自站点自己已下载的列表数据（首屏预载 `#data-preloaded`，其余读原站当前列表路由的模型），卡片创建即可见，不为这些信息发 `/t/*.json`，只有列表数据覆盖不到的主题才退回逐主题请求；列表载荷缺字段时该项不渲染，不写 0 或占位文字。
-- **Rules/Invariants**：卡片内容的显隐由各自独立的开关控制（头像、作者、分类、摘要、标签、元信息、未读、置顶、已看），其中元信息是总开关，
-  回复数、点赞数、浏览数与活动时间是它内部的细分开关；细分开关只隐藏对应片段（`data-betterld-meta-part`、`data-betterld-stat`），不改变请求，也不制造替代数值；关闭摘要开关后列表页不再发任何正文预览请求，关闭元信息开关后回复数、活动时间与统计隐藏（统计与参与者的填充要求摘要或元信息至少一个开关为真）。
+- **Definition**：自 0.1.53 起首页阅读卡已停用，主题列表改用 `.betterld-topic-row` 增强原生行。
+- **Rules/Invariants**：作者、头像、活动时间、回复/点赞/浏览与参与者都来自原站预载或当前路由模型，不发逐主题 JSON。缺字段保持缺失，不写占位、不自动请求。回复数按原站总楼数减首帖。
+- **Rules/Invariants**：分类、标签、未读与置顶保留原生链接/控件；显隐开关与三条字号设置对列表生效，已看只来自本机访问记录。
 
 ### Cover Content Area
-- **Definition**：参考图中原本展示视频封面的上方大面积内容区域。
-- **Rules/Invariants**：首版将该区域用于展示帖子标题和开头正文预览，而不是视频封面。
+- **Definition**：旧首页卡片封面/正文区域已废弃；原生行只展示主题信息。
 
 ### Topic Title and Opening Excerpt
-- **Definition**：帖子标题与帖子正文开头的一小段内容，作为首页卡片的主要预览内容。
-- **Rules/Invariants**：标题和正文预览共同替代封面内容；正文预览是每个主题一次的首帖正文请求，排在共享队列里按阅读位置取（悬停、聚焦或抽屉对应的卡片最优先，视口内越靠上越先，视口外不排队），并按照预览区域的实际高度截断（上限 2400 字符）。
+- **Definition**：首页只保留原生主题标题。搜索卡摘要直接来自原站搜索载荷。
+- **Rules/Invariants**：首页不自动读取首帖，无滚动/停顿/悬停正文请求与自动重试。
 
 ### Author Identity
 - **Definition**：帖子的用户 ID 与头像组合，用于识别发帖人。
@@ -36,29 +33,19 @@
 - **Rules/Invariants**：作者链接的点击不进入主题导航（不触发卡片的打开方式设置），也不改变卡片其余区域的原有链接行为。
 
 ### Adaptive Card Grid
-- **Definition**：首页阅读卡按照可用桌面宽度自动排列的网格，网格最小列宽由设置 `cardMinSize` 控制；网格相关设置同样作用于阅读卡：`gridMode`（自适应列数，或按断点使用固定列数）、`gridGap`、`cardSideGutter`。
-- **Rules/Invariants**：网格优先保持卡片可读性和稳定比例，再根据可用宽度调整列数。
-- **Rules/Invariants**：`cardMinSize` 有三处耦合：① 网格 track 下限（阅读网格与搜索网格的 `minmax` 下限都用它）；② 基类 `.betterld-topic-card` 的 `min-height` 回退（默认 280px，阅读卡自身覆盖为 210px）；③ 浏览器不支持容器查询单位时缩放单位的回退值（`ratioPerWidth × cardMinSize`，不经过上限）。
-- **Rules/Invariants**：阅读卡内部尺寸（标题 / 作者 / 元信息字号、内边距与间距、头像、徽标、菜单定位与触发按钮几何）按卡片自身内容盒宽度整体缩放（卡片 `container-type: inline-size`）：缩放单位 `--betterld-card-unit = min(0.0459 × 卡片内容盒宽, 22px)`，只有上限、无下限：卡片变窄时内容按比例缩小（现有卡宽下内容盒约 305px ≈ 14px，与改前固定尺寸逐项一致），每个尺寸 = 单位 × N（N = 改前固定 px ÷ 14）；比例与上限集中在 `betterld.config.js` 的 `cardScale`（`ratioPerWidth` / `maxPx`），经 `--betterld-card-unit-ratio`、`--betterld-card-unit-max` 注入。
-- **Rules/Invariants**（例外：窄屏横幅分支）：`@media (max-width: 900px)` 下阅读卡高度固定为 `cardScale.narrowHeightPx`（经 `--betterld-reading-narrow-height` 注入，默认 250px）；内部单位 = `min(0.0459 × 卡片内容盒宽, 14px)`，上限为 `--betterld-reading-narrow-unit`（`cardScale.narrowUnitPx`，默认 14px = 改前该分支字号），卡片更宽也不超过 14px、更窄时同样按比例缩小。该媒体块里的单列网格只对 `gridMode=auto` 成立，`gridMode=fixed` 与搜索页在该断点仍可能多列、卡片可宽至约 860px，但高度固定。
-- **Rules/Invariants**（例外：菜单）：阅读卡的菜单定位与触发按钮随卡缩放——top / right 0.857 单位、触发按钮宽高 2.571 单位、字号 1.571 单位；菜单弹层（panel / item）是浮层，保持固定 Material 3 尺寸（min-width 176px、item 最小高度 36px）。
-- **Rules/Invariants**：标题 / 作者 / 元信息三条字号设置作用于阅读卡，在缩放单位基础上乘档位系数：标题 响应式 1.0（默认，不写规则）/ 小 0.86 / 标准 1.14 / 大 1.43；作者 小 0.857 / 标准 1.0（默认）/ 大 1.143；元信息 小 0.909 / 标准 1.0（默认）/ 大 1.091。
+- **Definition**：网格、卡宽与缩放参数只用于可选的搜索结果卡片。
+- **Rules/Invariants**：首页不再生成网格；搜索卡现有缩放尺寸保留，`gridMode/cardMinSize/gridGap/cardSideGutter/showTopicExcerpt` 设置集中在搜索分类。
 
 ### Excerpt Failure State
-- **Definition**：首帖正文无法读取时，首页卡片中对正文预览区域的可见替代状态。
-- **Rules/Invariants**：保留帖子标题、作者和分区，并在正文区域展示占位状态；单个帖子失败不影响首页其他卡片。
-- **Rules/Invariants**：撞上站点限流（429）或 Cloudflare 挑战时正文预览请求整体停发一段时间（挑战状态 10 分钟，限流按 `Retry-After`、上限同为 10 分钟），冷却截止时间写进 `storage.local`，同一浏览器里换页或重新打开页面都接着等。
-- **Rules/Invariants**：限速等待期间保留已有正文与列表摘要；没有内容时显示 `站点正在限制正文请求，稍后自动重试`；等待结束后自动继续加载，优先当前可见与下一屏，其他卡滚动进入可见范围时加载；与普通读取失败的重试次数独立。
+- **Definition**：首页已删除自动摘要与作者回退请求、缓存写入、冷却后重排。
+- **Rules/Invariants**：树状回复等必要请求仍保留原站挑战/限速的跨页面冷却，不与列表元信息读取关联。旧摘要本机缓存不再读写，也不主动删除用户存储。
 
 ### Card Navigation
-- **Definition**：用户通过首页主题卡片进入对应原帖的行为。
-- **Rules/Invariants**：整张卡片沿用原帖链接习惯，并保留右键、Ctrl/Cmd 点击和键盘新标签页等浏览器原生操作。
-- **Rules/Invariants**：打开方式是一套共用取值，同时作用于主题卡片、主题导航与搜索链接：当前标签页、新标签页、后台标签页，
-  以及两个条件取值（首页外开新标签页 / 仅首页开新标签页）；修饰键点击一律交回浏览器原生行为，取值解析只在 `linkOpenBehavior` 一处。
+- **Definition**：原生标题及搜索卡保留浏览器修饰键、右键与键盘语义。
+- **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；列表提供独立「预览」按钮和菜单。手动网页预览只设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 呈现真实原站网页，不在里面再创建回复树或自动列表增强。
 
 ### Section Level
-- **Definition**：帖子所属的一级分区名称，在作者 ID 下方以使用分区原色的 Material 3 风格 Chip 展示为帖子归属标识。
-- **Rules/Invariants**：首版将参考图中原有的辅助标签位置改为展示一级分区名称；不把用户 Trust Level 当作分区信息。
+- **Definition**：保留原站分类色、分类/标签链接与主题等级；不将 Trust Level 当作分区。
 
 ### Visual Enhancement
 - **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次和氛围的效果集合。
@@ -83,22 +70,18 @@
 - **Rules/Invariants**：真实 linux.do 是所有页面（列表、主题详情、用户、分类、标签、搜索等）上改造效果的验收基准，不用静态页面代替；betterLD 在真实页面上按页面类型启用对应的页面级能力，壳层视觉则全页面生效，不因离开首页而恢复站点原生外观。
 
 ### Reading Topic Card
-- **Definition**：首页主题卡片默认且唯一的 betterLD 展示形式，以略长的桌面端圆角矩形集中呈现标题、作者、头像、标签、Markdown 正文预览、互动数据和详情入口。
-- **Rules/Invariants**：常规视口下为 1:√2 竖版卡（宽高比 0.7071 / 1），内部尺寸按卡片内容盒宽度整体缩放（缩放单位见 Adaptive Card Grid）；≤900px 视口走高度固定 250px 的横幅分支，使用该分支的上限单位（`--betterld-reading-narrow-unit`，卡片更窄时同样按比例缩小）。
-- **Rules/Invariants**：它与原生主题列表共享帖子语义、作者身份和原帖导航；`topicListLayoutMode` 的另一个取值是原生列表（`native`），不再提供其它卡片形式；新安装或恢复默认时使用此形式。
+- **Definition**：首页阅读卡已废弃；搜索结果可继续选择卡片形式，仅消费搜索结果自身的作者与摘要。
 
 ### Markdown Opening Preview
-- **Definition**：将主题首帖开头按 Markdown 语义呈现的卡片正文预览，保留段落、强调、链接、列表、引用和代码等内容层次。
-- **Rules/Invariants**：核心范围包含标题、段落、加粗、斜体、链接、列表、引用、行内代码和围栏代码；预览服务于阅读和识别主题，不改变原帖内容；无法读取正文时保留标题、作者和分区信息，并展示可见占位状态。
-- **Rules/Invariants**：正文与抽屉共用同一份本机缓存：每个主题一次请求，条目同时保存原站 `cooked` 与 Markdown，保留 7 天、最多 500 条；`cooked` 超过 32768 字符的条目不落盘、只留 Markdown 文本，抽屉对此退回 Markdown 渲染。
+- **Definition**：首页已停用首帖 Markdown 预览。手动预览以真实网页为权威；Markdown 渲染器留给项目既有使用路径。
 
 ### Card Presentation Style
-- **Definition**：用户为首页主题信息流选择的呈现方式，对应设置 `topicListLayoutMode`，枚举只有两个值：`reading`（Reading Topic Card）与 `native`（原生主题列表）。
-- **Rules/Invariants**：新安装或恢复默认时选择 `reading`；切换呈现方式只改变布局与视觉层次，不改变主题数据、互动语义、链接行为或原生列表恢复能力；互动数据缺失时不制造替代数值。
+- **Definition**：`topicListLayoutMode` 只允许 `native`，旧 `reading` 设置读入后归一为 `native`。
+- **Rules/Invariants**：不再提供首页布局切换按钮或下拉；首页采用 Material 3 原生列表。
 
 ### Incremental Topic Grid Update
-- **Definition**：卡片网格跟随原站主题列表变化的方式：网格顺序镜像原站列表，同步时复用已有卡片节点，不重建整张网格。
-- **Rules/Invariants**：网格顺序与原站主题列表一致；已渲染的卡片在同步中沿用同一节点（正文预览不重新加载，列表元信息按当前列表数据重填），只按原站顺序移动位置，只有未知主题才新建卡片；主题过滤规则对新卡与首批卡片一致生效；刷新入口是站点「查看 N 个新的或更新的话题」提示条（用户点击）以及操作栏刷新按钮与 `refreshTopics` 快捷键（触发同一次合并），刷新不重载页面；只有网格尚不存在、卡片呈现方式变更或进入新的主题列表时才重建整张网格。
+- **Definition**：主题行增量同步由 Discourse 管理，betterLD 幂等追加信息栏；搜索卡沿用既有增量网格。
+- **Rules/Invariants**：原生模型刷新后重读数据、更新信息与过滤。插件信息栏变更不触发源列表同步，原站新增/重排/标题更新仍被观察；主题页标题与树在可用内容区域同宽居中，并在右侧保留时间轴空间。
 
 ### Settings Window
 - **Definition**：用户在 LinuxDo 页面上打开的 betterLD 设置界面，覆盖当前页面并集中呈现全部设置分类。
@@ -115,8 +98,7 @@
 ### Immediate Apply
 - **Definition**：用户调整设置后立即作用于当前页面并持久化的生效方式。
 - **Rules/Invariants**：任何设置项被调整后立即成为当前生效值，设置窗口不提供提交动作；破坏性操作（恢复默认、导入、清空搜索历史）必须保留独立确认；界面必须让「改动已生效」可见。
-- **Rules/Invariants**：页面内的即时入口（浮动操作栏的卡片样式切换按钮、搜索历史面板）只写同一份设置或同一份本机数据，不引入第二套状态；
-  样式切换的取值顺序由 `config.settingsEnums.topicListLayoutMode` 决定，权威取值始终是 `topicListLayoutMode` 本身。
+- **Rules/Invariants**：页面内即时入口只写同一份设置或本机数据，不引入第二套状态。
 
 ### Settings Search
 - **Definition**：在设置窗口内按名称或关键词定位设置项的能力。

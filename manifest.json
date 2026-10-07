@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.52",
-  "description": "将 LinuxDo 首页主题信息流转换为可读的 Material 3 风格卡片。",
+  "version": "0.1.53",
+  "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
   "permissions": ["storage"],
   "optional_host_permissions": [
     "https://*/*",

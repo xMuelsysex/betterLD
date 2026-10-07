@@ -12,7 +12,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 
 - `manifest.json`：Chrome / Firefox 共用的 Manifest V3 配置。
 - `betterld.config.js`：首版运行参数与设置默认值的唯一参数文件。
-- `src/content.js`：LinuxDo 首页路由识别、主题卡片转换、首帖摘要加载和视觉设置应用。
+- `src/content.js`：原生主题行增强、搜索卡、真实网页预览、树状回复和视觉设置应用。
 - `src/content.css`：Material 3 风格 Token、卡片网格和背景效果。
 - `src/options.html`、`src/options.js`、`src/options.css`：扩展设置页与工具栏弹窗。
 
@@ -32,3 +32,4 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - LinuxDo 原有 DOM 只做精确覆盖和可恢复替换；插件自有设置 UI 保持独立。
 - 运行参数集中维护在 `betterld.config.js`，不通过环境变量注入。
 - 不新增测试框架；行为验证使用语法检查、配置解析和浏览器加载检查。
+- 自 0.1.53 起首页阅读卡与自动正文请求废弃；元信息只读原站预载/模型，缺字段不补发逐主题请求。原生行与搜索卡共用主题操作和筛选；网格参数仅用于搜索卡。原帖预览由用户手动打开同站真实网页 iframe，关闭卸载。

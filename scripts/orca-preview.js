@@ -589,36 +589,9 @@ function buildInjection(port) {
   }
   globalThis.__betterldPreviewInjected = { at: Date.now() };
 
-  const injectPreviewFrame = (frame) => {
-    const frameDocument = frame.contentDocument;
-    const frameWindow = frame.contentWindow;
-    if (!frameDocument?.head || !frameWindow || !["linux.do", "www.linux.do"].includes(frameDocument.location.hostname)
-      || frameWindow.__betterldContentScriptActive) return;
-    const nonceElement = frameDocument.querySelector("script[nonce]");
-    const frameNonce = nonceElement?.nonce || nonceElement?.getAttribute("nonce");
-    if (!frameNonce) throw new Error("topic preview CSP nonce is unavailable");
-    frameWindow.chrome = api;
-    runScript(configCode, frameDocument, frameNonce);
-    runScript(settingsCode, frameDocument, frameNonce);
-    runScript(markdownCode, frameDocument, frameNonce);
-    injectStyle(frameDocument, frameNonce);
-    runScript(contentCode, frameDocument, frameNonce);
-    if (!frameWindow.__betterldContentScriptActive) throw new Error("topic preview content script did not initialize");
-    frameWindow.__betterldPreviewInjected = { at: Date.now() };
-  };
-  const attachPreviewFrame = () => {
-    const frame = document.querySelector(".betterld-topic-drawer__frame");
-    if (!frame) return;
-    frameObserver.disconnect();
-    frame.addEventListener("load", () => injectPreviewFrame(frame));
-    injectPreviewFrame(frame);
-  };
-  const frameObserver = new MutationObserver(attachPreviewFrame);
-  frameObserver.observe(document.body, { childList: true, subtree: true });
-  attachPreviewFrame();
-
   return {
     topicCards: document.querySelectorAll(".betterld-topic-card").length,
+    topicRows: document.querySelectorAll(".betterld-topic-row").length,
     grids: document.querySelectorAll(".betterld-topic-grid").length,
     home: document.body?.classList.contains("betterld-home") || false,
     tagsPage: document.body?.classList.contains("betterld-tags-page") || false,

@@ -36,46 +36,13 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   fontRecommendedStack: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
   listControlsScrollThreshold: 8,
   scrollTopThreshold: 16,
-  excerptRootMargin: "0px",
-  excerptDwellMs: 400,
-  // 滚动中不请求正文预览；页面停住这么久之后才为当时可见的卡片排队，一闪而过的卡片不占用站点请求额度。
-  excerptScrollIdleMs: 500,
-  // 首屏最上面的几张卡几乎必然正在被阅读：卡片建好后不等滚动停住门，直接占用突发额度先发请求。
-  excerptPrimeCount: 2,
-  // 页面停住这么久、队列里又没有视口内的预览请求时，为视口下方一屏内的卡片提前排队（令牌桶有令牌才发）。
-  excerptPrefetchIdleMs: 2500,
-  excerptPrefetchCount: 2,
-  excerptStoragePrefix: "betterld.excerpt.v1.",
-  excerptCacheTtlMs: 7 * 24 * 60 * 60 * 1000,
-  excerptCacheMaxEntries: 500,
-  // storage.local 的总配额有限（Chrome/Firefox 默认 10MB，设置与用户壁纸的 data URL 也在这份配额里）：
-  // 正文缓存按「条数」与「字节」双重上限淘汰，且写入前先淘汰 —— 否则配额满时新条目一条都写不进去。
-  excerptCacheByteBudget: 3 * 1024 * 1024,
   excerptMaxCharacters: 2400,
-  // cooked 超过这个长度就不进 storage（避免膨胀）；该条目只存 markdown，抽屉会再请求一次拿完整正文。
-  excerptCookedStorageLimit: 32768,
-  // savedAt 比当前时间还靠后的条目按时钟不可信处理（允许这一点点时钟偏差）；
-  // 只要它不超前太多就仍然按正常时间判断 TTL。
-  excerptSavedAtSkewMs: 60 * 1000,
-  excerptLoadingLabel: "正在读取正文预览…",
-  excerptPlaceholder: "正文预览暂不可用",
-  // 站点在拦（Cloudflare 挑战/429）时正文预览被拒的提示：与抽屉共用同一份原因文案。
-  excerptThrottledLabel: "站点正在限制正文请求，稍后自动重试",
-  excerptEmptyLabel: "正文为空",
+  excerptPlaceholder: "正文摘要不可用",
   authorLoadingLabel: "作者信息加载中…",
-  authorPlaceholder: "作者信息暂不可用",
+  authorPlaceholder: "作者信息不可用",
   topicRequestMinIntervalMs: 800,
   topicRequestWindowMs: 8000,
   topicRequestMaxPerWindow: 10,
-  // 正文预览（每张卡一份）与回复加载分开配额：预览慢一点没关系，
-  // 但预览不能占满队列、把正在阅读的回复拖住。
-  // 实测：同一 IP 以 2s 间隔“单发”这些 URL，30 次/分钟连续 4 分钟不触发防护；
-  // 但页面加载时成串发（实测开头 15.6s 内 8 条 ≈ 31 次/分钟）会立刻撞 429 + Cloudflare 挑战，
-  // 之后连站点自己的分页也被挡 10 分钟。回到 4s 一张（15 次/分钟）在同一环境不触发。
-  // 所以突发额度只留 2 张，之后按 4s 一张匀速补。
-  excerptRequestMinIntervalMs: 1500,
-  excerptRequestBurst: 2,
-  excerptRequestRefillMs: 4000,
   replyTreePageSize: 20,
   replyTreeLoadAheadPx: 400,
   replyTreeTimeRefreshMs: 60000,
@@ -138,8 +105,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicChallengeCooldownMs: 600000,
   topicRequestCooldownStorageKey: "betterld.request-cooldown",
   siteTopicListTimeoutMs: 1500,
-  topicRequestRecoveryCount: 1,
-  topicRequestRecoveryDelayMs: 10000,
   undoRefreshStorageKey: "betterld.undo-refresh",
   undoRefreshSnapshotMaxBytes: 700000,
   undoRefreshSnapshotTtlMs: 600000,
@@ -280,6 +245,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   // 卡片网格的宽度上限：超过这个宽度后网格居中，两侧留白随视口变宽，避免卡片一直铺到窗口边缘。
   // 取值与 gridBreakpoints.xxl 一致，但不与断点绑定：断点决定列数，这里只决定内容宽度。
   topicGridMaxWidthPx: 1800,
+  topicListMaxWidthPx: 1320,
+  topicDetailWidthPercent: 80,
+  topicTimelineSpacePx: 176,
   // 卡片内部尺寸按卡片自身内容盒宽度缩放：缩放单位 = 卡片内容盒宽 × ratioPerWidth，
   // 只设上限 maxPx、不设下限：卡片变窄时内容按比例缩小，宽度未到上限前单位一直跟随卡宽。
   // 现有卡宽（内容盒约 305px）下为 14px，与改前阅读卡的固定尺寸逐项一致。
@@ -322,7 +290,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     "openAuthor",
     "ignoreAuthor"
   ]),
-  actionRailItems: Object.freeze(["settings", "theme", "layout"]),
+  actionRailItems: Object.freeze(["settings", "theme"]),
   // 返回顶部与刷新固定在操作栏尾部，它们的显隐分别只由对应的开关决定
   actionRailTailOrder: 90,
   settingsEnums: Object.freeze({
@@ -331,7 +299,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     fontScope: Object.freeze(["own", "managed"]),
     shadowMode: Object.freeze(["default", "none", "custom"]),
     gridMode: Object.freeze(["auto", "fixed"]),
-    topicListLayoutMode: Object.freeze(["reading", "native"]),
+    topicListLayoutMode: Object.freeze(["native"]),
     replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),
@@ -414,19 +382,13 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       subcategories: [
         {
           id: "card",
-          title: "主题卡片",
-          description: "主题信息流的卡片形式、网格、内容显隐与字号。",
+          title: "主题列表",
+          description: "Material 3 原生列表的信息显隐与字号；正文仅手动打开真实网页预览。",
           keys: [
-            "topicListLayoutMode",
             "topicSortMode",
-            "gridMode",
-            "cardMinSize",
-            "cardSideGutter",
-            "gridGap",
             "showTopicAvatar",
             "showTopicAuthor",
             "showTopicCategory",
-            "showTopicExcerpt",
             "showTopicTags",
             "showTopicMeta",
             "showTopicActivityTime",
@@ -450,7 +412,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "filter",
           title: "筛选",
-          description: "只影响 betterLD 生成的卡片，不改变 LinuxDo 原始查询与分页。",
+          description: "筛选原生主题行与搜索结果，不改变 LinuxDo 原始查询与分页。",
           keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode", "topicFilterMaxAgeDays", "topicFilterHideLv1", "topicFilterHideLv2", "topicFilterHideLv3", "topicFilterBinEnabled"]
         },
         {
@@ -459,6 +421,11 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           description: "搜索页能力需经真实页面确认，未确认前保存后不生效。",
           keys: [
             "searchMode",
+            "gridMode",
+            "cardMinSize",
+            "cardSideGutter",
+            "gridGap",
+            "showTopicExcerpt",
             "searchHistoryEnabled",
             "searchHistoryPanelEnabled",
             "searchRecommendationEnabled",
@@ -666,7 +633,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicUnreadState: true,
     showTopicPinnedState: true,
     showTopicWatchedState: true,
-    topicListLayoutMode: "reading",
+    topicListLayoutMode: "native",
     replyTreeNameMode: "both",
     topicSortMode: "activity",
     topicCardContextMenuConfig: [
@@ -698,7 +665,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     actionRailGlow: true,
     actionRailItemsConfig: [
       { key: "settings", visible: true, order: 0 },
-      { key: "layout", visible: true, order: 1 },
       { key: "theme", visible: false, order: 2 }
     ],
     showBackToTopButton: false,

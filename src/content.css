@@ -1508,9 +1508,9 @@ body.betterld-shell[data-betterld-topic-detail="true"] #topic-title .title-wrapp
 
 /* 为时间轴在正文区域外留出一列，公告、标题和树仍保持同宽。 */
 html.desktop-view body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
-  width: 80% !important;
-  margin-inline: 0 !important;
-  justify-self: start;
+  width: min(var(--betterld-topic-detail-width), calc(100% - var(--betterld-topic-timeline-space) * 2)) !important;
+  margin-inline: auto !important;
+  justify-self: center;
 }
 
 body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
@@ -1528,7 +1528,19 @@ body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .
 }
 
 html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+  position: sticky;
+  top: calc(var(--header-offset, 52px) + 16px);
+  grid-column: 1 / -1;
+  justify-self: end;
   transform: translateX(calc(100% + 16px));
+  width: calc(var(--betterld-topic-timeline-space) - 32px);
+  max-width: calc(var(--betterld-topic-timeline-space) - 32px);
+}
+
+html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation :is(.d-toc-wrapper, .d-toc-main, .timeline-container) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 html[data-betterld-header-visual="solid"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
@@ -2882,165 +2894,13 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   max-height: 100vh;
 }
 
-/* 抽屉正文是站内 DOM（cooked / Markdown）而不是整页 iframe：body 负责滚动，内容元素按原站语义排版。 */
-.betterld-topic-drawer__body {
+.betterld-topic-drawer__frame {
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 16px;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.16);
+  border: 0;
   border-radius: var(--betterld-radius-sm);
   background: rgb(var(--betterld-background-rgb));
-  color: var(--betterld-on-surface);
-  font-size: 15px;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.betterld-topic-drawer__body:focus-visible {
-  outline: var(--betterld-focus-width) solid var(--betterld-primary);
-  outline-offset: var(--betterld-focus-offset);
-}
-
-/* 作者、活动时间与统计来自列表载荷；没有对应数据时整块不渲染。 */
-.betterld-topic-drawer__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  margin: 0 0 14px;
-  padding: 0 0 10px;
-  border-bottom: 1px solid rgb(var(--betterld-outline-rgb) / 0.18);
-  color: var(--betterld-on-surface-variant);
-  font-size: 13px;
-}
-
-.betterld-topic-drawer__meta[hidden] {
-  display: none !important;
-}
-
-.betterld-topic-drawer__author {
-  color: var(--betterld-on-surface);
-  font-weight: 700;
-}
-
-.betterld-topic-drawer__stats {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-}
-
-.betterld-topic-drawer__stat {
-  display: inline-flex;
-  align-items: center;
-}
-
-html[data-betterld-show-topic-author="false"] .betterld-topic-drawer__author,
-html[data-betterld-show-topic-meta="false"] .betterld-topic-drawer__time,
-html[data-betterld-show-topic-meta="false"] .betterld-topic-drawer__stats {
-  display: none;
-}
-
-html[data-betterld-show-topic-replies="false"] .betterld-topic-drawer__stat[data-betterld-stat="replies"],
-html[data-betterld-show-topic-likes="false"] .betterld-topic-drawer__stat[data-betterld-stat="likes"],
-html[data-betterld-show-topic-views="false"] .betterld-topic-drawer__stat[data-betterld-stat="views"] {
-  display: none;
-}
-
-.betterld-topic-drawer__cooked > :first-child {
-  margin-top: 0;
-}
-
-.betterld-topic-drawer__cooked > :last-child {
-  margin-bottom: 0;
-}
-
-.betterld-topic-drawer__cooked :is(h1, h2, h3, h4, h5, h6) {
-  margin: 1.2em 0 0.6em;
-  color: var(--betterld-on-surface);
-  line-height: 1.35;
-}
-
-.betterld-topic-drawer__cooked p {
-  margin: 0 0 0.8em;
-}
-
-.betterld-topic-drawer__cooked :is(ul, ol) {
-  margin: 0 0 0.8em;
-  padding-inline-start: 1.6em;
-}
-
-.betterld-topic-drawer__cooked li + li {
-  margin-top: 0.2em;
-}
-
-.betterld-topic-drawer__cooked blockquote {
-  margin: 0 0 0.8em;
-  padding: 8px 12px;
-  border-inline-start: 3px solid var(--betterld-primary);
-  border-radius: 0 var(--betterld-radius-sm) var(--betterld-radius-sm) 0;
-  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
-}
-
-.betterld-topic-drawer__cooked :not(pre) > code {
-  padding: 1px 5px;
-  border-radius: 6px;
-  background: rgb(var(--betterld-outline-rgb) / 0.14);
-  color: var(--betterld-on-surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.9em;
-}
-
-.betterld-topic-drawer__cooked pre {
-  max-width: 100%;
-  margin: 0 0 0.8em;
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 12px;
-  border-radius: var(--betterld-radius-sm);
-  background: rgb(19 27 43 / 0.92);
-  color: #e5edf8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre;
-}
-
-.betterld-topic-drawer__cooked pre code {
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font-size: inherit;
-}
-
-.betterld-topic-drawer__cooked a {
-  color: var(--betterld-primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.betterld-topic-drawer__cooked img,
-.betterld-topic-drawer__cooked video {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-/* cooked 里的嵌入（播放器/地图等）可能自带上千像素宽度与高度，不限制会撑出横向滚动。
-   只夹宽与绝对高度、不按比例缩放：宽度必须夹住（否则撑破抽屉）；高度按原站给的值渲染，
-   嵌入自身比例失真与否由原站属性决定，这里不代它做 aspect-ratio 换算。 */
-.betterld-topic-drawer__cooked iframe {
-  max-width: 100%;
-  max-height: 70vh;
-  border: 0;
-  border-radius: 8px;
-}
-
-.betterld-topic-drawer__cooked table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
 }
 
 .betterld-topic-drawer__header {
@@ -3672,9 +3532,6 @@ html[data-betterld-navigation-counts="false"] body.betterld-shell #navigation-ba
     border-radius: 20px;
   }
 
-  .betterld-topic-drawer__body {
-    padding: 12px;
-  }
 }
 
 body.betterld-unmanaged-page #main-container,
@@ -5197,4 +5054,233 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   background: rgb(var(--betterld-surface-container-rgb));
   color: var(--betterld-on-surface);
   font-size: 14px;
+}
+
+/* 原生主题列表：保留站点行、排序与分页，信息栏是唯一新增的内容。 */
+body.betterld-shell .betterld-topic-list {
+  width: 100%;
+  max-width: var(--betterld-topic-list-max-width);
+  margin-inline: auto;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+  table-layout: auto;
+}
+body.betterld-shell .betterld-topic-list .topic-list-body { display: table-row-group !important; }
+body.betterld-shell .betterld-topic-list tr.betterld-topic-row {
+  display: table-row !important;
+  height: auto;
+}
+body.betterld-shell .betterld-topic-row > td.main-link {
+  display: table-cell !important;
+  width: 100% !important;
+}
+body.betterld-shell .betterld-topic-list thead th:not(.default):not(.bulk-select),
+body.betterld-shell .betterld-topic-row > td:not(.main-link):not(.bulk-select) { display: none !important; }
+body.betterld-shell .betterld-topic-row .link-top-line {
+  display: block;
+  width: auto !important;
+  height: auto !important;
+  padding: 0;
+  margin: 0;
+}
+body.betterld-shell .betterld-topic-row .link-bottom-line {
+  display: flex !important;
+  position: static;
+  width: auto;
+}
+body.betterld-shell .betterld-topic-list thead th {
+  background: transparent;
+  border: 0;
+  color: var(--betterld-on-surface-variant);
+}
+body.betterld-shell .betterld-topic-list :is(th, td):is(.posters, .posts, .views, .activity, .likes) {
+  display: none !important;
+}
+body.betterld-shell .betterld-topic-row {
+  background: transparent !important;
+  backdrop-filter: none;
+  border: 0;
+}
+body.betterld-shell .betterld-topic-row > td {
+  padding: 14px 20px !important;
+  border-block: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
+  background: rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity));
+  transition: background var(--betterld-card-motion);
+}
+body.betterld-shell .betterld-topic-row > td:first-child {
+  border-inline-start: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
+  border-start-start-radius: 20px;
+  border-end-start-radius: 20px;
+}
+body.betterld-shell .betterld-topic-row > td:last-child,
+body.betterld-shell .betterld-topic-row > td.main-link {
+  border-inline-end: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
+  border-start-end-radius: 20px;
+  border-end-end-radius: 20px;
+}
+body.betterld-shell .betterld-topic-row:is(:hover, :focus-within) > td {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity)));
+}
+body.betterld-shell .betterld-topic-row[hidden] { display: none !important; }
+body.betterld-shell .betterld-topic-row__info [hidden] { display: none !important; }
+body.betterld-shell .betterld-topic-row[data-filter-state="dimmed"] { opacity: 0.42; }
+body.betterld-shell .betterld-topic-row[data-filter-state="highlight"] > td {
+  border-color: var(--betterld-primary);
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__title {
+  display: inline;
+  font-size: var(--betterld-list-title-size, 17px);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--betterld-on-surface);
+  white-space: normal;
+  -webkit-line-clamp: unset;
+}
+body.betterld-shell .betterld-topic-row .link-bottom-line {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+body.betterld-shell .betterld-topic-row .discourse-tags {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+body.betterld-shell .betterld-topic-row :is(.badge-category__wrapper, .discourse-tag) {
+  font-size: 12px;
+  border-radius: 999px;
+}
+body.betterld-shell .betterld-topic-row__info {
+  display: flex;
+  width: 100%;
+  height: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--betterld-on-surface-variant);
+  font-size: var(--betterld-list-meta-size, 12px);
+}
+body.betterld-shell .betterld-topic-row__avatar {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+body.betterld-shell .betterld-topic-row__avatar:empty { display: none; }
+body.betterld-shell .betterld-topic-row__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__author {
+  color: var(--betterld-on-surface-variant);
+  font-size: var(--betterld-list-author-size, 13px);
+  font-weight: 500;
+}
+body.betterld-shell .betterld-topic-row__time { font-size: inherit; }
+body.betterld-shell .betterld-topic-row .betterld-topic-card__participants {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 4px;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__participants a + a { margin-inline-start: -5px; }
+body.betterld-shell .betterld-topic-row .betterld-topic-card__participant {
+  width: 24px;
+  height: 24px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__participants img {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgb(var(--betterld-surface-container-rgb));
+  border-radius: 50%;
+}
+body.betterld-shell .betterld-topic-row__stats {
+  margin-inline-start: auto;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__reading-stat {
+  display: inline-flex;
+  gap: 5px;
+  font-size: inherit;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__reading-stat-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__badge {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+}
+body.betterld-shell .betterld-topic-row__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+  color: var(--betterld-on-surface-variant);
+  font-size: 11px;
+}
+body.betterld-shell .betterld-topic-row [data-filter-hit="true"] {
+  background: color-mix(in srgb, var(--betterld-primary) 18%, transparent);
+  color: var(--betterld-primary);
+}
+body.betterld-shell .betterld-topic-row__preview {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+  color: var(--betterld-on-surface);
+  font: inherit;
+  cursor: pointer;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__menu {
+  position: relative;
+  inset: auto;
+  flex: 0 0 auto;
+  --betterld-card-unit: 14px;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__menu-trigger {
+  width: 28px;
+  height: 28px;
+  font-size: 20px;
+}
+body.betterld-shell .betterld-topic-row .betterld-topic-card__menu-panel {
+  z-index: 10;
+  min-width: 176px;
+}
+body.betterld-shell .betterld-topic-row :is(button, a):focus-visible {
+  outline: 2px solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+html[data-betterld-show-topic-avatar="false"] .betterld-topic-row :is(.betterld-topic-row__avatar, .betterld-topic-card__participants),
+html[data-betterld-show-topic-author="false"] .betterld-topic-row .betterld-topic-card__author,
+html[data-betterld-show-topic-category="false"] .betterld-topic-row .badge-category__wrapper,
+html[data-betterld-show-topic-tags="false"] .betterld-topic-row .discourse-tags,
+html[data-betterld-show-topic-meta="false"] .betterld-topic-row :is(.betterld-topic-row__time, .betterld-topic-row__stats),
+html[data-betterld-show-topic-activity-time="false"] .betterld-topic-row .betterld-topic-row__time,
+html[data-betterld-show-topic-unread-state="false"] .betterld-topic-row :is(.badge-notification, .new-topic),
+html[data-betterld-show-topic-pinned-state="false"] .betterld-topic-row .topic-status .d-icon-thumbtack {
+  display: none !important;
+}
+html[data-betterld-topic-title-size="small"] { --betterld-list-title-size: 15px; }
+html[data-betterld-topic-title-size="base"] { --betterld-list-title-size: 17px; }
+html[data-betterld-topic-title-size="large"] { --betterld-list-title-size: 20px; }
+html[data-betterld-topic-author-size="small"] { --betterld-list-author-size: 12px; }
+html[data-betterld-topic-author-size="large"] { --betterld-list-author-size: 15px; }
+html[data-betterld-topic-meta-size="small"] { --betterld-list-meta-size: 11px; }
+html[data-betterld-topic-meta-size="large"] { --betterld-list-meta-size: 14px; }
+@media (max-width: 600px) {
+  body.betterld-shell .betterld-topic-row > td { padding: 12px !important; }
+  body.betterld-shell .betterld-topic-row__stats { gap: 8px; }
+  body.betterld-shell .betterld-topic-row__time { flex-basis: calc(100% - 40px); }
 }
