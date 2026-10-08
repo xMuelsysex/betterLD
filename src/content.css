@@ -4669,43 +4669,19 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   min-width: 0;
 }
 
-.betterld-reply-tree__avatar-wrap {
+.topic-avatar.betterld-reply-tree__avatar-wrap {
   position: relative;
   display: block;
+  float: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
   width: 36px;
   height: 36px;
   flex: 0 0 36px;
 }
 
-.betterld-reply-tree__avatar-wrap > .betterld-reply-tree__avatar-flair {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  top: auto;
-  left: auto;
-  right: -4px;
-  bottom: -4px;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.betterld-reply-tree__avatar-flair.rounded {
-  border-radius: 50%;
-}
-
-.betterld-reply-tree__avatar-flair .d-icon {
-  width: 16px;
-  height: 16px;
-  color: inherit;
-  fill: currentColor;
-}
+/* 徽章复用 topic-avatar 的原站尺寸、偏移与圆形/图片规则。 */
 
 .betterld-reply-tree__avatar-link {
   display: block;
@@ -4739,20 +4715,29 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 .betterld-reply-tree__author {
   display: inline-flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0 8px;
   font-weight: 650;
 }
 
-.betterld-reply-tree__username,
-.betterld-reply-tree__author > .betterld-reply-tree__user-title {
+.betterld-reply-tree__author > .betterld-reply-tree__nickname {
+  color: inherit;
+}
+
+.betterld-reply-tree__author > .betterld-reply-tree__username {
   color: var(--betterld-on-surface-variant);
   font-weight: 400;
 }
 
+:where(.betterld-reply-tree__user-title, .betterld-reply-tree__user-title a) {
+  color: var(--primary-medium);
+  font-weight: 400;
+  font-size: inherit;
+}
+
 .betterld-reply-tree__author > .betterld-reply-tree__user-title {
   margin: 0;
-  font-size: 0.9em;
 }
 
 .betterld-reply-tree__author > .betterld-reply-tree__user-status {
@@ -4763,10 +4748,10 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   margin: 0;
 }
 
-.betterld-reply-tree__user-status > img.emoji {
+.betterld-reply-tree__user-status img.emoji {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 1em;
+  height: 1em;
   margin: 0;
   object-fit: contain;
 }

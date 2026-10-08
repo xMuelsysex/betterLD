@@ -8,7 +8,8 @@
   let replyTopicId = "";
   let replySignature = "";
   let floorTimeline = null;
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+  const replyAuthors = new Map();
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -144,25 +145,158 @@
     return routeTo.call(this, url, options);
   };
 
-  // 与正文高亮一样在主世界增强树节点，复用原站的自动群组徽章、图标和 emoji 解析。
-  // 输入来自各楼已有数据，分页楼层不必加入原站 postStream，也不额外请求用户信息。
-  function enhanceReplyAuthors() {
+  function replyAuthorError(topicId, error) {
+    console.error("[betterLD] 作者附加信息渲染失败", error);
+    document.dispatchEvent(new CustomEvent("betterld:reply-data", {
+      detail: JSON.stringify({ topicId, error: `作者附加信息渲染失败：${error.message}` })
+    }));
+  }
+
+  function resetReplyAuthors() {
+    for (const entry of replyAuthors.values()) {
+      entry.user.off("status-changed", entry, entry.onStatus);
+      if (entry.tracking) entry.user.statusManager.stopTrackingStatus();
+      for (const view of entry.views) view.message?.destroy();
+      if (entry.ownsUser) entry.user.destroy();
+    }
+    replyAuthors.clear();
+    // 同话题的新树也必须收到模型投影，不能沿用上一棵树的同步签名。
+    replySignature = "";
+  }
+
+  document.addEventListener("betterld:reply-author-reset", resetReplyAuthors);
+
+  function renderReplyAuthorStatus(entry, view) {
+    view.message?.destroy();
+    view.message = null;
+    view.statusHost?.remove();
+    view.statusHost = null;
+    const status = entry.user.status;
+    if (!entry.owner.lookup("service:site-settings").enable_emoji || !status?.emoji
+      || (status.ends_at && Date.parse(status.ends_at) <= Date.now())) return;
+    const { UserStatusMessage } = window.require("discourse/lib/user-status-message");
+    const message = new UserStatusMessage(entry.owner, status);
+    view.message = message;
+    message.html.classList.add("fk-d-tooltip__trigger");
+    message.html.dataset.identifier = "user-status-message-tooltip";
+    message.html.dataset.trigger = "";
+    message.html.id = message.tooltipInstance.id;
+    message.html.setAttribute("role", "button");
+    message.html.tabIndex = 0;
+    message.html.setAttribute("aria-label", status.description || status.emoji);
+    message.html.setAttribute("aria-expanded", "false");
+    message.tooltipInstance.options.onShow = () => {
+      message.html.classList.add("-expanded");
+      message.html.setAttribute("aria-expanded", "true");
+    };
+    message.tooltipInstance.options.onClose = () => {
+      message.html.classList.remove("-expanded");
+      message.html.setAttribute("aria-expanded", "false");
+    };
+    const trigger = document.createElement("span");
+    trigger.className = "fk-d-tooltip__trigger-container";
+    trigger.append(...message.html.childNodes);
+    message.html.append(trigger);
+    message.html.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      message.tooltipInstance.onClick(event).catch((error) => replyAuthorError(entry.topicId, error));
+    });
+    // 原站公开的命令式组件与 Glimmer 组件共用 FloatKit，补齐后者的说明布局。
+    const until = message.content.querySelector(".user-status-tooltip-until");
+    if (until) {
+      const inlineUntil = document.createElement("span");
+      inlineUntil.className = until.className;
+      inlineUntil.textContent = until.textContent;
+      until.replaceWith(inlineUntil);
+    }
+    const wrapper = document.createElement("div");
+    wrapper.className = "user-status-tooltip-wrapper";
+    wrapper.append(...message.content.querySelectorAll(".user-status-tooltip-description, .user-status-tooltip-until"));
+    message.content.append(wrapper);
+    // 命令式 API 多一层宿主，展平后沿用原站 inner-content 的间距，避免叠加 padding。
+    message.content.style.display = "contents";
+    const host = document.createElement("span");
+    host.className = "user-status-message-wrap betterld-reply-tree__user-status";
+    host.append(message.html);
+    view.statusHost = host;
+    view.author.append(host);
+  }
+
+  function trackReplyAuthor(owner, post, liveUser, topicId) {
+    const existing = replyAuthors.get(post.id);
+    if (existing) return existing;
+    const User = window.require("discourse/models/user").default;
+    const user = liveUser || User.create({
+      id: post.user_id, username: post.username, name: post.name,
+      status: post.user_status ?? null, title: post.user_title,
+      primary_group_name: post.primary_group_name,
+      admin: post.admin, moderator: post.moderator, trust_level: post.trust_level,
+      flair_name: post.flair_name, flair_url: post.flair_url,
+      flair_bg_color: post.flair_bg_color, flair_color: post.flair_color,
+      flair_group_id: post.flair_group_id, avatar_template: post.avatar_template
+    });
+    const entry = { owner, topicId, user, ownsUser: !liveUser, tracking: owner.lookup("service:user-status").isEnabled, views: [], onStatus() {
+      try {
+        for (const view of this.views) renderReplyAuthorStatus(this, view);
+        document.dispatchEvent(new CustomEvent("betterld:reply-author-status", {
+          detail: JSON.stringify({ topicId, postId: post.id, status: user.status ?? null })
+        }));
+      } catch (error) {
+        replyAuthorError(topicId, error);
+      }
+    } };
+    // 原帖每楼各持一个 User；按楼复用，避免同作者的不同头衔/群组快照互相覆盖。
+    replyAuthors.set(post.id, entry);
+    user.on("status-changed", entry, entry.onStatus);
+    if (entry.tracking) user.statusManager.trackStatus();
+    entry.onStatus();
+    return entry;
+  }
+
+  function renderReplyAuthorTitle(author, post, user) {
+    const { applyValueTransformer } = window.require("discourse/lib/transformer");
+    const title = applyValueTransformer("poster-name-user-title", user.title, { post, user });
+    if (!title) return;
+    const host = document.createElement("span");
+    host.className = "user-title betterld-reply-tree__user-title";
+    host.classList.add(`user-title--${title.replace(/\s+/g, "-").toLowerCase()}`);
+    if (post.title_is_group && user.primary_group_name) {
+      host.classList.add(`user-title--${user.primary_group_name.replace(/\s+/g, "-").toLowerCase()}`);
+      const link = document.createElement("a");
+      link.className = "user-group trigger-group-card";
+      link.dataset.groupCard = user.primary_group_name;
+      link.href = window.require("discourse/lib/get-url").default(`/g/${encodeURIComponent(user.primary_group_name)}`);
+      link.textContent = title;
+      host.append(link);
+    } else host.textContent = title;
+    author.append(host);
+  }
+
+  // 分页作者复用原站已有模型能力，不加入 postStream 或补发逐用户请求。
+  function enhanceReplyAuthors(topicId) {
     const pending = document.querySelectorAll(".betterld-reply-tree__avatar-wrap[data-betterld-author-details]");
     if (!pending.length) return;
     const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+    const topic = owner.lookup("controller:topic").model;
+    if (String(topic.id) !== topicId) return;
     const site = owner.lookup("service:site");
+    const statusEnabled = owner.lookup("service:user-status").isEnabled;
+    const livePosts = new Map(topic.postStream.posts.map((post) => [post.id, post]));
     const autoGroupFlairForUser = window.require("discourse/lib/avatar-flair").default;
     const { convertIconClass, iconHTML } = window.require("discourse/lib/icon-library");
-    const { emojiUrlFor } = window.require("discourse/lib/text");
     for (const host of pending) {
-      const details = JSON.parse(host.dataset.betterldAuthorDetails);
-      const flair = details.flair_url || details.flair_bg_color ? details
-        : details.flair_group_id ? autoGroupFlairForUser(site, details) : null;
+      const post = JSON.parse(host.dataset.betterldAuthorDetails);
+      delete host.dataset.betterldAuthorDetails;
+      const livePost = livePosts.get(post.id);
+      const entry = trackReplyAuthor(owner, post, livePost?.user, topicId);
+      const user = entry.user;
+      const flair = !user.flair_group_id ? null : user.flair_url || user.flair_bg_color ? user : autoGroupFlairForUser(site, user);
       if (flair) {
         const badge = document.createElement("div");
-        badge.className = "avatar-flair betterld-reply-tree__avatar-flair";
+        badge.className = "avatar-flair";
         if (flair.flair_name) {
-          badge.classList.add(`avatar-flair-${flair.flair_name.replace(/\s+/g, "-")}`);
+          badge.classList.add(`avatar-flair-${flair.flair_name}`);
           badge.title = flair.flair_name;
           badge.setAttribute("aria-label", flair.flair_name);
           badge.setAttribute("role", "img");
@@ -182,35 +316,22 @@
         }
         host.append(badge);
       }
-      const status = details.user_status;
-      if (status?.emoji && (!status.ends_at || Date.parse(status.ends_at) > Date.now())) {
-        const url = emojiUrlFor(status.emoji);
-        if (url) {
-          const message = document.createElement("span");
-          message.className = "user-status-message-wrap betterld-reply-tree__user-status";
-          message.title = status.description || status.emoji;
-          const image = document.createElement("img");
-          image.className = "emoji";
-          image.src = url;
-          image.alt = status.emoji;
-          message.append(image);
-          const author = host.closest(".betterld-reply-tree__card").querySelector(".betterld-reply-tree__author");
-          author.insertBefore(message, author.querySelector(".betterld-reply-tree__user-title"));
-        }
+      const author = host.closest(".betterld-reply-tree__card").querySelector(".betterld-reply-tree__author");
+      renderReplyAuthorTitle(author, livePost || post, user);
+      if (statusEnabled) {
+        const view = { author, message: null, statusHost: null };
+        entry.views.push(view);
+        renderReplyAuthorStatus(entry, view);
       }
-      delete host.dataset.betterldAuthorDetails;
     }
   }
 
   document.addEventListener("betterld:reply-author-details", (event) => {
     const { topicId } = JSON.parse(event.detail);
     try {
-      enhanceReplyAuthors();
+      enhanceReplyAuthors(topicId);
     } catch (error) {
-      console.error("[betterLD] 作者附加信息渲染失败", error);
-      document.dispatchEvent(new CustomEvent("betterld:reply-data", {
-        detail: JSON.stringify({ topicId, error: `作者附加信息渲染失败：${error.message}` })
-      }));
+      replyAuthorError(topicId, error);
     }
   });
 
@@ -236,7 +357,8 @@
         posts: stream.posts.map((post) => ({
           ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
           // 原站通过 User 模型接收状态变更；null 也要投影，以移除树里已取消的状态。
-          user_status: post.user?.status === undefined ? post.user_status ?? null : post.user.status,
+          user_status: replyAuthors.has(post.id) ? replyAuthors.get(post.id).user.status ?? null
+            : post.user?.status === undefined ? post.user_status ?? null : post.user.status,
           boosts: post.boosts?.map((boost) => ({
             ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
             user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))

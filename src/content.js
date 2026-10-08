@@ -5101,12 +5101,13 @@
       children.get(key)?.push(post);
     }
 
+    document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
     const list = createElement("ol", "betterld-reply-tree__list");
     function renderPost(post) {
       const item = createElement("li", "betterld-reply-tree__item");
       item.dataset.postNumber = String(post.post_number);
       const card = createElement("article", "betterld-reply-tree__card");
-      const avatarWrap = createElement("div", "betterld-reply-tree__avatar-wrap");
+      const avatarWrap = createElement("div", "topic-avatar betterld-reply-tree__avatar-wrap");
       const avatar = createElement("img", "betterld-reply-tree__avatar");
       const avatarPath = replyTreeAvatarPath(post.avatar_template);
       if (avatarPath) avatar.src = avatarPath;
@@ -5123,19 +5124,26 @@
         avatarLink.append(avatar);
       }
       avatarWrap.append(avatarLink || avatar);
-      const authorDetails = Object.fromEntries([
-        "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "user_status"
-      ].map((key) => [key, post[key]]));
-      if (post.flair_url || post.flair_bg_color || post.flair_group_id || post.user_status?.emoji) {
-        avatarWrap.dataset.betterldAuthorDetails = JSON.stringify(authorDetails);
+      // 无状态的作者也交给原站 User 模型追踪，才能接收后续设置的新状态。
+      if (Number.isInteger(post.user_id) && username) {
+        avatarWrap.dataset.betterldAuthorDetails = JSON.stringify(post);
       }
       const body = createElement("div", "betterld-reply-tree__body");
       const head = createElement("div", "betterld-reply-tree__head");
       const author = createElement("span", "betterld-reply-tree__author");
       const nameMode = state.currentSettings.replyTreeNameMode;
-      if (nameMode !== "username" && nickname) author.append(createElement("span", "betterld-reply-tree__nickname", nickname));
+      function appendName(className, text) {
+        const name = createElement(avatarHref ? "a" : "span", className, text);
+        if (avatarHref) {
+          name.href = avatarHref;
+          name.dataset.userCard = username;
+          name.classList.add("trigger-user-card");
+        }
+        author.append(name);
+      }
+      if (nameMode !== "username" && nickname) appendName("betterld-reply-tree__nickname", nickname);
       if ((nameMode !== "nickname" || !nickname) && username && (nameMode !== "both" || nickname !== username)) {
-        author.append(createElement("span", "betterld-reply-tree__username", username));
+        appendName("betterld-reply-tree__username", username);
       }
       if (!author.textContent) author.textContent = username || `#${post.post_number}`;
       if (post.post_number > 1 && Number.isInteger(topicOwnerId) && post.user_id === topicOwnerId) {
@@ -5150,8 +5158,6 @@
         mark.setAttribute("aria-label", mark.title);
         author.append(mark);
       }
-      const userTitle = cleanText(post.user_title);
-      if (userTitle) author.append(createElement("span", "user-title betterld-reply-tree__user-title", userTitle));
       const number = createElement("a", "betterld-reply-tree__number", `#${post.post_number} · 去原帖回复`);
       number.href = topicReplyUrl(tree.topicId, post.post_number);
       number.addEventListener("click", (event) => {
@@ -5537,6 +5543,14 @@
     tree.pendingData = data;
     syncReplyTreeData(tree);
   });
+  document.addEventListener("betterld:reply-author-status", (event) => {
+    const { topicId, postId, status } = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (tree?.topicId !== topicId) return;
+    // 主世界已原位更新本楼；缓存同值供后续树重建，避免分页快照恢复旧状态。
+    const post = tree.posts.get(postId);
+    if (post) post.user_status = status;
+  });
   document.addEventListener('betterld:reply-jump', (event) => {
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
@@ -5558,6 +5572,7 @@
       closeReplyReactionPicker(state.replyTree);
       state.replyTree.streamElement.removeAttribute("data-betterld-reply-source");
       state.replyTree.topicContainer.removeAttribute("data-betterld-reply-tree-active");
+      document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
       state.replyTree.panel.remove();
       document.dispatchEvent(new CustomEvent('betterld:timeline-reset'));
       state.replyTree = null;
