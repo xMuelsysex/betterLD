@@ -1305,7 +1305,7 @@ html[data-betterld-wallpaper-state] body #main-outlet > .list-controls {
 html[data-betterld-wallpaper-state] body :is(
   .badge-card, .user-stream .item, .user-stream .user-stream-item,
   .post-list .post-list-item, .nested-post.--depth-0, .nested-view__topic-map,
-  .topic-list .topic-list-item, .discourse-boosts__bubble,
+  .topic-list .topic-list-item:not(.betterld-topic-row), .discourse-boosts__bubble,
   .user-card, .group-card, .category-card, .fk-d-menu__inner-content,
   .topic-navigation .d-toc-wrapper
 ) {
@@ -1483,6 +1483,7 @@ html[data-betterld-wallpaper-state] body .discourse-tag.box {
 /* 帖子顶栏减淡底色，保留模糊以维持标题可读性。 */
 body.betterld-shell[data-betterld-topic-detail="true"] #topic-title .title-wrapper,
 html:is([data-betterld-header-visual="native"], [data-betterld-header-visual="frosted"]) body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
+  box-sizing: border-box;
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
   background: rgb(var(--betterld-surface-container-rgb) / 0.56) !important;
   box-shadow: var(--betterld-shadow-level-1);
@@ -1506,17 +1507,31 @@ body.betterld-shell[data-betterld-topic-detail="true"] #topic-title .title-wrapp
   border-radius: var(--betterld-radius-lg);
 }
 
-/* 为时间轴在正文区域外留出一列，公告、标题和树仍保持同宽。 */
+/* 原站的未打开卡片仅有注释节点；空占位框不参与正文宽度计算。 */
+body.betterld-shell #main-outlet :is(.user-card, .group-card, .category-card):empty {
+  display: none;
+}
+
+/* 正文跨过侧栏轨道，以整个视口为中线；两侧对称预留侧栏与时间轴空间。 */
+body.betterld-shell #main-outlet-wrapper:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+  padding-inline: 0;
+}
+
 html.desktop-view body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
-  width: min(var(--betterld-topic-detail-width), calc(100% - var(--betterld-topic-timeline-space) * 2)) !important;
+  grid-column: 1 / -1 !important;
+  width: min(var(--betterld-topic-detail-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
   margin-inline: auto !important;
   justify-self: center;
+  /* vw 包含滚动条，网格包含块不包含；补齐半个滚动条宽度才能对齐物理中线。 */
+  left: calc((100vw - 100%) / 2);
 }
 
 body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
   grid-column: 1 / -1;
   grid-row: 1;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
@@ -1541,6 +1556,31 @@ html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+}
+
+/* 侧栏收起的窄窗口让时间轴独占一行，正文仍占满同宽轨道。 */
+@media (max-width: 767px) {
+  html:is(.desktop-view, .mobile-view) body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+    grid-column: 1 / -1 !important;
+    width: calc(100% - 48px) !important;
+    margin-inline: auto !important;
+    left: calc((100vw - 100%) / 2);
+  }
+
+  body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
+    grid-row: 2;
+  }
+
+  html:is(.desktop-view, .mobile-view) body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    position: relative;
+    inset: auto;
+    justify-self: end;
+    transform: none;
+    width: auto;
+    max-width: 100%;
+  }
 }
 
 html[data-betterld-header-visual="solid"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
@@ -2883,21 +2923,18 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 
 .betterld-topic-drawer[open] {
   display: grid;
-  /* 标题的 nowrap（保留省略号语义）会把隐式列轨道的 min-content 顶到约 690px；
-     列宽必须能收缩到容器宽度，否则窄视口下抽屉横向溢出、右侧的关闭按钮被 overflow:hidden 裁掉。 */
+  /* 标题允许省略，列轨道允许收缩，窄窗口的关闭按钮仍保持可达。 */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
-  /* max-height:none 关掉了 dialog 的 UA 夹取；这里给未设 inline 尺寸的回退上限，
-     让内容经 __body 内部滚动可达。resizeTopicDrawer 的真实高度 ≤ 视口高−2×marginPx（config 里 marginPx=16），
-     恒小于该上限，所以正常路径不受影响；用视口百分比当上限会反夹住真实路径。 */
-  max-height: 100vh;
 }
 
 .betterld-topic-drawer__frame {
   width: 100%;
   height: 100%;
   min-height: 0;
+  /* 原站 iframe 的 1000px 上限会留下空白，预览应占满中间轨道。 */
+  max-height: none;
   border: 0;
   border-radius: var(--betterld-radius-sm);
   background: rgb(var(--betterld-background-rgb));
@@ -3425,11 +3462,11 @@ html[data-betterld-header-sticky="false"] body.betterld-shell .d-header {
 body.betterld-shell .d-header .extra-info-wrapper {
   /* 站点把该块放在 Header 五列网格的中间 1320px 轨道里（width 由轨道决定，改 width 无效），
      因此用 content-box + 左右 padding 把面板横向放宽，再用负 margin 抵消 padding 让标题位置不变；
-     padding 同时受两侧可用空间限制，窄屏不会溢出视口 */
-  --betterld-title-block-bleed: min(
+     可用空间为负时留白归零，避免负 margin 将滚动标题推出视口。 */
+  --betterld-title-block-bleed: max(0px, min(
     calc(var(--betterld-title-block-extra-width) / 2),
     calc((100vw - var(--d-max-width, 1320px) - 24px) / 2)
-  );
+  ));
   box-sizing: content-box;
   padding-inline: var(--betterld-title-block-bleed);
   margin-inline: calc(var(--betterld-title-block-bleed) * -1);
@@ -5102,9 +5139,13 @@ body.betterld-shell .betterld-topic-row {
   border: 0;
 }
 body.betterld-shell .betterld-topic-row > td {
+  position: relative;
+  z-index: 0;
   padding: 14px 20px !important;
   border-block: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
   background: rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity));
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   transition: background var(--betterld-card-motion);
 }
 body.betterld-shell .betterld-topic-row > td:first-child {
@@ -5121,6 +5162,8 @@ body.betterld-shell .betterld-topic-row > td.main-link {
 body.betterld-shell .betterld-topic-row:is(:hover, :focus-within) > td {
   background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity)));
 }
+/* 单元格的磨砂创建独立绘制层，聚焦菜单所在行保持在后续行之上。 */
+body.betterld-shell .betterld-topic-row:focus-within > td { z-index: 1; }
 body.betterld-shell .betterld-topic-row[hidden] { display: none !important; }
 body.betterld-shell .betterld-topic-row__info [hidden] { display: none !important; }
 body.betterld-shell .betterld-topic-row[data-filter-state="dimmed"] { opacity: 0.42; }
