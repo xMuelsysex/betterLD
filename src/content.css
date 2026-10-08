@@ -763,8 +763,8 @@ body.betterld-shell .show-more.has-topics {
   display: flex !important;
   justify-content: center;
   width: 100% !important;
-  /* 与卡片网格共用宽度上限与内缩：超宽屏下居中，左右边缘对齐卡片 */
-  max-width: min(100%, var(--betterld-topic-grid-max-width, 1800px)) !important;
+  /* 更新提示与原生列表使用同一中线，链接按内容宽度收紧。 */
+  max-width: var(--betterld-topic-list-max-width) !important;
   box-sizing: border-box;
   margin: 0 auto 16px !important;
   padding-inline: var(--betterld-card-side-gutter, 24px);
@@ -774,17 +774,18 @@ body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable {
   position: static;
   z-index: auto;
   display: flex !important;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100% !important;
-  min-height: 48px !important;
+  width: fit-content !important;
+  max-width: 100%;
+  min-height: 40px !important;
   box-sizing: border-box;
   margin: 0 !important;
-  padding: 10px 16px !important;
+  padding: 8px 20px !important;
   border: 1px solid color-mix(in srgb, var(--betterld-primary) 42%, transparent) !important;
-  border-radius: var(--betterld-radius-md) !important;
+  border-radius: 999px !important;
   background: color-mix(in srgb, var(--betterld-primary) 14%, rgb(var(--betterld-surface-container-rgb)) 86%) !important;
   box-shadow: var(--betterld-shadow-level-1);
   color: var(--betterld-primary) !important;
@@ -1513,7 +1514,8 @@ body.betterld-shell #main-outlet :is(.user-card, .group-card, .category-card):em
 }
 
 /* 正文跨过侧栏轨道，以整个视口为中线；两侧对称预留侧栏与时间轴空间。 */
-body.betterld-shell #main-outlet-wrapper:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+body.betterld-shell #main-outlet-wrapper:has(.container.posts[data-betterld-reply-tree-active="true"]),
+body:is(.betterld-home, .betterld-topic-page) #main-outlet-wrapper:has(.betterld-topic-list) {
   padding-inline: 0;
 }
 
@@ -5091,6 +5093,24 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   background: rgb(var(--betterld-surface-container-rgb));
   color: var(--betterld-on-surface);
   font-size: 14px;
+}
+
+/* 首页和主题列表跨过侧栏轨道，按整个视口中线布局。 */
+body:is(.betterld-home, .betterld-topic-page) #main-outlet:has(.betterld-topic-list) {
+  position: relative;
+  grid-column: 1 / -1 !important;
+  width: calc(100% - 48px) !important;
+  max-width: var(--betterld-topic-list-max-width) !important;
+  margin-inline: auto !important;
+  justify-self: center;
+  left: calc((100vw - 100%) / 2);
+}
+
+@media (min-width: 768px) {
+  body.has-sidebar-page:is(.betterld-home, .betterld-topic-page) #main-outlet:has(.betterld-topic-list) {
+    /* 可见侧栏在左或右都对称留位，列表与侧栏保持分离。 */
+    width: calc(100% - (var(--d-sidebar-width) + 16px) * 2) !important;
+  }
 }
 
 /* 原生主题列表：保留站点行、排序与分页，信息栏是唯一新增的内容。 */

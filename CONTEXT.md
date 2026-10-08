@@ -78,6 +78,7 @@
 ### Card Presentation Style
 - **Definition**：`topicListLayoutMode` 只允许 `native`，旧 `reading` 设置读入后归一为 `native`。
 - **Rules/Invariants**：不再提供首页布局切换按钮或下拉；首页采用 Material 3 原生列表。
+- **Rules/Invariants**：首页与主题列表以整个浏览器视口中线居中；可见桌面侧栏两边对称预留空间，收起侧栏恢复列表宽度上限。新/更新话题提示按文字宽度收紧为居中胶囊，保留原站点击刷新与消息更新行为。
 
 ### Incremental Topic Grid Update
 - **Definition**：主题行增量同步由 Discourse 管理，betterLD 幂等追加信息栏；搜索卡沿用既有增量网格。
