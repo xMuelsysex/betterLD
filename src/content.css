@@ -9,6 +9,7 @@
   --betterld-on-primary: #ffffff;
   --betterld-outline-rgb: 121 116 126;
   --betterld-error: #ba1a1a;
+  --betterld-on-error: #ffffff;
   --betterld-success: #146c2e;
   --betterld-background-blur: 18px;
   --betterld-surface-blur: 16px;
@@ -56,6 +57,7 @@ html[data-betterld-mode="dark"] {
   --betterld-on-primary: #381e72;
   --betterld-outline-rgb: 147 143 153;
   --betterld-error: #ffb4ab;
+  --betterld-on-error: #690005;
   --betterld-success: #8aef9c;
   --betterld-mask-rgb: 20 18 24;
   --betterld-shadow-color: 0 0 0;
@@ -1272,7 +1274,9 @@ html[data-betterld-wallpaper-state] body :is(
   #main-container, #main-outlet-wrapper, #main-outlet, #list-area, #header-list-area,
   .topic-list-container, .container.tags-index, .search-container,
   .user-main, .user-content, .body-page, #main-outlet > .regular,
-  #main-outlet.not-found-container, .sidebar-footer-container
+  #main-outlet.not-found-container, .sidebar-footer-container,
+  .show-badge, .login-fullpage, .signup-fullpage, .invites-show, .password-reset-page,
+  .chat-messages-container
 ) {
   background: transparent !important;
 }
@@ -1302,16 +1306,238 @@ html[data-betterld-wallpaper-state] body #main-outlet > .list-controls {
   z-index: 3;
 }
 
-/* 内容和弹层保留材质对比度，而不再用站点的不透明白底遮盖壁纸。 */
-html[data-betterld-wallpaper-state] body :is(
-  .badge-card, .user-stream .item, .user-stream .user-stream-item,
+/* 内容卡与浮层共用材质声明；只覆盖外壳，保留正文与第三方内容。 */
+body.betterld-shell :where(
+  .badge-card, .user-stream .item, .user-stream .user-stream-item, .follow-stream-item,
   .post-list .post-list-item, .nested-post.--depth-0, .nested-view__topic-map,
   .topic-list .topic-list-item:not(.betterld-topic-row), .discourse-boosts__bubble,
+  .show-badge .badge-title, .show-badge .badge-user,
+  :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) :is(.login-body, .signup-body),
+  .full-page-chat, .chat-drawer-container,
   .user-card, .group-card, .category-card, .fk-d-menu__inner-content,
+  .select-kit-body, .d-modal__container, #dialog-holder .dialog-content,
+  .fk-d-toast, #reply-control.open, #reply-control.draft, #reply-control.saving,
+  .c-navbar-container, .chat-pinned-bar, .chat-channel-status, .chat-channel__filter-bar,
+  .c-footer, .chat-pinned-messages-list__footer, .chat-composer__inner-container,
+  .ai-bot-conversations__input-wrapper, .docked-composer.ai-bot-docked-composer .d-editor-textarea-wrapper,
   .topic-navigation .d-toc-wrapper
 ) {
-  background-color: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
+  --betterld-native-surface-rgb: var(--betterld-surface-rgb);
+  --betterld-native-surface-opacity: 0.56;
+  background-color: rgb(var(--betterld-native-surface-rgb) / var(--betterld-native-surface-opacity)) !important;
+  color: var(--betterld-on-surface);
+  border-color: rgb(var(--betterld-outline-rgb) / 0.28) !important;
+  border-radius: var(--betterld-radius-md);
+  box-shadow: var(--betterld-shadow-level-1);
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
+body.betterld-shell :where(
+  .user-card, .group-card, .category-card, .fk-d-menu__inner-content,
+  .select-kit-body, .d-modal__container, #dialog-holder .dialog-content,
+  .fk-d-toast, #reply-control, .chat-drawer-container,
+  .c-navbar-container, .chat-pinned-bar, .chat-channel-status, .chat-channel__filter-bar,
+  .c-footer, .chat-pinned-messages-list__footer, .chat-composer__inner-container,
+  .ai-bot-conversations__input-wrapper, .docked-composer.ai-bot-docked-composer .d-editor-textarea-wrapper,
+  .topic-navigation .d-toc-wrapper
+) {
+  --betterld-native-surface-rgb: var(--betterld-surface-container-rgb);
+  --betterld-native-surface-opacity: 0.96;
+}
+
+/* 普通按钮只换材质、颜色与形状；图标、平面与组合按钮保留原站几何。 */
+body.betterld-shell {
+  --betterld-native-button-bg: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb)));
+  --betterld-native-button-fg: var(--betterld-primary);
+}
+
+body.betterld-shell :is(.btn-default, .btn-primary, .btn-danger):not(
+  .btn-icon, .btn-flat, .btn-transparent, .btn-link, .d-combo-button > *,
+  .cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .chat-message-text *, .fc *
+) {
+  --d-button-default-bg-color: var(--betterld-native-button-bg);
+  --d-button-default-text-color: var(--betterld-native-button-fg);
+  --d-button-default-icon-color: var(--betterld-native-button-fg);
+  background-color: var(--betterld-native-button-bg) !important;
+  color: var(--betterld-native-button-fg) !important;
+  border-color: transparent !important;
+  border-radius: 999px !important;
+}
+
+body.betterld-shell .btn-primary {
+  --betterld-native-button-bg: var(--betterld-primary);
+  --betterld-native-button-fg: var(--betterld-on-primary);
+}
+
+body.betterld-shell .btn-danger {
+  --betterld-native-button-bg: var(--betterld-error);
+  --betterld-native-button-fg: var(--betterld-on-error);
+}
+
+body.betterld-shell :is(.btn-default, .btn-primary, .btn-danger):not(
+  .btn-icon, .btn-flat, .btn-transparent, .btn-link, .d-combo-button > *,
+  .cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .chat-message-text *, .fc *
+):is(:hover, :focus-visible, :active):not(:disabled, .disabled, [aria-disabled="true"]) {
+  background-color: color-mix(in srgb, var(--betterld-native-button-bg) 90%, var(--betterld-native-button-fg)) !important;
+}
+
+body.betterld-shell :is(.btn-default, .btn-primary, .btn-danger):not(
+  .btn-icon, .btn-flat, .btn-transparent, .btn-link, .d-combo-button > *,
+  .cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .chat-message-text *, .fc *
+) .d-icon {
+  color: inherit !important;
+}
+
+/* 原生输入不改尺寸与 appearance，分类色、错误、禁用和键盘语义仍由原站保留。 */
+body.betterld-shell :where(
+  #reply-control, .d-modal, #dialog-holder, .user-preferences, .form-kit, .form-vertical,
+  .search-container, .groups-header-filters, .container.group,
+  .login-fullpage, .signup-fullpage, .invites-show, .password-reset-page
+) :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"]),
+  textarea:not(.d-editor-input, .chat-composer__input, #ai-bot-conversations-input), select
+):not(.cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .fc *),
+body.betterld-shell .select-kit-header:not(.cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .fc *),
+body.betterld-shell .d-editor-textarea-wrapper {
+  background-color: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
+  color: var(--betterld-on-surface) !important;
+  border-color: rgb(var(--betterld-outline-rgb) / 0.48) !important;
+  border-radius: var(--betterld-radius-sm);
+  caret-color: var(--betterld-primary);
+}
+
+body.betterld-shell :is(.select-kit-body, .d-modal__container, #dialog-holder .dialog-content, .fk-d-toast, .chat-drawer-container) {
+  border-radius: var(--betterld-radius-md) !important;
+  color: var(--betterld-on-surface);
+  box-shadow: var(--betterld-shadow-raised) !important;
+}
+
+body.betterld-shell :is(.badge-card, .show-badge .badge-title, .show-badge .badge-user) {
+  border-radius: var(--betterld-radius-md) !important;
+}
+
+body.betterld-shell :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) .btn-social {
+  background-color: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
+  border-color: rgb(var(--betterld-outline-rgb) / 0.48) !important;
+  border-radius: var(--betterld-radius-sm);
+  color: var(--betterld-on-surface) !important;
+}
+
+body.betterld-shell :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) .btn-social:is(:hover, :focus-visible):not(:disabled) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb))) !important;
+}
+
+/* 多色品牌标志保留原色；单色标志与浮动标签跟随面板前景。 */
+body.betterld-shell .btn-social:is(.github, .apple, .passkey-login-button) .d-icon {
+  color: var(--betterld-on-surface) !important;
+}
+
+body.betterld-shell :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) .input-group :is(.alt-placeholder, .control-label) {
+  color: var(--betterld-on-surface-variant) !important;
+}
+
+body.betterld-shell :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) .input-group :is(input:focus, input.value-entered) + .alt-placeholder {
+  background: rgb(var(--betterld-surface-container-rgb)) !important;
+  color: var(--betterld-primary) !important;
+}
+
+body.betterld-shell .select-kit .select-kit-row:is(:hover, .is-highlighted):not(.is-selected) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important;
+}
+
+body.betterld-shell .select-kit .select-kit-row.is-selected {
+  background: color-mix(in srgb, var(--betterld-primary) 16%, transparent) !important;
+  color: var(--betterld-on-surface) !important;
+}
+
+body.betterld-shell .select-kit.is-disabled .select-kit-header,
+body.betterld-shell .chat-composer.is-disabled .chat-composer__inner-container,
+body.betterld-shell .ai-bot-conversations__input-wrapper:has(textarea:disabled),
+body.betterld-shell :is(input, textarea, select):disabled:not(.cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .chat-message-text *, .fc *) {
+  opacity: 0.6;
+}
+
+body.betterld-shell :is(input[type="checkbox"], input[type="radio"]):not(.cooked *, .betterld-reply-tree__cooked *, .fc *) {
+  accent-color: var(--betterld-primary);
+}
+
+body.betterld-shell .d-toggle-switch__checkbox-slider {
+  background: rgb(var(--betterld-surface-container-high-rgb)) !important;
+  box-shadow: inset 0 0 0 2px rgb(var(--betterld-outline-rgb) / 0.72);
+}
+
+body.betterld-shell .d-toggle-switch__checkbox-slider::before {
+  background: var(--betterld-on-surface-variant);
+}
+
+body.betterld-shell .d-toggle-switch__checkbox[aria-checked="true"] + .d-toggle-switch__checkbox-slider {
+  background: var(--betterld-primary) !important;
+  box-shadow: none;
+}
+
+body.betterld-shell .d-toggle-switch__checkbox[aria-checked="true"] + .d-toggle-switch__checkbox-slider::before {
+  background: var(--betterld-on-primary);
+}
+
+/* 编辑器底板与预览框分层，预览内 cooked 样式不在此覆盖。 */
+body.betterld-shell #reply-control {
+  border-start-start-radius: var(--betterld-radius-xl);
+  border-start-end-radius: var(--betterld-radius-xl);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+
+body.betterld-shell :is(.d-modal__header, .d-modal__footer, .dialog-header, .dialog-footer, #reply-control .d-editor-button-bar) {
+  background: transparent !important;
+  border-color: rgb(var(--betterld-outline-rgb) / 0.24);
+}
+
+body.betterld-shell .d-editor-textarea-wrapper .d-editor-input,
+body.betterld-shell .ai-bot-conversations__input-wrapper #ai-bot-conversations-input,
+body.betterld-shell .chat-composer__input {
+  background: transparent !important;
+  color: var(--betterld-on-surface);
+  caret-color: var(--betterld-primary);
+}
+
+body.betterld-shell #reply-control .d-editor-preview-wrapper {
+  background-color: rgb(var(--betterld-surface-rgb) / 0.56) !important;
+  border-radius: var(--betterld-radius-sm);
+}
+
+body.betterld-shell :is(.d-editor-textarea-wrapper, .ai-bot-conversations__input-wrapper, .chat-composer__inner-container):focus-within {
+  border-color: var(--betterld-primary) !important;
+}
+
+/* 错误边框后于焦点状态，聚焦不掩盖原站校验结果。 */
+body.betterld-shell :is(.has-errors, .has-error) :is(input, textarea, .select-kit-header, .d-editor-textarea-wrapper),
+body.betterld-shell :is(input, textarea, select):is(:user-invalid, [aria-invalid="true"]) {
+  border-color: var(--betterld-error) !important;
+}
+
+/* 聊天布局和逐条消息状态保持原站，只归一不透明容器与日期胶囊。 */
+body.betterld-shell :is(.chat-message-container, .chat-transcript):not(.-deleted, .-bookmarked, .-highlighted, .-active, :hover) {
+  background-color: transparent;
+}
+
+body.betterld-shell .chat-message-separator__text {
+  background-color: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
+  border-radius: 999px;
+}
+
+body.betterld-shell .chat-message-separator-date .chat-message-separator__text {
+  color: var(--betterld-on-surface-variant) !important;
+}
+
+body.betterld-shell .chat-composer__inner-container {
+  box-shadow: none;
+}
+
+/* 大型聊天壳层不创建滤镜包含块，消息内浮动控件保留原站定位上下文。 */
+body.betterld-shell :is(.full-page-chat, .chat-drawer-container) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* 透明区域使用与前景相反的局部轮廓，保持文字可读而不遮盖壁纸。 */
@@ -1358,7 +1584,7 @@ body.betterld-shell .groups-index .groups-header {
 }
 
 body.betterld-shell .groups-index .groups-header-filters :is(input, .select-kit-header) {
-  background: rgb(var(--betterld-surface-rgb) / 0.56) !important;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
   color: var(--betterld-on-surface);
 }
 
@@ -2192,9 +2418,13 @@ body.betterld-tags-page .tags-index {
   outline-offset: 3px;
 }
 
-.betterld-settings-trigger__icon {
-  font-size: 18px;
-  line-height: 1;
+.betterld-settings-trigger__icon,
+.betterld-touch-home__icon,
+.betterld-action-rail__icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: currentColor;
 }
 
 .betterld-action-rail {
@@ -2321,11 +2551,6 @@ body.betterld-tags-page .tags-index {
 .betterld-action-rail__button:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: 3px;
-}
-
-.betterld-action-rail__icon {
-  font-size: 19px;
-  line-height: 1;
 }
 
 /* 合并后的「返回顶部或刷新」按钮：未到顶部显示向上箭头，已在顶部显示刷新图标 */
@@ -3586,11 +3811,12 @@ body.betterld-unmanaged-page .sidebar-wrapper {
   background: transparent !important;
 }
 
-html[data-betterld-font-scope="own"] :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-action-rail, .betterld-settings-trigger, .betterld-topic-empty, .betterld-action-status) {
+html[data-betterld-font-scope="own"] :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-reply-tree, .betterld-floor-timeline, .betterld-action-rail, .betterld-settings-trigger, .betterld-touch-home, .betterld-topic-empty, .betterld-action-status) {
   font-family: var(--betterld-font-family, inherit);
 }
 
-html[data-betterld-font-scope="managed"] body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) {
+html[data-betterld-font-scope="managed"] body.betterld-shell,
+html[data-betterld-font-scope="managed"] body.betterld-shell :is(button, input, select, textarea):not(.cooked *, .betterld-reply-tree__cooked *, .d-editor-preview *, .fc *) {
   font-family: var(--betterld-font-family, inherit);
 }
 

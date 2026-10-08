@@ -56,6 +56,8 @@
 - **Rules/Invariants**：站点自己的二级导航条（用户页 `.user-navigation .nav-pills`、私信页 `.messages-nav`）与主题列表导航共用同一套胶囊规则（选择器组写在一处，不复制声明）；站点按钮 `.btn-default`/`.btn-primary`/`.btn-danger` 统一为 betterLD 形态，只改背景、描边、圆角与文字色，保持原几何尺寸，`.btn-icon`/`.btn-flat`/`.btn-transparent` 不受影响。
 - **Rules/Invariants**：站点用 `var(--d-content-background)` / `var(--secondary)` 画的整页底板都算壳层要处理的对象，已知清单：`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`、`.list-controls`、`.search-container`、`.user-main`、`.user-content`、`.body-page`（静态文档页）、`#main-outlet.not-found-container`（404）、`.show-badge`（徽章详情）、`.login-fullpage`、`.container.group`（群组页）、`.latest-topic-list-item`、`.user-stream-item`、`.follow-stream-item`、`.badge-card`。聊天页（`.full-page-chat`、`.chat-message-container`、`.c-navbar-container`、`.chat-pinned-bar`、`.chat-channel-status`）与 AI 机器人输入区同样处理。第三方组件（如 `/upcoming-events` 的日历）与帖子正文内容元素（blockquote、代码块）保留自身观感。
 - **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
+- **Rules/Invariants**：原站编辑器、通用弹窗/对话框/Toast、偏好表单和 select-kit、聊天容器/输入、AI 会话输入、徽章详情/登录注册/关注流复用这两种材质。只改变容器和控件观感，保持原尺寸、布局、焦点/禁用/错误/选中语义，不重建表单或改提交行为；普通按钮不覆盖组合按钮与帖子正文/预览/日历内的控件。
+- **Rules/Invariants**：betterLD 自有设置/首页/主题/顶部/刷新/撤销刷新工具使用内联 Material SVG，不请求图标字体、不批量替换原站图标。默认字体范围 `own` 仅影响插件自有内容；用户选择 `managed` 后应用到全站壳层及原生控件，保留代码字体与第三方组件自身字体。
 
 ### BewlyCat Wallpaper Selection
 - **Definition**：首页背景图片的来源选择模型，包含网站随机图片、内置图片和用户自定义图片 3 类来源。

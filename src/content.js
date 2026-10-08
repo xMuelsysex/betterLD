@@ -1432,6 +1432,27 @@
     }
   }
 
+  function createActionIcon(name, className) {
+    const paths = {
+      settings: "M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.08-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.6-.22l-2.49 1c-.52-.4-1.07-.73-1.68-.98L14.5 2.42A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.68.98l-2.49-1c-.23-.08-.48 0-.6.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.05.32-.09.66-.09.98s.03.66.08.98L2.07 14.63c-.19.15-.24.42-.12.64l2 3.46c.12.22.37.31.6.22l2.49-1c.52.4 1.07.73 1.68.98l.38 2.65c.04.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.68-.98l2.49 1c.23.08.48 0 .6-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.08-1.65zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z",
+      home: "M12 3 2 12h3v8h5v-6h4v6h5v-8h3L12 3z",
+      theme: "M6.76 4.84 4.96 3.05 3.55 4.46l1.79 1.79 1.42-1.41zM1 10h3v2H1v-2zm10-9h2v3h-2V1zm8.45 3.46-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zM20 10h3v2h-3v-2zM12 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm5.24 3.16 1.79 1.79 1.41-1.41-1.79-1.79-1.41 1.41zM11 18h2v3h-2v-3zm-7.45-.46 1.41 1.41 1.79-1.79-1.41-1.41-1.79 1.79z",
+      top: "M4 4h16v2H4V4zm8 4-6 6 1.41 1.41L11 11.83V20h2v-8.17l3.59 3.58L18 14l-6-6z",
+      refresh: "M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.93 9h-2.02A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
+      undoRefresh: "M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62A7.96 7.96 0 0 1 12.5 10c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.15 10.81 17.18 8 12.5 8z"
+    };
+    const namespace = "http://www.w3.org/2000/svg";
+    const icon = document.createElementNS(namespace, "svg");
+    icon.setAttribute("class", className);
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+    const path = document.createElementNS(namespace, "path");
+    path.setAttribute("d", paths[name]);
+    icon.append(path);
+    return icon;
+  }
+
   function createSettingsTrigger() {
     const trigger = createElement("button", "betterld-settings-trigger");
     trigger.type = "button";
@@ -1439,8 +1460,7 @@
     trigger.setAttribute("aria-label", "打开 betterLD 设置");
     trigger.title = "打开 betterLD 设置";
     trigger.addEventListener("click", openSettingsPage);
-    const icon = createElement("span", "betterld-settings-trigger__icon", "⚙");
-    icon.setAttribute("aria-hidden", "true");
+    const icon = createActionIcon("settings", "betterld-settings-trigger__icon");
     trigger.append(icon, createElement("span", "betterld-settings-trigger__label", "设置"));
     return trigger;
   }
@@ -1456,7 +1476,8 @@
   }
 
   function createTouchHomeButton() {
-    const link = createElement("a", "betterld-touch-home", "⌂");
+    const link = createElement("a", "betterld-touch-home");
+    link.append(createActionIcon("home", "betterld-touch-home__icon"));
     link.href = config.homepagePath;
     link.setAttribute("aria-label", "返回首页");
     link.title = "返回首页";
@@ -1486,13 +1507,12 @@
       refresh: "刷新",
       undoRefresh: "撤销刷新"
     };
-    const icons = { settings: "⚙", theme: "☼", top: "↑", refresh: "↻", undoRefresh: "↶" };
     const button = createElement("button", "betterld-action-rail__button");
     button.type = "button";
     button.dataset.betterldAction = key;
     button.setAttribute("aria-label", labels[key] || key);
     button.title = labels[key] || key;
-    button.append(createElement("span", "betterld-action-rail__icon", icons[key] || "•"));
+    button.append(createActionIcon(key, "betterld-action-rail__icon"));
     button.addEventListener("click", () => {
       if (key === "settings") {
         openSettingsPage();
@@ -1526,10 +1546,10 @@
     button.setAttribute("aria-label", "返回顶部或刷新");
     button.title = "返回顶部或刷新";
     if (showTop) {
-      button.append(createElement("span", "betterld-action-rail__icon", "↑"));
+      button.append(createActionIcon("top", "betterld-action-rail__icon"));
     }
     if (showRefresh) {
-      button.append(createElement("span", "betterld-action-rail__icon", "↻"));
+      button.append(createActionIcon("refresh", "betterld-action-rail__icon"));
     }
     button.addEventListener("click", () => {
       if (showTop && pageScrollTop() > config.scrollTopThreshold) {
