@@ -5106,6 +5106,7 @@
       const item = createElement("li", "betterld-reply-tree__item");
       item.dataset.postNumber = String(post.post_number);
       const card = createElement("article", "betterld-reply-tree__card");
+      const avatarWrap = createElement("div", "betterld-reply-tree__avatar-wrap");
       const avatar = createElement("img", "betterld-reply-tree__avatar");
       const avatarPath = replyTreeAvatarPath(post.avatar_template);
       if (avatarPath) avatar.src = avatarPath;
@@ -5120,6 +5121,13 @@
         avatarLink.dataset.userCard = username;
         avatarLink.setAttribute("aria-label", `查看 ${nickname || username} 的个人资料`);
         avatarLink.append(avatar);
+      }
+      avatarWrap.append(avatarLink || avatar);
+      const authorDetails = Object.fromEntries([
+        "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "user_status"
+      ].map((key) => [key, post[key]]));
+      if (post.flair_url || post.flair_bg_color || post.flair_group_id || post.user_status?.emoji) {
+        avatarWrap.dataset.betterldAuthorDetails = JSON.stringify(authorDetails);
       }
       const body = createElement("div", "betterld-reply-tree__body");
       const head = createElement("div", "betterld-reply-tree__head");
@@ -5142,6 +5150,8 @@
         mark.setAttribute("aria-label", mark.title);
         author.append(mark);
       }
+      const userTitle = cleanText(post.user_title);
+      if (userTitle) author.append(createElement("span", "user-title betterld-reply-tree__user-title", userTitle));
       const number = createElement("a", "betterld-reply-tree__number", `#${post.post_number} · 去原帖回复`);
       number.href = topicReplyUrl(tree.topicId, post.post_number);
       number.addEventListener("click", (event) => {
@@ -5271,7 +5281,7 @@
       body.append(actions);
       const boosts = replyTreeBoostSection(tree, post);
       if (boosts) body.append(boosts);
-      card.append(avatarLink || avatar, body);
+      card.append(avatarWrap, body);
       item.append(card);
       const replies = children.get(post.post_number) || [];
       if (replies.length) {
@@ -5297,6 +5307,9 @@
     const rootPost = byNumber.get(1);
     if (rootPost) list.append(renderPost(rootPost));
     tree.content.replaceChildren(list);
+    if (tree.bridgeReady) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
+    }
     if (anchor && !tree.contentContainer.hidden) {
       const replacement = tree.content.querySelector(`[data-post-number="${anchor.dataset.postNumber}"]`);
       if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
@@ -5603,7 +5616,9 @@
     tree.liveIds = previous?.liveIds || new Set();
     state.replyTree = tree;
     loadPageRefreshBridge().then(() => {
-      if (state.replyTree === tree) tree.bridgeReady = true;
+      if (state.replyTree !== tree) return;
+      tree.bridgeReady = true;
+      document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }).catch((error) => {
       console.error('[betterLD] reply bridge failed', error);
       if (state.replyTree === tree) tree.status.textContent = `回复实时同步与楼层跳转不可用：${error.message}`;

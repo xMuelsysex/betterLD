@@ -8,7 +8,7 @@
   let replyTopicId = "";
   let replySignature = "";
   let floorTimeline = null;
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -144,6 +144,76 @@
     return routeTo.call(this, url, options);
   };
 
+  // 与正文高亮一样在主世界增强树节点，复用原站的自动群组徽章、图标和 emoji 解析。
+  // 输入来自各楼已有数据，分页楼层不必加入原站 postStream，也不额外请求用户信息。
+  function enhanceReplyAuthors() {
+    const pending = document.querySelectorAll(".betterld-reply-tree__avatar-wrap[data-betterld-author-details]");
+    if (!pending.length) return;
+    const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+    const site = owner.lookup("service:site");
+    const autoGroupFlairForUser = window.require("discourse/lib/avatar-flair").default;
+    const { convertIconClass, iconHTML } = window.require("discourse/lib/icon-library");
+    const { emojiUrlFor } = window.require("discourse/lib/text");
+    for (const host of pending) {
+      const details = JSON.parse(host.dataset.betterldAuthorDetails);
+      const flair = details.flair_url || details.flair_bg_color ? details
+        : details.flair_group_id ? autoGroupFlairForUser(site, details) : null;
+      if (flair) {
+        const badge = document.createElement("div");
+        badge.className = "avatar-flair betterld-reply-tree__avatar-flair";
+        if (flair.flair_name) {
+          badge.classList.add(`avatar-flair-${flair.flair_name.replace(/\s+/g, "-")}`);
+          badge.title = flair.flair_name;
+          badge.setAttribute("aria-label", flair.flair_name);
+          badge.setAttribute("role", "img");
+        }
+        if (flair.flair_bg_color) {
+          badge.classList.add("rounded");
+          badge.style.backgroundColor = `#${flair.flair_bg_color}`;
+        }
+        if (flair.flair_color) badge.style.color = `#${flair.flair_color}`;
+        if (flair.flair_url && !flair.flair_url.includes("/")) {
+          const template = document.createElement("template");
+          template.innerHTML = iconHTML(convertIconClass(flair.flair_url));
+          badge.append(template.content);
+        } else {
+          badge.classList.add("avatar-flair-image");
+          if (flair.flair_url) badge.style.backgroundImage = `url(${JSON.stringify(flair.flair_url)})`;
+        }
+        host.append(badge);
+      }
+      const status = details.user_status;
+      if (status?.emoji && (!status.ends_at || Date.parse(status.ends_at) > Date.now())) {
+        const url = emojiUrlFor(status.emoji);
+        if (url) {
+          const message = document.createElement("span");
+          message.className = "user-status-message-wrap betterld-reply-tree__user-status";
+          message.title = status.description || status.emoji;
+          const image = document.createElement("img");
+          image.className = "emoji";
+          image.src = url;
+          image.alt = status.emoji;
+          message.append(image);
+          const author = host.closest(".betterld-reply-tree__card").querySelector(".betterld-reply-tree__author");
+          author.insertBefore(message, author.querySelector(".betterld-reply-tree__user-title"));
+        }
+      }
+      delete host.dataset.betterldAuthorDetails;
+    }
+  }
+
+  document.addEventListener("betterld:reply-author-details", (event) => {
+    const { topicId } = JSON.parse(event.detail);
+    try {
+      enhanceReplyAuthors();
+    } catch (error) {
+      console.error("[betterLD] 作者附加信息渲染失败", error);
+      document.dispatchEvent(new CustomEvent("betterld:reply-data", {
+        detail: JSON.stringify({ topicId, error: `作者附加信息渲染失败：${error.message}` })
+      }));
+    }
+  });
+
   document.addEventListener("betterld:reply-sync", (event) => {
     const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
     try {
@@ -165,6 +235,8 @@
         stream: [...stream.stream],
         posts: stream.posts.map((post) => ({
           ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
+          // 原站通过 User 模型接收状态变更；null 也要投影，以移除树里已取消的状态。
+          user_status: post.user?.status === undefined ? post.user_status ?? null : post.user.status,
           boosts: post.boosts?.map((boost) => ({
             ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
             user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))
