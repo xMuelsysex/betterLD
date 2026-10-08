@@ -151,3 +151,8 @@
 - **Rules/Invariants**：楼层正文与楼内 Boost 内容按原站 cooked 原样呈现：服务端能下发的任何内容都不在树里被单独剔除或改写（含 B 站等 iframe 播放器、object/embed 嵌入、内联矢量图、表单、帖子自带样式，以及 data:/blob: 资源），避免出现「原站可见、树里消失」；显示的尺寸与行为同样以原站为准。
 - **Rules/Invariants**：树内除按原站 cooked 原样呈现内容外，还按原站 DOM 复刻 Discourse 客户端的增强：`[!Type]±` callout 折叠、`spoiler` 剧透（点击/键盘显示）、`hashtag` 图标、代码块复制与全屏按钮、语法高亮（借用原站 highlight.js，经主世界桥接）、图片灯箱（树内浮层）；各增强幂等，树重建时随 cooked 重新应用。
 - **Rules/Invariants**：引用有两种独立能力，都对齐原站：一是每个引用都带「展开/收起」按钮，展开时按 `data-topic`/`data-post` 取被引用帖的完整内容替换引用片段、收起时还原；二是内容高度超过 `replyTreeQuoteCollapseHeightPx` 的引用额外提供限高折叠。展开失败要可见并可重试。
+
+### Reply Author Mark
+- **Definition**：树状回复作者名旁用于识别话题发起人和当前用户本人的紧凑身份标识。
+- **Rules/Invariants**：OP（Original Poster）代表首帖作者，只在其第 2 楼及后续楼层显示；ME 代表当前登录用户，在其全部楼层显示，包括本人首帖。同一楼层可并列显示 OP ME，顺序固定为 OP 在前。
+- **Rules/Invariants**：身份以原站真实用户 ID 判定，与昵称/用户名的显示模式无关；身份缺失时不猜测，未登录时没有 ME。标识覆盖任意嵌套深度和后续加载的新回复，只标注作者身份，不改变回复内容或交互；本轮仅提供 OP / ME。

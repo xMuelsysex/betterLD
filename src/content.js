@@ -4871,17 +4871,21 @@
     selection.addRange(range);
   }
 
-  // 原站编辑器的头像是当前用户的 48px avatar_template（显示尺寸 24px），直接从预载用户数据取，不自造一份。
-  function currentUserAvatarPath() {
+  function preloadedCurrentUser() {
     const source = document.querySelector("#data-preloaded")?.textContent;
-    if (!source) return "";
+    if (!source) return null;
     try {
       const current = JSON.parse(source).currentUser;
-      return replyTreeAvatarPath(current ? JSON.parse(current).avatar_template : "");
+      return current ? JSON.parse(current) : null;
     } catch (error) {
-      console.error("[betterLD] 当前用户头像数据无效", error);
-      return "";
+      console.error("[betterLD] 当前用户预载数据无效", error);
+      return null;
     }
+  }
+
+  // 原站编辑器的头像是当前用户的 48px avatar_template（显示尺寸 24px），直接从预载用户数据取，不自造一份。
+  function currentUserAvatarPath() {
+    return replyTreeAvatarPath(preloadedCurrentUser()?.avatar_template);
   }
 
   // 原站 Boost 编辑器是挂在触发器旁的 DMenu 浮层（当前用户头像 + 文本域 + 提交/取消按钮）：
@@ -5067,6 +5071,8 @@
     closeReplyReactionPicker(tree);
     const posts = [...tree.posts.values()].sort((a, b) => a.post_number - b.post_number);
     const byNumber = new Map(posts.map((post) => [post.post_number, post]));
+    const topicOwnerId = byNumber.get(1)?.user_id;
+    const currentUserId = preloadedCurrentUser()?.id;
     const children = new Map(posts.map((post) => [post.post_number, []]));
     for (const post of posts) {
       if (post.post_number === 1) continue;
@@ -5104,6 +5110,18 @@
         author.append(createElement("span", "betterld-reply-tree__username", username));
       }
       if (!author.textContent) author.textContent = username || `#${post.post_number}`;
+      if (post.post_number > 1 && Number.isInteger(topicOwnerId) && post.user_id === topicOwnerId) {
+        const mark = createElement("span", "betterld-reply-tree__author-mark", "OP");
+        mark.title = "楼主（话题发起人）";
+        mark.setAttribute("aria-label", mark.title);
+        author.append(mark);
+      }
+      if (Number.isInteger(currentUserId) && post.user_id === currentUserId) {
+        const mark = createElement("span", "betterld-reply-tree__author-mark betterld-reply-tree__author-mark--me", "ME");
+        mark.title = "我（当前登录用户）";
+        mark.setAttribute("aria-label", mark.title);
+        author.append(mark);
+      }
       const number = createElement("a", "betterld-reply-tree__number", `#${post.post_number} · 去原帖回复`);
       number.href = topicReplyUrl(tree.topicId, post.post_number);
       number.addEventListener("click", (event) => {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.55",
+  "version": "0.1.56",
   "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
   "permissions": ["storage"],
   "optional_host_permissions": [

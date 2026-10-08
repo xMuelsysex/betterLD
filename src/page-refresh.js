@@ -8,7 +8,7 @@
   let replyTopicId = "";
   let replySignature = "";
   let floorTimeline = null;
-  const postFields = ["id", "post_number", "reply_to_post_number", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
