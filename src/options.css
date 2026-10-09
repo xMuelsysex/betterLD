@@ -611,6 +611,20 @@ body {
   line-height: var(--settings-line-height-control);
 }
 
+.settings-network-guide {
+  display: grid;
+  gap: var(--settings-space-2);
+  margin-top: var(--settings-space-4);
+}
+
+.settings-network-guide p { margin: 0; }
+.settings-network-guide__address {
+  display: grid;
+  gap: var(--settings-space-2);
+  font-size: var(--settings-font-size-control);
+  color: var(--settings-text-2);
+}
+
 .settings-inline-status:empty {
   display: none;
 }

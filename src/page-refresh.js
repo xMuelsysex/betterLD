@@ -273,6 +273,50 @@
     author.append(host);
   }
 
+  function replyPosterBadgeSettings() {
+    const moduleName = Object.keys(window.require.entries).find((name) =>
+      name.endsWith("/discourse/initializers/initialize-discourse-post-badges"));
+    if (!moduleName) return null;
+    const themeId = Number(moduleName.match(/\/theme-(\d+)\//)[1]);
+    return window.require("discourse/lib/theme-settings-store").getObjectForTheme(themeId);
+  }
+
+  function renderReplyPosterBadges(author, post, settings) {
+    if (!settings || !post.user_badges?.length) return;
+    const order = settings.badges.split("|").filter(Boolean).map((name) => name.toLowerCase());
+    const badges = post.user_badges.filter((badge) => order.includes(badge.name.toLowerCase()))
+      .sort((a, b) => order.indexOf(a.name.toLowerCase()) - order.indexOf(b.name.toLowerCase()));
+    const highestTrustBadge = Math.max(0, ...post.user_badges.filter((badge) => badge.badge_grouping_id === 4).map((badge) => badge.id));
+    const { iconHTML } = window.require("discourse/lib/icon-library");
+    const getURL = window.require("discourse/lib/get-url").default;
+    const group = document.createElement("span");
+    group.className = "poster-icon-container betterld-reply-tree__poster-badges";
+    for (const badge of badges) {
+      if (settings.only_show_highest_trust_level && badge.id >= 1 && badge.id <= 4 && badge.id !== highestTrustBadge) continue;
+      const host = document.createElement("span");
+      host.className = `poster-icon badge-type-${["gold", "silver", "bronze"][badge.badge_type_id - 1]}`;
+      host.title = badge.description;
+      const link = document.createElement("a");
+      const username = settings.badge_link_destination === "user's badge page" ? `?username=${encodeURIComponent(post.username)}` : "";
+      link.href = getURL(`/badges/${badge.id}/${encodeURIComponent(badge.slug)}${username}`);
+      link.setAttribute("aria-label", `${badge.name}：${badge.description}`);
+      const image = badge.image_url || badge.image;
+      if (image) {
+        const icon = document.createElement("img");
+        icon.src = image;
+        icon.alt = "";
+        link.append(icon);
+      } else {
+        const template = document.createElement("template");
+        template.innerHTML = iconHTML(badge.icon.replace("fa-", ""));
+        link.append(template.content);
+      }
+      host.append(link);
+      group.append(host);
+    }
+    if (group.childElementCount) author.append(group);
+  }
+
   // 分页作者复用原站已有模型能力，不加入 postStream 或补发逐用户请求。
   function enhanceReplyAuthors(topicId) {
     const pending = document.querySelectorAll(".betterld-reply-tree__avatar-wrap[data-betterld-author-details]");
@@ -282,6 +326,7 @@
     if (String(topic.id) !== topicId) return;
     const site = owner.lookup("service:site");
     const statusEnabled = owner.lookup("service:user-status").isEnabled;
+    const posterBadgeSettings = replyPosterBadgeSettings();
     const livePosts = new Map(topic.postStream.posts.map((post) => [post.id, post]));
     const autoGroupFlairForUser = window.require("discourse/lib/avatar-flair").default;
     const { convertIconClass, iconHTML } = window.require("discourse/lib/icon-library");
@@ -323,6 +368,7 @@
         entry.views.push(view);
         renderReplyAuthorStatus(entry, view);
       }
+      renderReplyPosterBadges(author, post, posterBadgeSettings);
     }
   }
 
@@ -354,6 +400,7 @@
       const data = {
         topicId,
         stream: [...stream.stream],
+        user_badges: topic.user_badges,
         posts: stream.posts.map((post) => ({
           ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
           // 原站通过 User 模型接收状态变更；null 也要投影，以移除树里已取消的状态。
@@ -525,6 +572,26 @@
     document.dispatchEvent(new CustomEvent("betterld:topic-list", {
       detail: JSON.stringify({ id, payload })
     }));
+  });
+
+  document.addEventListener("betterld:search-state-request", (event) => {
+    const { id } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const route = owner.lookup("service:router").currentRouteName;
+      const controller = route === "full-page-search" ? owner.lookup("controller:full-page-search") : null;
+      const model = controller?.model;
+      const term = model?.grouped_search_result?.term;
+      const ready = Boolean(controller && typeof term === "string" && term === controller.q
+        && Array.isArray(model.posts) && !controller.searching && !controller.loading
+        && !controller.error && !controller.invalidSearch && controller.searchActive
+        && controller.usingDefaultSearchType && !controller.context && !controller.isPrivateMessage && !controller.isPMOnly);
+      document.dispatchEvent(new CustomEvent("betterld:search-state", {
+        detail: JSON.stringify({ id, ready, query: ready ? term : "", empty: ready && controller.resultCount === 0 })
+      }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:search-state", { detail: JSON.stringify({ id, error: error.message }) }));
+    }
   });
 
   document.addEventListener("betterld:refresh", async (event) => {

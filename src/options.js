@@ -777,6 +777,7 @@
     topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", highlight: "高亮命中项", include: "只显示命中项" },
     topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
     searchMode: { native: "原生结果", cards: "阅读卡" },
+    externalSearchEngine: { off: "关闭", bing: "Bing", duckduckgo: "DuckDuckGo" },
     searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
     searchPageWallpaperMode: { inherit: "继承全局", builtin: "内置图片", url: "远程图片" },
     touchOptimization: { auto: "自动", on: "开启", off: "关闭" }
@@ -808,6 +809,7 @@
     topicFilterMode: { hide: "Hide matches", dim: "Dim matches", highlight: "Highlight matches", include: "Show matches only" },
     topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
     searchMode: { native: "Native results", cards: "Reading cards" },
+    externalSearchEngine: { off: "Off", bing: "Bing", duckduckgo: "DuckDuckGo" },
     searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
     searchPageWallpaperMode: { inherit: "Inherit global", builtin: "Built-in image", url: "Remote image" },
     touchOptimization: { auto: "Automatic", on: "On", off: "Off" }
@@ -1075,6 +1077,7 @@
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后只隐藏命中项。", dependsOn: ["topicFilterEnabled", true] },
 
     { key: "searchMode", type: "select", label: "搜索结果模式", help: "阅读卡复用搜索结果的作者和摘要，不额外请求；支持作者等过滤规则。原生模式保持站点结果页。" },
+    { key: "externalSearchEngine", type: "select", label: "空结果补充搜索引擎", help: "站内明确无结果时追加 site:linux.do；仅保留并去重 LinuxDo 主题。启用时请求所选引擎访问权限，搜索词会发送给该引擎。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
     { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
     { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
@@ -1909,6 +1912,39 @@
     }
   }
 
+  function initializeDnsGuide() {
+    const guide = config.browserDnsGuides[/Firefox\//.test(navigator.userAgent) ? "firefox" : "chrome"];
+    const address = document.querySelector("#dns-settings-address");
+    const dnsStatus = document.querySelector("#dns-settings-status");
+    const open = document.querySelector("#open-dns-settings");
+    address.value = guide.url;
+    document.querySelector("#dns-settings-path").textContent = `${guide.label}：${guide.path}`;
+    document.querySelector("#dns-settings-hint").textContent = guide.hint;
+    open.hidden = !guide.canOpen;
+    open.addEventListener("click", async () => {
+      open.disabled = true;
+      try {
+        const response = await sendRuntimeMessage({ type: "open-dns-settings" });
+        if (!response?.ok) throw new Error(response?.error || "浏览器设置未能打开");
+        setStatusMessage(dnsStatus, `已打开 ${guide.label} 设置，请找到“使用安全 DNS”。`, "success");
+      } catch (error) {
+        setStatusMessage(dnsStatus, `打开失败：${error.message}。可复制设置地址到浏览器地址栏。`, "error");
+      } finally {
+        open.disabled = false;
+      }
+    });
+    document.querySelector("#copy-dns-settings").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(guide.url);
+        setStatusMessage(dnsStatus, "地址已复制，请粘贴到浏览器地址栏后按回车。", "success");
+      } catch (error) {
+        address.focus();
+        address.select();
+        setStatusMessage(dnsStatus, `复制失败：${error.message}。地址已选中，可按 Ctrl/Cmd+C 复制。`, "error");
+      }
+    });
+  }
+
   function iconMask(svg) {
     return `url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round">${svg}</svg>')`;
   }
@@ -2115,6 +2151,7 @@
   renderFieldDefinitions();
   addRangeLimits();
   renderStructuredEditors();
+  initializeDnsGuide();
   renderRail();
   showCategory(config.settingsCategories[0].id);
 
@@ -2127,6 +2164,25 @@
       return;
     }
     updateDependencies();
+    if (event.target.name === "externalSearchEngine") {
+      const control = event.target;
+      const entry = config.externalSearch.engines[control.value];
+      if (!entry) { commitSettings(); return; }
+      if (!api.permissions?.request) {
+        control.value = state.settings.externalSearchEngine;
+        setStatusMessage(status, "请在扩展设置页或工具栏弹窗中启用外部搜索并授予访问权限。", "error");
+        return;
+      }
+      // 权限申请留在选择手势内，避免异步保存后失去浏览器授权上下文。
+      api.permissions.request({ origins: [`${new URL(entry.url).origin}/*`] }).then((granted) => {
+        if (!granted) throw new Error("所选搜索引擎的访问权限未获授权");
+        commitSettings();
+      }).catch((error) => {
+        control.value = state.settings.externalSearchEngine;
+        setStatusMessage(status, `外部搜索未启用：${error.message}`, "error");
+      });
+      return;
+    }
     commitSettings();
   });
 

@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.59",
+  "version": "0.1.60",
   "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "optional_host_permissions": [
     "https://*/*",
     "http://127.0.0.1/*",
@@ -15,7 +17,12 @@
     "https://api.github.com/*"
   ],
   "background": {
-    "scripts": ["betterld.config.js", "src/webdav.js", "src/background.js"],
+    "scripts": [
+      "betterld.config.js",
+      "src/webdav.js",
+      "src/external-search.js",
+      "src/background.js"
+    ],
     "service_worker": "src/background.js"
   },
   "content_scripts": [
@@ -28,9 +35,14 @@
         "betterld.config.js",
         "src/settings.js",
         "src/markdown.js",
+        "src/external-search.js",
+        "src/topic-library.js",
         "src/content.js"
       ],
-      "css": ["src/content.css"],
+      "css": [
+        "src/content.css",
+        "src/topic-library.css"
+      ],
       "all_frames": true,
       "run_at": "document_idle"
     }

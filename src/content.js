@@ -1,7 +1,8 @@
 (() => {
   "use strict";
 
-  if (window !== window.top) {
+  // 仅插件主动打开的同站主题预览复用完整样式与回复树，帖子里的嵌入不接管。
+  if (window !== window.top && !window.frameElement?.matches("iframe[data-betterld-topic-preview]")) {
     return;
   }
 
@@ -58,6 +59,9 @@
     topicListSyncAgain: false,
 
     searchLoadMoreBusy: false,
+    externalSearchBusy: false,
+    externalSearchKey: "",
+    externalSearchPanel: null,
     undoRefreshSnapshot: null,
     refreshScrollTopSince: 0,
     managedSources: new Map(),
@@ -392,6 +396,8 @@
     root.style.setProperty("--betterld-topic-detail-width", `${config.topicDetailWidthPercent}%`);
     root.style.setProperty("--betterld-topic-timeline-space", `${config.topicTimelineSpacePx}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
+    root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
+    root.style.setProperty("--betterld-surface-edge-fade", `${config.surfaceEdgeFadePx}px`);
     root.style.setProperty("--betterld-reply-quote-collapse-height", `${config.replyTreeQuoteCollapseHeightPx}px`);
     root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);
@@ -1113,6 +1119,110 @@
     sentinel.parentElement.append(button);
   }
 
+  async function readNativeSearchState() {
+    await loadPageRefreshBridge();
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      const onResult = (event) => {
+        const result = JSON.parse(event.detail);
+        if (result.id !== id) return;
+        clearTimeout(timer);
+        document.removeEventListener("betterld:search-state", onResult);
+        if (result.error) reject(new Error(result.error));
+        else resolve(result);
+      };
+      const timer = setTimeout(() => {
+        document.removeEventListener("betterld:search-state", onResult);
+        reject(new Error("原站搜索状态读取超时"));
+      }, config.externalSearch.nativeStateTimeoutMs);
+      document.addEventListener("betterld:search-state", onResult);
+      document.dispatchEvent(new CustomEvent("betterld:search-state-request", { detail: JSON.stringify({ id }) }));
+    });
+  }
+
+  function clearExternalSearch() {
+    state.externalSearchPanel?.remove();
+    state.externalSearchPanel = null;
+    state.externalSearchKey = "";
+  }
+
+  function createExternalSearchPanel(engine, message) {
+    const host = document.querySelector(".search-container");
+    if (!host) return null;
+    state.externalSearchPanel?.remove();
+    const panel = createElement("section", "betterld-external-search");
+    const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · LinuxDo 补充结果`);
+    const status = createElement("p", "betterld-external-search__status", message);
+    status.setAttribute("role", "status");
+    const retry = createElement("button", "betterld-search-more", "重试补充搜索");
+    retry.type = "button";
+    retry.hidden = true;
+    retry.addEventListener("click", () => { state.externalSearchKey = ""; syncExternalSearch(); });
+    panel.append(heading, status, retry);
+    host.append(panel);
+    state.externalSearchPanel = panel;
+    return { panel, status, retry };
+  }
+
+  async function syncExternalSearch() {
+    const engine = state.currentSettings.externalSearchEngine;
+    if (!isSearchPage() || engine === "off") { clearExternalSearch(); return; }
+    const href = location.href;
+    const failedStateKey = `${engine}:state:${href}`;
+    if (state.externalSearchBusy || (state.externalSearchKey === failedStateKey && state.externalSearchPanel?.isConnected)) return;
+    state.externalSearchBusy = true;
+    try {
+      const native = await readNativeSearchState();
+      if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
+      if (!native.ready || !native.empty) { clearExternalSearch(); return; }
+      const key = `${engine}:${native.query}`;
+      if (key === state.externalSearchKey && state.externalSearchPanel?.isConnected) return;
+      const view = createExternalSearchPanel(engine, `站内无结果，正在搜索 ${native.query} site:linux.do…`);
+      if (!view) return;
+      const { panel, status, retry } = view;
+      state.externalSearchKey = key;
+      try {
+        const response = await sendRuntimeMessage({ type: "external-search", engine, query: native.query });
+        if (!response?.ok) throw new Error(response?.error || "外部搜索没有返回结果");
+        const current = await readNativeSearchState();
+        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine || !current.ready || !current.empty || current.query !== native.query) {
+          clearExternalSearch();
+          return;
+        }
+        const parsed = globalThis.BETTERLD_EXTERNAL_SEARCH.parseResults(engine, response.html);
+        const grid = createElement("div", "betterld-external-search__grid");
+        for (const result of parsed.results) {
+          const card = createElement("article", "betterld-external-search__card");
+          const title = createElement("a", "", result.title);
+          title.href = result.href;
+          const excerpt = createElement("p", "", result.excerpt);
+          const source = createElement("small", "", `外部索引 · ${config.externalSearch.engines[engine].label}`);
+          card.append(title, excerpt, source);
+          grid.append(card);
+        }
+        panel.insertBefore(grid, retry);
+        status.textContent = `补充 ${parsed.results.length} 个主题，过滤 ${parsed.filteredCount} 条重复、站外或非主题结果。外部索引可能过期，链接可见性由 LinuxDo 决定。`;
+        const original = createElement("a", "", "查看搜索引擎原始结果");
+        original.href = response.searchUrl;
+        original.target = "_blank";
+        original.rel = "noopener noreferrer";
+        panel.append(original);
+      } catch (error) {
+        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
+        status.textContent = `补充搜索失败：${error.message}`;
+        retry.hidden = false;
+        console.error("[betterLD] external search failed", error);
+      }
+    } catch (error) {
+      if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
+      const view = createExternalSearchPanel(engine, `补充搜索暂不可用：无法确认站内搜索状态。${error.message}`);
+      if (view) { state.externalSearchKey = failedStateKey; view.retry.hidden = false; }
+      console.error("[betterLD] native search state read failed", error);
+    } finally {
+      state.externalSearchBusy = false;
+    }
+  }
+
   function applySearchSettings() {
     const root = document.documentElement;
     const settings = state.currentSettings;
@@ -1466,7 +1576,7 @@
   }
 
   function ensureSettingsTrigger() {
-    if (!document.body || !state.currentSettings.showSettingsTrigger) {
+    if (window !== window.top || !document.body || !state.currentSettings.showSettingsTrigger) {
       document.querySelector("[data-betterld-settings-trigger]")?.remove();
       return;
     }
@@ -1485,7 +1595,7 @@
   }
 
   function syncTouchHomeButton() {
-    const shouldShow = state.currentSettings.showHomeButtonInTouchMode
+    const shouldShow = window === window.top && state.currentSettings.showHomeButtonInTouchMode
       && document.documentElement.dataset.betterldTouchMode === "true";
     const current = document.querySelector("[data-betterld-touch-home]");
     if (!shouldShow) {
@@ -1657,7 +1767,7 @@
   }
 
   function syncFloatingActions() {
-    if (!document.body) {
+    if (window !== window.top || !document.body) {
       return;
     }
     const settings = state.currentSettings;
@@ -2357,7 +2467,8 @@
     dialog.setAttribute("aria-labelledby", title.id);
     const frame = document.createElement("iframe");
     frame.className = "betterld-topic-drawer__frame";
-    frame.title = "LinuxDo 真实网页预览";
+    frame.title = "LinuxDo 树状回复预览";
+    frame.dataset.betterldTopicPreview = "true";
     const openLink = createElement("a", "betterld-topic-drawer__open", "在当前页打开完整主题");
     openLink.target = "_self";
     dialog.append(header, frame, openLink);
@@ -2443,7 +2554,7 @@
       return;
     }
     closeCardMenus();
-    state.drawerTrigger = card.querySelector(".betterld-topic-card__link");
+    state.drawerTrigger = card.querySelector(".betterld-topic-card__link, a.title, a.raw-link");
     drawer.title.textContent = card.dataset.filterTitle || "原帖预览";
     drawer.openLink.href = topicUrl;
     drawer.frame.src = topicUrl;
@@ -2455,7 +2566,7 @@
       drawer.dialog.setAttribute("open", "");
     }
     resizeTopicDrawer();
-    window.requestAnimationFrame(() => drawer.close.focus());
+    window.setTimeout(() => drawer.close.focus(), 0);
   }
 
   function plainText(markup) {
@@ -3724,14 +3835,12 @@
       if (posters) participants.append(...[...posters.querySelectorAll("a")].map((link) => link.cloneNode(true)));
       const stats = createElement("span", "betterld-topic-row__stats");
       stats.dataset.betterldReadingStats = "true";
-      const preview = createElement("button", "betterld-topic-row__preview", "预览");
-      preview.type = "button";
-      preview.setAttribute("aria-label", `预览：${topic.title}`);
-      preview.addEventListener("click", () => openTopicDrawer(row));
       const watched = createElement("span", "betterld-topic-card__badge", "已看");
       watched.dataset.betterldBadge = "watched";
       const status = createElement("span", "betterld-topic-row__status");
-      info.append(avatar, author, time, participants, stats, status, watched, preview, createCardMenu(row, row, topic));
+      const actions = createElement("span", "betterld-topic-row__actions");
+      actions.append(createCardMenu(row, row, topic));
+      info.append(avatar, author, time, participants, stats, status, watched, actions);
       main.append(info);
     }
     const status = info.querySelector(".betterld-topic-row__status");
@@ -3754,10 +3863,13 @@
     } finally {
       state.mutating = false;
     }
+    globalThis.BETTERLD_LIBRARY.sync();
     syncTopicListMetadata();
   }
 
   function syncHomepage() {
+    syncExternalSearch();
+    globalThis.BETTERLD_LIBRARY.sync();
     const searchCards = isSearchPage() && state.currentSettings.searchMode === "cards";
     if (!searchCards) {
       restoreAll();
@@ -5126,7 +5238,11 @@
       avatarWrap.append(avatarLink || avatar);
       // 无状态的作者也交给原站 User 模型追踪，才能接收后续设置的新状态。
       if (Number.isInteger(post.user_id) && username) {
-        avatarWrap.dataset.betterldAuthorDetails = JSON.stringify(post);
+        const badges = tree.userBadges?.users?.[post.user_id]?.badge_ids;
+        avatarWrap.dataset.betterldAuthorDetails = JSON.stringify({
+          ...post,
+          user_badges: badges?.map((id) => tree.userBadges.badges[id])
+        });
       }
       const body = createElement("div", "betterld-reply-tree__body");
       const head = createElement("div", "betterld-reply-tree__head");
@@ -5351,6 +5467,16 @@
     }
   }
 
+  function mergeReplyUserBadges(tree, badges) {
+    if (!badges) return false;
+    const previous = JSON.stringify(tree.userBadges);
+    tree.userBadges = {
+      users: { ...tree.userBadges?.users, ...badges.users },
+      badges: { ...tree.userBadges?.badges, ...badges.badges }
+    };
+    return previous !== JSON.stringify(tree.userBadges);
+  }
+
   async function loadReplyTree(tree, more = false) {
     if (tree.busy) return;
     tree.busy = true;
@@ -5380,6 +5506,7 @@
         if (!Array.isArray(data?.post_stream?.posts)) throw new Error("回复分页数据格式不正确");
         ids.forEach((id) => tree.loaded.add(id));
       }
+      mergeReplyUserBadges(tree, data.user_badges);
       const streamIds = new Set(tree.stream);
       [...data.post_stream.posts, ...nearbyPosts].forEach((post) => {
         if (Number.isInteger(post.id) && Number.isInteger(post.post_number) && streamIds.has(post.id)) {
@@ -5436,7 +5563,7 @@
     const added = data.stream.filter((id) => !tree.stream.includes(id));
     tree.stream = data.stream;
     const streamIds = new Set(tree.stream);
-    let changed = false;
+    let changed = mergeReplyUserBadges(tree, data.user_badges);
     for (const [id] of tree.posts) {
       if (!streamIds.has(id)) {
         tree.posts.delete(id);
@@ -5465,6 +5592,7 @@
       const result = await requestTopicResponse(`/t/${tree.topicId}/posts.json?${params}`, () => state.replyTree === tree);
       if (state.replyTree !== tree) return;
       if (!Array.isArray(result?.post_stream?.posts)) throw new Error('新回复数据格式不正确');
+      mergeReplyUserBadges(tree, result.user_badges);
       for (const post of result.post_stream.posts) {
         if (!tree.stream.includes(post.id)) continue;
         tree.posts.set(post.id, post);
@@ -5499,6 +5627,7 @@
         const data = await requestTopicResponse(endpoint, () => state.replyTree === tree);
         if (state.replyTree !== tree) return;
         if (!Array.isArray(data?.post_stream?.posts)) throw new Error('跳转楼层数据格式不正确');
+        mergeReplyUserBadges(tree, data.user_badges);
         for (const entry of data.post_stream.posts) {
           if (!tree.stream.includes(entry.id)) continue;
           tree.posts.set(entry.id, entry);
@@ -5629,6 +5758,7 @@
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
     tree.observer.observe(sentinel);
     tree.liveIds = previous?.liveIds || new Set();
+    tree.userBadges = previous?.userBadges;
     state.replyTree = tree;
     loadPageRefreshBridge().then(() => {
       if (state.replyTree !== tree) return;
@@ -5677,6 +5807,8 @@
     checkDailyWallpaper();
     recordVisitedTopic();
     syncReplyTree();
+    globalThis.BETTERLD_LIBRARY.sync();
+    syncExternalSearch();
     applyTopicSort();
     enforceRefreshScrollTop();
     // 站点结果异步渲染，触点与结果列表出现得比注入晚，因此每次轮询重试一次状态同步
@@ -5805,6 +5937,24 @@
   });
 
   const domObserver = new MutationObserver((records) => {
+    // 新主题在同一轮 DOM 提交中增强，避免防抖窗口留下原站 grid 行与插件 table 行混排。
+    if (isTopicListPage()) {
+      const rows = new Set();
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          if (node.matches(".topic-list-item")) rows.add(node);
+          const parentRow = node.closest(".topic-list-item:not(.betterld-topic-row)");
+          if (parentRow) rows.add(parentRow);
+          node.querySelectorAll(".topic-list-item").forEach((row) => rows.add(row));
+        }
+      }
+      rows.forEach((row) => {
+        row.closest(".topic-list")?.classList.add("betterld-topic-list");
+        enhanceTopicRow(row);
+      });
+      if (rows.size) globalThis.BETTERLD_LIBRARY.sync();
+    }
     // 只镜像原站变化；卡片内部的作者、预览与筛选结果不能再次驱动源列表同步。
     if (records.some(({ target }) => {
       const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;

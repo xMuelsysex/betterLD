@@ -42,7 +42,7 @@
 
 ### Card Navigation
 - **Definition**：原生标题及搜索卡保留浏览器修饰键、右键与键盘语义。
-- **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；列表提供独立「预览」按钮和菜单。手动网页预览只设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 占满弹窗标题与底部操作之间的空间，不受原站 iframe 的高度上限限制，呈现真实原站网页，不在里面再创建回复树或自动列表增强。
+- **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；首页行不再提供独立「预览」按钮，菜单保留预览。手动网页预览设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 占满弹窗标题与底部操作之间的空间，不受原站 iframe 高度上限限制。仅插件标记 `data-betterld-topic-preview` 的同站 frame 运行 betterLD 样式与树状回复，其他帖子嵌入不接管。
 
 ### Section Level
 - **Definition**：保留原站分类色、分类/标签链接与主题等级；不将 Trust Level 当作分区。
@@ -84,7 +84,7 @@
 
 ### Incremental Topic Grid Update
 - **Definition**：主题行增量同步由 Discourse 管理，betterLD 幂等追加信息栏；搜索卡沿用既有增量网格。
-- **Rules/Invariants**：原生模型刷新后重读数据、更新信息与过滤。插件信息栏变更不触发源列表同步，原站新增/重排/标题更新仍被观察；主题页标题与树同宽，以整个浏览器视口的物理中线（`innerWidth / 2`，含滚动条）居中；桌面两侧对称预留侧栏/时间轴空间，窄窗口时间轴独占一行。原生列表的背景、模糊与圆角统一绘制在单元格，行本身透明，展开菜单保持在后续行之上。
+- **Rules/Invariants**：原生模型刷新后重读数据、更新信息与过滤。插件信息栏变更不触发源列表同步，原站新增/重排/标题更新仍被观察；主题页标题与树同宽，以整个浏览器视口的物理中线（`innerWidth / 2`，含滚动条）居中；桌面两侧对称预留侧栏/时间轴空间，窄窗口时间轴独占一行。原生列表的背景、模糊与圆角统一绘制在单元格，行本身透明，展开菜单保持在后续行之上。刷新新行从插入起与增强行保持同一 table 布局、列显隐及材质归属；新增行同轮 DOM 提交幂等增强，不等待尾部防抖。
 
 ### Settings Window
 - **Definition**：用户在 LinuxDo 页面上打开的 betterLD 设置界面，覆盖当前页面并集中呈现全部设置分类。
@@ -155,9 +155,21 @@
 - **Rules/Invariants**：引用有两种独立能力，都对齐原站：一是每个引用都带「展开/收起」按钮，展开时按 `data-topic`/`data-post` 取被引用帖的完整内容替换引用片段、收起时还原；二是内容高度超过 `replyTreeQuoteCollapseHeightPx` 的引用额外提供限高折叠。展开失败要可见并可重试。
 
 ### Reply Author Details
-- **Definition**：树状回复保留原站作者头像徽章、状态表情和用户头衔。
-- **Rules/Invariants**：三项独立按已有帖子数据呈现，缺项不留占位、不补发用户请求；覆盖首帖、任意嵌套与分页/实时载入的回复，与昵称/用户名显示模式独立。头像徽章位于头像右下角，复用原站 topic-avatar 样式、图标或图片、群组徽章解析与颜色，不推断原站未显示的身份徽章。作者栏按原站姓名 → 头衔 → 状态排列（保留 OP / ME）；头衔同字号并保留原站文本/群组类名、转换器和群组卡片链接。状态复用原站 UserStatusMessage 与 FloatKit，保留自定义 emoji、状态说明、按原站时区/语言格式化的到期时间及悬停/点击提示，键盘可操作；遵循原站 enable_user_status/enable_emoji。
+- **Definition**：树状回复保留原站作者头像徽章、状态表情、用户头衔与姓名旁整组 poster-icon 徽章。
+- **Rules/Invariants**：四项独立按已有帖子数据呈现，缺项不留占位、不补发用户请求；覆盖首帖、任意嵌套与分页/实时载入的回复，与昵称/用户名显示模式独立。头像徽章位于头像右下角，复用原站 topic-avatar 样式、图标或图片、群组徽章解析与颜色，不推断原站未显示的身份徽章。作者栏按原站姓名 → 头衔 → 状态排列（保留 OP / ME）；头衔同字号并保留原站文本/群组类名、转换器和群组卡片链接。状态复用原站 UserStatusMessage 与 FloatKit，保留自定义 emoji、状态说明、按原站时区/语言格式化的到期时间及悬停/点击提示，键盘可操作；遵循原站 enable_user_status/enable_emoji。
 - **Rules/Invariants**：主世界按楼复用原站 User 模型，原站未加载的分页楼层用已有 post 字段创建独立 User，不加入 postStream；跟踪原站状态事件与到期清除，状态取消以 null 清除旧值，缓存回写供树重建使用。无状态作者也订阅后续状态；每楼各自的头衔/群组快照不互相覆盖。树重建/离开话题清除 tooltip、监听、自建模型及同步签名，原站共享模型仅释放本树订阅。保留用户卡片入口及 OP / ME 标识，不添加设置开关或新的身份推断。
+
+### External Search Supplement
+- **Definition**：原站确认站内搜索为空后，按用户选择的 Bing 或 DuckDuckGo 补充检索并追加 `site:linux.do`，展示在当前搜索页。
+- **Rules/Invariants**：默认关闭，启用时显式申请所选引擎权限；搜索词发送给该引擎。读取原站控制器的完成/错误/查询/结果状态，加载、失败、私信、用户或分类搜索不触发；外部结果只保留 HTTPS LinuxDo 主题链接，按主题 ID 去重，标题与摘要以文本渲染，标明外部索引。权限/挑战/结构/网络失败清晰显示，不自动换引擎或降为无结果。
+
+### Local Topic Library
+- **Definition**：右下角 Material 3 入口，按「稍后再看」「收藏」分类保存主题；首页行提供稍后再看，主题标题提供收藏。
+- **Rules/Invariants**：`libraryStorageKey` 对应的 storage.local 是唯一数据源，与原站书签及浏览器同步设置独立；后台串行处理跨标签增删，成功写入后更新 UI，失败保留原数据并显示错误。面板可打开或移除主题，其他标签监听同一存储；插件预览内保留主题收藏，右下入口只在顶层渲染。
+
+### Browser DoH Location
+- **Definition**：高级 → 浏览器网络提供 Chrome 安全 DNS / Firefox 基于 HTTPS 的 DNS 的现有设置定位。
+- **Rules/Invariants**：标准扩展不接管网页 DNS，不自行修改 DNS、代理或浏览器隐私配置；Chrome 可直达设置，Firefox 复制内部地址并提示准确路径。路径集中在 `browserDnsGuides`，受管理策略或浏览器限制时由用户自行选择配置。
 
 ### Reply Author Mark
 - **Definition**：树状回复作者名旁用于识别话题发起人和当前用户本人的紧凑身份标识。

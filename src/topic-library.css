@@ -1,0 +1,98 @@
+.betterld-library-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 16px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--betterld-primary);
+  color: var(--betterld-on-primary);
+  box-shadow: var(--betterld-shadow-level-3);
+  cursor: pointer;
+}
+.betterld-library-fab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.betterld-library-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 88px;
+  z-index: 2147483001;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(420px, calc(100vw - 40px));
+  max-height: min(600px, calc(100dvh - 120px));
+  box-sizing: border-box;
+  padding: 20px;
+  gap: 16px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .24);
+  border-radius: 28px;
+  background: rgb(var(--betterld-surface-container-rgb));
+  color: var(--betterld-on-surface);
+  box-shadow: var(--betterld-shadow-level-3);
+  font-family: var(--betterld-font-family);
+}
+.betterld-library-panel[hidden] { display: none; }
+.betterld-library-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.betterld-library-header h2 { margin: 0; font-size: 22px; font-weight: 600; }
+.betterld-library-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgb(var(--betterld-outline-rgb) / .08);
+}
+.betterld-library-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.betterld-library-tab[aria-selected="true"] { background: color-mix(in srgb, var(--betterld-primary) 18%, rgb(var(--betterld-surface-container-rgb))); color: var(--betterld-primary); font-weight: 650; }
+.betterld-library-list { overflow: auto; overscroll-behavior: contain; min-height: 80px; }
+.betterld-library-item { display: flex; align-items: center; gap: 12px; padding-block: 12px; border-bottom: 1px solid rgb(var(--betterld-outline-rgb) / .14); }
+.betterld-library-item:last-child { border-bottom: 0; }
+.betterld-library-link { flex: 1; min-width: 0; color: var(--betterld-on-surface); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; text-decoration: none; }
+.betterld-library-link:hover { color: var(--betterld-primary); text-decoration: underline; }
+.betterld-library-empty { margin: 12px 0; color: var(--betterld-on-surface-variant); font-size: 14px; line-height: 1.8; }
+.betterld-library-save,
+.betterld-library-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.betterld-library-save[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--betterld-primary) 16%, transparent); }
+.betterld-library-topic-action { display: flex; justify-content: flex-end; margin-block: 8px; }
+.betterld-library-topic-action .betterld-library-save { min-height: 40px; font-size: 14px; padding-inline: 20px; }
+.betterld-library-status { margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; line-height: 1.6; }
+.betterld-library-status[data-error="true"] { color: var(--betterld-error); }
+:is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove):hover { filter: brightness(1.08); }
+:is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove, .betterld-library-link):focus-visible { outline: 3px solid var(--betterld-primary); outline-offset: 3px; }
+:is(.betterld-library-save, .betterld-library-remove):disabled { opacity: .5; cursor: progress; }
+@media (max-width: 560px) {
+  .betterld-library-fab { right: 12px; bottom: 12px; }
+  .betterld-library-panel { right: 12px; bottom: 80px; width: calc(100vw - 24px); max-height: calc(100dvh - 104px); padding: 16px; }
+}
+@media (forced-colors: active) {
+  .betterld-library-panel, .betterld-library-fab { background: Canvas; color: CanvasText; border: 1px solid ButtonText; }
+  .betterld-library-tab[aria-selected="true"], .betterld-library-save[aria-pressed="true"] { outline: 2px solid Highlight; }
+}

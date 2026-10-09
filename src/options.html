@@ -217,6 +217,29 @@
                     </div>
                   </section>
 
+                  <section class="settings-panel" data-panel="advanced" data-subpanel="network" hidden>
+                    <div class="settings-group-card__surface">
+                      <section class="settings-field" data-settings-guide="dns">
+                        <div class="settings-field__title">安全 DNS / DNS over HTTPS（DoH）</div>
+                        <p class="settings-field__desc">使用浏览器现有的加密域名解析。betterLD 提供设置定位，不接管网页 DNS，也无法读取当前启用状态。DNS 隐私保护并不保证提高加载速度，服务提供商与保护级别由你决定。</p>
+                        <div class="settings-network-guide">
+                          <p id="dns-settings-path"></p>
+                          <p id="dns-settings-hint" class="settings-inline-note"></p>
+                          <label class="settings-network-guide__address">
+                            <span>浏览器设置地址</span>
+                            <input id="dns-settings-address" class="settings-text-input" type="text" readonly spellcheck="false">
+                          </label>
+                          <div class="settings-actions">
+                            <button id="open-dns-settings" class="settings-button settings-button--tonal" type="button" hidden>打开浏览器 DNS 设置</button>
+                            <button id="copy-dns-settings" class="settings-button settings-button--tonal" type="button">复制设置地址</button>
+                          </div>
+                          <p class="settings-inline-note">修改影响整个浏览器；受组织策略管理时，选项可能锁定。使用代理或 VPN 时，实际解析方式还取决于其配置。betterLD 保持现有网络设置。</p>
+                          <p id="dns-settings-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                        </div>
+                      </section>
+                    </div>
+                  </section>
+
                   <section class="settings-panel" data-panel="advanced" data-subpanel="maintenance" hidden>
                     <div class="settings-group-card">
                       <div class="settings-group-card__surface" data-fields="maintenance"></div>

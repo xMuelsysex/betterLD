@@ -33,6 +33,22 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   settingsCommitDelayMs: 220,
   settingsSearchResultLimit: 12,
   settingsSearchHighlightMs: 2400,
+  browserDnsGuides: Object.freeze({
+    chrome: Object.freeze({
+      label: "Chrome",
+      url: "chrome://settings/security",
+      path: "设置 → 隐私和安全 → 安全 → 使用安全 DNS",
+      hint: "可在 Chrome 设置中搜索“安全 DNS”，按需要启用并选择服务提供商或自定义地址。",
+      canOpen: true
+    }),
+    firefox: Object.freeze({
+      label: "Firefox",
+      url: "about:preferences#privacy",
+      path: "设置 → 隐私与安全 → 基于 HTTPS 的 DNS",
+      hint: "在隐私与安全页面下方找到“基于 HTTPS 的 DNS”，选择保护级别与服务提供商。Firefox 限制扩展打开此内部页面，请复制地址到地址栏后按回车。",
+      canOpen: false
+    })
+  }),
   fontRecommendedStack: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
   listControlsScrollThreshold: 8,
   scrollTopThreshold: 16,
@@ -113,6 +129,19 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   searchLoadMoreTimeoutMs: 8000,
   searchNoMoreLabels: ["没有找到更多结果", "没有更多结果", "No more results"],
   searchHistoryPanelMaxItems: 8,
+  headerBlurFadePx: 32,
+  surfaceEdgeFadePx: 12,
+  libraryStorageKey: "betterld.library",
+  libraryTitleMaxLength: 500,
+  externalSearch: Object.freeze({
+    nativeStateTimeoutMs: 1500,
+    timeoutMs: 15000,
+    maxResults: 20,
+    engines: Object.freeze({
+      bing: Object.freeze({ label: "Bing", url: "https://www.bing.com/search", queryParam: "q" }),
+      duckduckgo: Object.freeze({ label: "DuckDuckGo", url: "https://html.duckduckgo.com/html/", queryParam: "q" })
+    })
+  }),
   listRefreshScrollTopWindowMs: 10000,
   visitedTopicStorageKey: "betterld.visited-topics",
   visitedTopicMaxEntries: 500,
@@ -317,6 +346,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     topicFilterMode: Object.freeze(["hide", "dim", "highlight", "include"]),
     topicFilterMatchMode: Object.freeze(["contains", "whole", "regex"]),
     searchMode: Object.freeze(["native", "cards"]),
+    externalSearchEngine: Object.freeze(["off", "bing", "duckduckgo"]),
     searchResultsPaginationMode: Object.freeze(["scroll", "pagination"]),
     searchPageWallpaperMode: Object.freeze(["inherit", "builtin", "url"]),
     touchOptimization: Object.freeze(["auto", "on", "off"]),
@@ -418,9 +448,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "search",
           title: "搜索",
-          description: "搜索页能力需经真实页面确认，未确认前保存后不生效。",
+          description: "原生搜索与阅读卡；站内无结果时可选外部引擎补充 LinuxDo 主题。",
           keys: [
             "searchMode",
+            "externalSearchEngine",
             "gridMode",
             "cardMinSize",
             "cardSideGutter",
@@ -541,6 +572,12 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       icon: "advanced",
       subcategories: [
         {
+          id: "network",
+          title: "浏览器网络",
+          description: "定位浏览器自有的安全 DNS（DoH）设置，由用户选择保护级别与服务提供商。",
+          keys: []
+        },
+        {
           id: "maintenance",
           title: "同步与缓存",
           description: "浏览器同步只投影设置，不包含本地壁纸正文、搜索历史与 WebDAV 凭据。",
@@ -640,7 +677,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       { key: "openCurrentTab", visible: true, order: 0 },
       { key: "openNewTab", visible: true, order: 1 },
       { key: "copyTopicUrl", visible: true, order: 2 },
-      { key: "copyTopicId", visible: true, order: 3 }
+      { key: "copyTopicId", visible: true, order: 3 },
+      { key: "openDrawer", visible: true, order: 4 }
     ],
     topicTitleFontSize: "responsive",
     topicAuthorFontSize: "base",
@@ -691,6 +729,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     topicTagRules: [],
     topicWhitelistRules: [],
     searchMode: "native",
+    externalSearchEngine: "off",
     searchHistoryEnabled: false,
     searchHistoryPanelEnabled: false,
     searchRecommendationEnabled: false,
