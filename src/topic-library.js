@@ -112,7 +112,8 @@
       if (button.disabled !== disabled) button.disabled = disabled;
       const pressed = String(selected);
       if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
-      setText(button, selected ? (group === "later" ? "取消稍后再看" : "取消收藏") : groups[group]);
+      const label = group === "favorites" ? button.querySelector(".d-button-label") : button;
+      setText(label, selected ? (group === "later" ? "取消稍后再看" : "取消收藏") : groups[group]);
     });
   }
 
@@ -121,9 +122,19 @@
     if (button?.dataset.libraryId === topic.id) return;
     button?.remove();
     const className = group === "favorites"
-      ? "betterld-library-save betterld-library-topic-action btn btn-default topic-footer-button"
+      ? "betterld-library-save betterld-library-topic-action btn btn-icon-text btn-default topic-footer-button"
       : "betterld-library-save";
-    button = element("button", className, groups[group]);
+    button = element("button", className);
+    if (group === "favorites") {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "fa d-icon svg-icon");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("aria-hidden", "true");
+      const path = document.createElementNS(svg.namespaceURI, "path");
+      path.setAttribute("d", "m12 17.27 6.18 3.73-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z");
+      svg.append(path);
+      button.append(svg, element("span", "d-button-label", groups[group]));
+    } else button.textContent = groups[group];
     button.type = "button";
     button.dataset.libraryGroup = group;
     button.dataset.libraryId = topic.id;
