@@ -398,6 +398,7 @@
     root.style.setProperty("--betterld-topic-timeline-space", `${config.topicTimelineSpacePx}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
     root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
+    root.style.setProperty("--betterld-sidebar-top-gap", `${config.sidebarTopGapPx}px`);
     root.style.setProperty("--betterld-reply-quote-collapse-height", `${config.replyTreeQuoteCollapseHeightPx}px`);
     root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);

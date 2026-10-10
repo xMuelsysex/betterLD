@@ -212,11 +212,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
 
 body.betterld-shell .sidebar-wrapper {
   position: sticky !important;
-  top: calc(var(--header-offset, 52px) + 12px) !important;
+  top: calc(var(--header-offset, 52px) + var(--betterld-sidebar-top-gap)) !important;
   align-self: start;
-  margin-block: 12px;
-  height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
-  max-height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
+  margin-block: var(--betterld-sidebar-top-gap) 12px;
+  height: calc(100dvh - var(--header-offset, 52px) - var(--betterld-sidebar-top-gap) - 12px) !important;
+  max-height: calc(100dvh - var(--header-offset, 52px) - var(--betterld-sidebar-top-gap) - 12px) !important;
   overflow-y: auto !important;
 }
 
