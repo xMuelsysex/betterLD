@@ -212,11 +212,11 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sideba
 
 body.betterld-shell .sidebar-wrapper {
   position: sticky !important;
-  top: calc(var(--header-offset, 52px) + 12px) !important;
+  top: calc(var(--header-offset, 52px) + var(--betterld-sidebar-top-gap)) !important;
   align-self: start;
-  margin-block: 12px;
-  height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
-  max-height: calc(100dvh - var(--header-offset, 52px) - 24px) !important;
+  margin-block: var(--betterld-sidebar-top-gap) 12px;
+  height: calc(100dvh - var(--header-offset, 52px) - var(--betterld-sidebar-top-gap) - 12px) !important;
+  max-height: calc(100dvh - var(--header-offset, 52px) - var(--betterld-sidebar-top-gap) - 12px) !important;
   overflow-y: auto !important;
 }
 
@@ -241,18 +241,11 @@ body.betterld-shell .sidebar-container::before {
   box-shadow: 0 8px 24px rgb(19 16 29 / 0.14);
   -webkit-backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
-  /* 封面只遮罩背景层；四边柔化，文字与按钮保持清晰。 */
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent), linear-gradient(to bottom, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent), linear-gradient(to bottom, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent);
-  mask-composite: intersect;
   pointer-events: none;
 }
 
 /* 关闭「侧栏封面高斯模糊」后改用不透明表面，不再让壁纸透过并被模糊 */
 html[data-betterld-sidebar-cover="false"] body.betterld-shell .sidebar-container::before {
-  -webkit-mask-image: none;
-  mask-image: none;
   background: rgb(var(--betterld-surface-container-high-rgb) / 0.98);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -1051,6 +1044,7 @@ body.betterld-shell .user-menu.revamped .notification.unread > a {
 }
 
 body.betterld-shell .user-menu.revamped .notification .icon-avatar {
+  position: relative;
   width: 40px;
   height: 40px;
   display: grid;
@@ -1072,27 +1066,35 @@ body.betterld-shell .user-menu.revamped .notification .icon-avatar img.avatar {
 
 body.betterld-shell .user-menu.revamped .notification .icon-avatar__icon-wrapper {
   position: absolute;
-  top: -4px !important;
-  right: -4px !important;
+  top: -6px !important;
+  right: -6px !important;
+  bottom: auto !important;
   left: auto !important;
   z-index: 1;
-  width: 20px;
-  height: 20px;
+  width: 26px !important;
+  height: 26px !important;
   box-sizing: border-box;
   display: grid !important;
   place-items: center;
-  border: 2px solid rgb(var(--betterld-surface-container-high-rgb)) !important;
-  border-radius: 50%;
+  border: 2px solid rgb(var(--betterld-surface-container-rgb)) !important;
+  border-radius: 9px !important;
   background: rgb(var(--betterld-surface-container-high-rgb)) !important;
   box-shadow: var(--betterld-shadow-level-1);
-  color: var(--betterld-primary) !important;
+  color: var(--betterld-on-surface) !important;
   pointer-events: none;
   transform: none;
 }
 
+body.betterld-shell .user-menu.revamped .notification.unread .icon-avatar__icon-wrapper {
+  background: var(--betterld-primary) !important;
+  color: var(--betterld-on-primary) !important;
+}
+
 body.betterld-shell .user-menu.revamped .notification .icon-avatar__icon-wrapper .d-icon {
-  width: 12px;
-  height: 12px;
+  width: 16px !important;
+  height: 16px !important;
+  color: inherit !important;
+  fill: currentColor !important;
 }
 
 body.betterld-shell .user-menu.revamped .notification > a > div:not(.icon-avatar) {
@@ -1246,8 +1248,16 @@ html[data-betterld-material="fallback"] body.betterld-shell .user-menu.revamped 
     color: CanvasText !important;
   }
 
+  body.betterld-shell .user-menu.revamped .notification .icon-avatar__icon-wrapper {
+    background: Canvas !important;
+    border-color: CanvasText !important;
+    color: CanvasText !important;
+    box-shadow: none !important;
+  }
+
   body.betterld-shell .user-menu.revamped .user-menu-tab.active,
-  body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="true"] {
+  body.betterld-shell .user-menu.revamped .user-menu-tab[aria-selected="true"],
+  body.betterld-shell .user-menu.revamped .notification.unread .icon-avatar__icon-wrapper {
     background: Highlight !important;
     color: HighlightText !important;
   }
@@ -1814,6 +1824,28 @@ html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-
     transform: none;
     width: auto;
     max-width: 100%;
+  }
+}
+
+/* 仅插件预览收起侧栏，不改原站侧栏偏好或完整主题页。 */
+html[data-betterld-topic-preview="true"] body.betterld-shell :is(.sidebar-wrapper, .sidebar-container, .header-sidebar-toggle) {
+  display: none !important;
+}
+html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet-wrapper {
+  grid-template-columns: minmax(0, 1fr) !important;
+  padding-inline: 16px !important;
+}
+html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+  width: min(var(--betterld-topic-detail-width), calc(100% - var(--betterld-topic-timeline-space))) !important;
+  left: 0;
+  margin-inline-start: 0 !important;
+  margin-inline-end: var(--betterld-topic-timeline-space) !important;
+  justify-self: center;
+}
+@media (max-width: 767px) {
+  html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+    width: 100% !important;
+    margin-inline: 0 !important;
   }
 }
 
@@ -5608,7 +5640,6 @@ body.betterld-shell .betterld-topic-row .betterld-topic-card__participants img {
   border-radius: 50%;
 }
 body.betterld-shell .betterld-topic-row__stats {
-  margin-inline-start: auto;
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -5628,6 +5659,17 @@ body.betterld-shell .betterld-topic-row .betterld-topic-card__badge {
   padding: 2px 8px;
   font-size: 11px;
   border-radius: 999px;
+}
+body.betterld-shell .betterld-topic-row > .main-link > [data-betterld-badge="watched"] {
+  position: absolute;
+  inset-block-start: 14px;
+  inset-inline-end: 20px;
+}
+body.betterld-shell .betterld-topic-row > .main-link > [data-betterld-badge="watched"][hidden] {
+  display: none !important;
+}
+html:not([data-betterld-show-topic-watched-state="false"]) body.betterld-shell .betterld-topic-row > .main-link:has(> [data-betterld-badge="watched"]:not([hidden])) .link-top-line {
+  padding-inline-end: 48px;
 }
 body.betterld-shell .betterld-topic-row__status {
   padding: 2px 8px;
@@ -5671,9 +5713,15 @@ html[data-betterld-show-topic-pinned-state="false"] .betterld-topic-row .topic-s
 }
 body.betterld-shell .betterld-topic-row__actions {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
+  max-width: 100%;
   gap: 8px;
   margin-inline-start: auto;
+}
+body.betterld-shell .betterld-topic-row__actions > :is(.betterld-topic-row__status, .betterld-library-save) {
+  flex: 0 0 auto;
 }
 body.betterld-has-library .betterld-filter-bin,
 body.betterld-has-library .betterld-action-status { bottom: 92px; }
@@ -5707,6 +5755,10 @@ html[data-betterld-topic-meta-size="small"] { --betterld-list-meta-size: 11px; }
 html[data-betterld-topic-meta-size="large"] { --betterld-list-meta-size: 14px; }
 @media (max-width: 600px) {
   body.betterld-shell .betterld-topic-row > td { padding: 12px !important; }
+  body.betterld-shell .betterld-topic-row > .main-link > [data-betterld-badge="watched"] {
+    inset-block-start: 12px;
+    inset-inline-end: 12px;
+  }
   body.betterld-shell .betterld-topic-row__stats { gap: 8px; }
   body.betterld-shell .betterld-topic-row__time { flex-basis: calc(100% - 40px); }
 }
