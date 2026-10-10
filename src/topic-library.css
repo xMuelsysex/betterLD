@@ -13,8 +13,12 @@
   background: var(--betterld-primary);
   color: var(--betterld-on-primary);
   box-shadow: var(--betterld-shadow-level-3);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
+.betterld-library-fab[data-dragging="true"] { cursor: grabbing; }
 .betterld-library-fab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .betterld-library-panel {
   position: fixed;
@@ -23,8 +27,8 @@
   z-index: 2147483001;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(420px, calc(100vw - 40px));
-  max-height: min(600px, calc(100dvh - 120px));
+  width: min(420px, calc(100% - 24px));
+  max-height: min(600px, calc(100dvh - 24px));
   box-sizing: border-box;
   padding: 20px;
   gap: 16px;
@@ -90,7 +94,7 @@
 :is(.betterld-library-save, .betterld-library-remove):disabled { opacity: .5; cursor: progress; }
 @media (max-width: 560px) {
   .betterld-library-fab { right: 12px; bottom: 12px; }
-  .betterld-library-panel { right: 12px; bottom: 80px; width: calc(100vw - 24px); max-height: calc(100dvh - 104px); padding: 16px; }
+  .betterld-library-panel { right: 12px; bottom: 80px; width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 16px; }
 }
 @media (forced-colors: active) {
   .betterld-library-panel, .betterld-library-fab { background: Canvas; color: CanvasText; border: 1px solid ButtonText; }

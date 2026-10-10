@@ -29,6 +29,7 @@
     return;
   }
   globalThis.__betterldContentScriptActive = true;
+  if (window !== window.top) document.documentElement.dataset.betterldTopicPreview = "true";
 
   const state = {
     currentHref: "",
@@ -89,7 +90,7 @@
     replyTreeSnapshot: null
   };
 
-  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.topicRequestCooldownStorageKey]) {
+  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.topicRequestCooldownStorageKey, config.visitedTopicStorageKey]) {
     const storageKeys = keys;
     if (firefoxApi) {
       return api.storage.local.get(storageKeys);
@@ -3839,15 +3840,15 @@
       watched.dataset.betterldBadge = "watched";
       const status = createElement("span", "betterld-topic-row__status");
       const actions = createElement("span", "betterld-topic-row__actions");
-      actions.append(createCardMenu(row, row, topic));
-      info.append(avatar, author, time, participants, stats, status, watched, actions);
-      main.append(info);
+      actions.append(stats, status, createCardMenu(row, row, topic));
+      info.append(avatar, author, time, participants, actions);
+      main.append(watched, info);
     }
     const status = info.querySelector(".betterld-topic-row__status");
     const statusText = cleanText(row.querySelector(".topic-status-data")?.textContent);
     if (status.textContent !== statusText) status.textContent = statusText;
     status.hidden = !statusText;
-    info.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
+    main.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
     applyTopicListMetadata(row);
     applyCardFilter(row);
     row.setAttribute("aria-busy", "false");

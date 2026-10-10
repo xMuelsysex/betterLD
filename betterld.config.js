@@ -132,6 +132,11 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   headerBlurFadePx: 32,
   surfaceEdgeFadePx: 12,
   libraryStorageKey: "betterld.library",
+  libraryPositionStorageKey: "betterld.library-position",
+  libraryDragThresholdPx: 6,
+  libraryMoveStepPx: 16,
+  libraryViewportInsetPx: 12,
+  libraryPanelGapPx: 12,
   libraryTitleMaxLength: 500,
   externalSearch: Object.freeze({
     nativeStateTimeoutMs: 1500,

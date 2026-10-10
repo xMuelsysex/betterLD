@@ -17,7 +17,7 @@
 ### Homepage Topic Card
 - **Definition**：自 0.1.53 起首页阅读卡已停用，主题列表改用 `.betterld-topic-row` 增强原生行。
 - **Rules/Invariants**：作者、头像、活动时间、回复/点赞/浏览与参与者都来自原站预载或当前路由模型，不发逐主题 JSON。缺字段保持缺失，不写占位、不自动请求。回复数按原站总楼数减首帖。
-- **Rules/Invariants**：分类、标签、未读与置顶保留原生链接/控件；显隐开关与三条字号设置对列表生效，已看只来自本机访问记录。
+- **Rules/Invariants**：分类、标签、未读与置顶保留原生链接/控件；显隐开关与三条字号设置对列表生效，已看只来自本机访问记录。信息栏左侧保留作者、活动时间与参与者，已看标记独立位于主题行右上角并为标题留位；右侧操作组统一排列回复/点赞/浏览统计 → 热门等原站状态 → 稍后再看 → 菜单，窄屏可换行并保持靠右。
 
 ### Cover Content Area
 - **Definition**：旧首页卡片封面/正文区域已废弃；原生行只展示主题信息。
@@ -42,7 +42,7 @@
 
 ### Card Navigation
 - **Definition**：原生标题及搜索卡保留浏览器修饰键、右键与键盘语义。
-- **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；首页行不再提供独立「预览」按钮，菜单保留预览。手动网页预览设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 占满弹窗标题与底部操作之间的空间，不受原站 iframe 高度上限限制。仅插件标记 `data-betterld-topic-preview` 的同站 frame 运行 betterLD 样式与树状回复，其他帖子嵌入不接管。
+- **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；首页行不再提供独立「预览」按钮，菜单保留预览。手动网页预览设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 占满弹窗标题与底部操作之间的空间，不受原站 iframe 高度上限限制。仅插件标记 `data-betterld-topic-preview` 的同站 frame 运行 betterLD 样式与树状回复，并在预览内隐藏左侧栏、释放正文空间；不修改原站侧栏偏好，完整主题与其他帖子嵌入保持原样。
 
 ### Section Level
 - **Definition**：保留原站分类色、分类/标签链接与主题等级；不将 Trust Level 当作分区。
@@ -57,6 +57,7 @@
 - **Rules/Invariants**：站点用 `var(--d-content-background)` / `var(--secondary)` 画的整页底板都算壳层要处理的对象，已知清单：`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`、`.list-controls`、`.search-container`、`.user-main`、`.user-content`、`.body-page`（静态文档页）、`#main-outlet.not-found-container`（404）、`.show-badge`（徽章详情）、`.login-fullpage`、`.container.group`（群组页）、`.latest-topic-list-item`、`.user-stream-item`、`.follow-stream-item`、`.badge-card`。聊天页（`.full-page-chat`、`.chat-message-container`、`.c-navbar-container`、`.chat-pinned-bar`、`.chat-channel-status`）与 AI 机器人输入区同样处理。第三方组件（如 `/upcoming-events` 的日历）与帖子正文内容元素（blockquote、代码块）保留自身观感。
 - **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
 - **Rules/Invariants**：原站编辑器、通用弹窗/对话框/Toast、偏好表单和 select-kit、聊天容器/输入、AI 会话输入、徽章详情/登录注册/关注流复用这两种材质。只改变容器和控件观感，保持原尺寸、布局、焦点/禁用/错误/选中语义，不重建表单或改提交行为；普通按钮不覆盖组合按钮与帖子正文/预览/日历内的控件。
+- **Rules/Invariants**：通知列表头像旁的类型角标保留原站 SVG，使用高对比 Material 3 圆角方形表面；未读为主色填充/on-primary，已读为实色表面/on-surface，图标显式继承填充颜色。只改视觉，不变通知类型、链接及原站已读行为。
 - **Rules/Invariants**：betterLD 自有设置/首页/主题/顶部/刷新/撤销刷新工具使用内联 Material SVG，不请求图标字体、不批量替换原站图标。默认字体范围 `own` 仅影响插件自有内容；用户选择 `managed` 后应用到全站壳层及原生控件，保留代码字体与第三方组件自身字体。
 
 ### BewlyCat Wallpaper Selection
@@ -128,9 +129,9 @@
 - **Rules/Invariants**：请求统一经后台 service worker 发出并按 origin 申请权限，不依赖页面 CORS；地址只接受 https，http 仅允许环回地址；WebDAV 密码只保存在本地，不进入浏览器同步投影与设置导出文件；下载采用追加 + 去重，不是覆盖。
 
 ### Watched Topic Mark
-- **Definition**：卡片上的「已看」徒标，数据来自本机浏览记录（`visitedTopicStorageKey` 里的主题 id 列表，访问 `/t/{slug}/{id}` 时追加）。
+- **Definition**：原生主题行右上角与搜索卡中的「已看」标记，数据来自本机浏览记录（`visitedTopicStorageKey` 里的主题 id 列表，访问 `/t/{slug}/{id}` 时追加）。
 - **Rules/Invariants**：只读本机记录，不读也不写 Discourse 的已读状态；列表不进入浏览器同步投影；超过 `visitedTopicMaxEntries` 时丢弃最早的记录；
-  标记只按主题 id 匹配，不根据页面上的未读类名推断。
+  标记只按主题 id 匹配，不根据页面上的未读类名推断；启动与跨标签变化均读同一份本机记录，位置变化保持原显隐设置生效。
 
 ### Search History Panel
 - **Definition**：搜索输入框聚焦时弹出的浮层，列出本机保存的搜索历史，支持回填、单条删除与清空全部。
@@ -165,7 +166,7 @@
 
 ### Local Topic Library
 - **Definition**：右下角 Material 3 入口，按「稍后再看」「收藏」分类保存主题；首页行提供稍后再看，主题标题提供收藏。
-- **Rules/Invariants**：`libraryStorageKey` 对应的 storage.local 是唯一数据源，与原站书签及浏览器同步设置独立；后台串行处理跨标签增删，成功写入后更新 UI，失败保留原数据并显示错误。面板可打开或移除主题，其他标签监听同一存储；插件预览内保留主题收藏，右下入口只在顶层渲染。
+- **Rules/Invariants**：`libraryStorageKey` 对应的 storage.local 是唯一数据源，与原站书签及浏览器同步设置独立；后台串行处理跨标签增删，成功写入后更新 UI，失败保留原数据并显示错误。面板可打开或移除主题，其他标签监听同一存储；插件预览内保留主题收藏，浮动入口只在顶层渲染。入口默认右下角，可指针拖动或 Alt + 方向键移动；位置以视口比例保存在 `libraryPositionStorageKey` 的本机存储，刷新恢复并随视口变化约束到可见范围，面板跟随入口且保留视口边距，拖动不触发打开动作。
 
 ### Browser DoH Location
 - **Definition**：高级 → 浏览器网络提供 Chrome 安全 DNS / Firefox 基于 HTTPS 的 DNS 的现有设置定位。

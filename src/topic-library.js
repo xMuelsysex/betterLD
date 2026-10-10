@@ -15,6 +15,9 @@
   let status;
   let tabs;
   let previousFocus;
+  let fabPosition = null;
+  let drag = null;
+  let suppressClick = false;
   const pending = new Set();
 
   function element(tag, className, text) {
@@ -129,7 +132,8 @@
       event.stopPropagation();
       change(group, topic, button.getAttribute("aria-pressed") === "true");
     });
-    host.prepend(button);
+    if (group === "later") host.insertBefore(button, host.querySelector(".betterld-topic-card__menu"));
+    else host.prepend(button);
   }
 
   function syncTopicButton() {
@@ -159,6 +163,138 @@
         setText(message, errorMessage);
       } else message?.remove();
     }
+  }
+
+  function fabBounds() {
+    const rect = fab.getBoundingClientRect();
+    const maxX = Math.max(0, document.documentElement.clientWidth - rect.width);
+    const maxY = Math.max(0, window.innerHeight - rect.height);
+    const insetX = Math.min(config.libraryViewportInsetPx, maxX / 2);
+    const insetY = Math.min(config.libraryViewportInsetPx, maxY / 2);
+    return { rect, left: insetX, top: insetY, right: maxX - insetX, bottom: maxY - insetY };
+  }
+
+  function moveFab(left, top) {
+    const bounds = fabBounds();
+    const x = Math.min(bounds.right, Math.max(bounds.left, left));
+    const y = Math.min(bounds.bottom, Math.max(bounds.top, top));
+    fab.style.left = `${x}px`;
+    fab.style.top = `${y}px`;
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+    fabPosition = {
+      x: bounds.right === bounds.left ? 0 : (x - bounds.left) / (bounds.right - bounds.left),
+      y: bounds.bottom === bounds.top ? 0 : (y - bounds.top) / (bounds.bottom - bounds.top)
+    };
+    positionPanel();
+  }
+
+  function positionPanel() {
+    if (!panel || panel.hidden) return;
+    const { left, top, bottom, width } = fab.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const inset = config.libraryViewportInsetPx;
+    const gap = config.libraryPanelGapPx;
+    const x = Math.min(document.documentElement.clientWidth - panelRect.width - inset, Math.max(inset, left + width - panelRect.width));
+    const above = top - gap - panelRect.height;
+    const y = above >= inset ? above : Math.min(window.innerHeight - panelRect.height - inset, bottom + gap);
+    panel.style.left = `${Math.max(0, x)}px`;
+    panel.style.top = `${Math.max(inset, y)}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+  }
+
+  function applyFabPosition() {
+    if (!fab || drag) return;
+    if (fabPosition) {
+      const bounds = fabBounds();
+      moveFab(bounds.left + fabPosition.x * (bounds.right - bounds.left), bounds.top + fabPosition.y * (bounds.bottom - bounds.top));
+    } else {
+      fab.style.removeProperty("left");
+      fab.style.removeProperty("top");
+      fab.style.removeProperty("right");
+      fab.style.removeProperty("bottom");
+      positionPanel();
+    }
+  }
+
+  function parseFabPosition(value) {
+    if (value === undefined) return null;
+    if (!value || ![value.x, value.y].every((n) => Number.isFinite(n) && n >= 0 && n <= 1)) {
+      throw new Error("收藏按钮位置格式异常");
+    }
+    return { x: value.x, y: value.y };
+  }
+
+  async function readFabPosition() {
+    if (drag) return;
+    try {
+      const stored = await api.storage.local.get(config.libraryPositionStorageKey);
+      if (drag) return;
+      fabPosition = parseFabPosition(stored[config.libraryPositionStorageKey]);
+      applyFabPosition();
+    } catch (error) {
+      errorMessage = `按钮位置读取失败：${error.message}`;
+      console.error("[betterLD] library position read failed", error);
+      showPanel();
+    }
+  }
+
+  async function saveFabPosition() {
+    try {
+      await api.storage.local.set({ [config.libraryPositionStorageKey]: fabPosition });
+    } catch (error) {
+      errorMessage = `按钮位置保存失败：${error.message}`;
+      console.error("[betterLD] library position save failed", error);
+      showPanel();
+    }
+  }
+
+  function bindFabMovement() {
+    fab.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary || event.button !== 0) return;
+      suppressClick = false;
+      const rect = fab.getBoundingClientRect();
+      drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, moved: false };
+      fab.setPointerCapture(event.pointerId);
+    });
+    fab.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < config.libraryDragThresholdPx) return;
+      if (!drag.moved) closePanel();
+      drag.moved = true;
+      fab.dataset.dragging = "true";
+      moveFab(drag.left + dx, drag.top + dy);
+    });
+    const finish = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const finished = drag;
+      drag = null;
+      delete fab.dataset.dragging;
+      suppressClick = finished.moved;
+      if (fab.hasPointerCapture(event.pointerId)) fab.releasePointerCapture(event.pointerId);
+      if (!finished.moved) return;
+      if (event.type === "pointerup") saveFabPosition();
+      else {
+        moveFab(finished.left, finished.top);
+        readFabPosition();
+      }
+    };
+    fab.addEventListener("pointerup", finish);
+    fab.addEventListener("pointercancel", finish);
+    fab.addEventListener("lostpointercapture", finish);
+    fab.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const rect = fab.getBoundingClientRect();
+      const step = config.libraryMoveStepPx;
+      moveFab(rect.left + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0),
+        rect.top + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0));
+      saveFabPosition();
+    });
+    window.addEventListener("resize", applyFabPosition);
   }
 
   function closePanel() {
@@ -195,10 +331,12 @@
       retry.type = "button";
       retry.addEventListener("click", readLibrary);
       list.append(retry);
+      positionPanel();
       return;
     }
     if (!library[activeGroup].length) {
       list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子标题处点击「收藏」，主题就会保存在这里。"));
+      positionPanel();
       return;
     }
     for (const topic of library[activeGroup]) {
@@ -214,6 +352,7 @@
       row.append(link, remove);
       list.append(row);
     }
+    positionPanel();
   }
 
   function createPanel() {
@@ -222,7 +361,8 @@
     fab = element("button", "betterld-library-fab");
     fab.type = "button";
     fab.append(icon());
-    fab.setAttribute("aria-label", "打开收藏库：稍后再看与收藏");
+    fab.setAttribute("aria-label", "打开收藏库：稍后再看与收藏；可拖动，Alt 加方向键移动");
+    fab.title = "点击打开收藏库，拖动改变位置；Alt + 方向键移动";
     fab.setAttribute("aria-expanded", "false");
     fab.setAttribute("aria-controls", "betterld-topic-library");
     panel = element("section", "betterld-library-panel");
@@ -264,7 +404,16 @@
     status.setAttribute("role", "status");
     panel.append(header, tabs, list, status);
     document.body.append(fab, panel);
-    fab.addEventListener("click", () => panel.hidden ? showPanel() : closePanel());
+    bindFabMovement();
+    readFabPosition();
+    fab.addEventListener("click", (event) => {
+      if (suppressClick && event.detail > 0) {
+        suppressClick = false;
+        event.preventDefault();
+        return;
+      }
+      panel.hidden ? showPanel() : closePanel();
+    });
     document.addEventListener("pointerdown", (event) => {
       if (!panel.hidden && !panel.contains(event.target) && !fab.contains(event.target)) closePanel();
     });
@@ -288,7 +437,9 @@
 
   globalThis.BETTERLD_LIBRARY = Object.freeze({ sync });
   api.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && Object.hasOwn(changes, config.libraryStorageKey)) readLibrary();
+    if (area !== "local") return;
+    if (Object.hasOwn(changes, config.libraryStorageKey)) readLibrary();
+    if (fab && Object.hasOwn(changes, config.libraryPositionStorageKey)) readFabPosition();
   });
   readLibrary();
 })();
