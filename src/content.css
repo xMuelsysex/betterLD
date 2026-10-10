@@ -241,18 +241,11 @@ body.betterld-shell .sidebar-container::before {
   box-shadow: 0 8px 24px rgb(19 16 29 / 0.14);
   -webkit-backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
   backdrop-filter: blur(var(--betterld-background-blur)) saturate(135%);
-  /* 封面只遮罩背景层；四边柔化，文字与按钮保持清晰。 */
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent), linear-gradient(to bottom, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(to right, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent), linear-gradient(to bottom, transparent, #000 var(--betterld-surface-edge-fade), #000 calc(100% - var(--betterld-surface-edge-fade)), transparent);
-  mask-composite: intersect;
   pointer-events: none;
 }
 
 /* 关闭「侧栏封面高斯模糊」后改用不透明表面，不再让壁纸透过并被模糊 */
 html[data-betterld-sidebar-cover="false"] body.betterld-shell .sidebar-container::before {
-  -webkit-mask-image: none;
-  mask-image: none;
   background: rgb(var(--betterld-surface-container-high-rgb) / 0.98);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

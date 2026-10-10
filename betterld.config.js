@@ -130,7 +130,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   searchNoMoreLabels: ["没有找到更多结果", "没有更多结果", "No more results"],
   searchHistoryPanelMaxItems: 8,
   headerBlurFadePx: 32,
-  surfaceEdgeFadePx: 12,
   libraryStorageKey: "betterld.library",
   libraryPositionStorageKey: "betterld.library-position",
   libraryDragThresholdPx: 6,
