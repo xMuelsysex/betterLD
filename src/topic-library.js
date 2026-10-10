@@ -120,7 +120,10 @@
     let button = host.querySelector(`.betterld-library-save[data-library-group="${group}"]`);
     if (button?.dataset.libraryId === topic.id) return;
     button?.remove();
-    button = element("button", "betterld-library-save", groups[group]);
+    const className = group === "favorites"
+      ? "betterld-library-save betterld-library-topic-action btn btn-default topic-footer-button"
+      : "betterld-library-save";
+    button = element("button", className, groups[group]);
     button.type = "button";
     button.dataset.libraryGroup = group;
     button.dataset.libraryId = topic.id;
@@ -129,32 +132,30 @@
       event.stopPropagation();
       change(group, topic, button.getAttribute("aria-pressed") === "true");
     });
-    host.prepend(button);
+    if (group === "favorites") host.append(button);
+    else host.prepend(button);
   }
 
   function syncTopicButton() {
     const match = /^\/t\/(?:(?!\d+(?:\/|$))[^/]+\/)?([1-9]\d*)(?:\/(?:[1-9]\d*|last))?\/?$/.exec(location.pathname);
     const old = document.querySelector(".betterld-library-topic-action");
     if (!match) { old?.remove(); return; }
-    const titleBlock = document.querySelector("#topic-title");
-    const heading = titleBlock?.querySelector("h1");
-    const title = heading?.textContent.trim();
+    // 原站到页底时会卸载正文标题，并把同一主题标题放进顶栏。
+    const title = document.querySelector(`#topic-title h1, .d-header .header-title .topic-link[data-topic-id="${match[1]}"]`)?.textContent.trim();
+    const host = document.querySelector("#topic-footer-buttons .topic-footer-main-buttons__actions");
+    if (!host) { old?.remove(); return; }
+    if (old && (old.parentElement !== host || old.dataset.libraryId !== match[1])) old.remove();
     if (!title) return;
-    let host = old;
-    if (!host || !titleBlock.contains(host)) {
-      host?.remove();
-      host = element("div", "betterld-library-topic-action");
-      titleBlock.append(host);
-    }
     attachButton(host, "favorites", { id: match[1], title, href: `${location.origin}/t/topic/${match[1]}` });
     if (window !== window.top) {
-      let message = host.querySelector(".betterld-library-status");
+      const footer = host.closest("#topic-footer-buttons");
+      let message = footer.querySelector(":scope > .betterld-library-status");
       if (errorMessage) {
         if (!message) {
           message = element("p", "betterld-library-status");
           message.setAttribute("role", "status");
           message.dataset.error = "true";
-          host.append(message);
+          footer.append(message);
         }
         setText(message, errorMessage);
       } else message?.remove();
@@ -198,7 +199,7 @@
       return;
     }
     if (!library[activeGroup].length) {
-      list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子标题处点击「收藏」，主题就会保存在这里。"));
+      list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子底部操作栏点击「收藏」，主题就会保存在这里。"));
       return;
     }
     for (const topic of library[activeGroup]) {

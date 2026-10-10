@@ -59,6 +59,10 @@
   const status = document.querySelector("#settings-status");
 
   let wallpaper = null;
+  let externalSearchPermissionButton;
+  let externalSearchPermissionStatus;
+  let externalSearchPermissionBusy = false;
+  const canRequestExternalSearchPermission = !isEmbedded && typeof api.permissions?.request === "function";
 
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
@@ -816,6 +820,7 @@
   };
 
   const englishFieldLabels = {
+    externalSearchEngine: "External search (when site search is empty)",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", replyTreeNameMode: "Reply author name", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
     topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
@@ -824,6 +829,11 @@
   };
 
   const staticTranslations = {
+    "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 主题。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When site search is empty, search with site:linux.do and keep LinuxDo topics only. Enabling requires access to the chosen engine; search terms are sent to it.",
+    "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。": "Choose Bing or DuckDuckGo and allow access in the browser permission dialog. If access was revoked, request it again below.",
+    "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。": "In-page settings cannot show the browser permission dialog. Open the extension settings below, then choose Bing or DuckDuckGo and allow access.",
+    "重新申请访问权限": "Request access again",
+    "打开扩展授权页": "Open extension permission settings",
     "首页视觉设置": "Home visual settings",
     "调整 LinuxDo 首页卡片、导航和页面外观。所有修改在点击“保存设置”后生效。": "Adjust LinuxDo cards, navigation, and page visuals. Changes apply after saving.",
     "搜索设置": "Search settings",
@@ -1077,7 +1087,7 @@
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后只隐藏命中项。", dependsOn: ["topicFilterEnabled", true] },
 
     { key: "searchMode", type: "select", label: "搜索结果模式", help: "阅读卡复用搜索结果的作者和摘要，不额外请求；支持作者等过滤规则。原生模式保持站点结果页。" },
-    { key: "externalSearchEngine", type: "select", label: "空结果补充搜索引擎", help: "站内明确无结果时追加 site:linux.do；仅保留并去重 LinuxDo 主题。启用时请求所选引擎访问权限，搜索词会发送给该引擎。" },
+    { key: "externalSearchEngine", type: "select", label: "外部搜索（站内无结果时）", help: "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 主题。启用需要所选引擎的访问权限，搜索词会发送给该引擎。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
     { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
     { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
@@ -1277,6 +1287,32 @@
     row.append(left, right);
     field.append(row);
     controlMap.set(definition.key, input);
+    if (definition.key === "externalSearchEngine") {
+      const note = document.createElement("p");
+      note.className = "settings-inline-note";
+      note.textContent = canRequestExternalSearchPermission
+        ? "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。"
+        : "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。";
+      const actions = document.createElement("div");
+      actions.className = "settings-actions";
+      externalSearchPermissionButton = document.createElement("button");
+      externalSearchPermissionButton.type = "button";
+      externalSearchPermissionButton.className = "settings-button settings-button--tonal";
+      externalSearchPermissionButton.textContent = canRequestExternalSearchPermission ? "重新申请访问权限" : "打开扩展授权页";
+      externalSearchPermissionButton.addEventListener("click", () => {
+        if (canRequestExternalSearchPermission) {
+          requestExternalSearchPermission(state.settings.externalSearchEngine);
+        } else {
+          openExternalSearchSettings();
+        }
+      });
+      actions.append(externalSearchPermissionButton);
+      externalSearchPermissionStatus = document.createElement("p");
+      externalSearchPermissionStatus.className = "settings-inline-status";
+      externalSearchPermissionStatus.setAttribute("role", "status");
+      externalSearchPermissionStatus.setAttribute("aria-live", "polite");
+      field.append(note, actions, externalSearchPermissionStatus);
+    }
     return field;
   }
 
@@ -1665,6 +1701,7 @@
     }
     syncSegmentIndicators();
     updateDependencies();
+    syncExternalSearchControl(settings.externalSearchEngine);
   }
 
   function readOrderedEditor(key, idField) {
@@ -1808,6 +1845,60 @@
         reject(error);
       }
     });
+  }
+
+  function syncExternalSearchControl(engine) {
+    const input = controlMap.get("externalSearchEngine");
+    input.value = engine;
+    input.parentElement.querySelectorAll(".settings-segmented__item").forEach((button) => {
+      const active = button.dataset.segmentValue === engine;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-checked", String(active));
+      button.tabIndex = active ? 0 : -1;
+      button.disabled = externalSearchPermissionBusy;
+    });
+    externalSearchPermissionButton.hidden = canRequestExternalSearchPermission && engine === "off";
+    externalSearchPermissionButton.disabled = externalSearchPermissionBusy;
+    syncSegmentIndicators();
+  }
+
+  async function openExternalSearchSettings() {
+    if (externalSearchPermissionBusy) return;
+    externalSearchPermissionBusy = true;
+    syncExternalSearchControl(state.settings.externalSearchEngine);
+    try {
+      const response = await sendRuntimeMessage({ type: "open-external-search-settings" });
+      if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
+      setStatusMessage(externalSearchPermissionStatus, "已打开扩展授权页：页面 → 搜索 → 外部搜索。请选择引擎并允许访问，然后返回这里。", "success");
+    } catch (error) {
+      setStatusMessage(externalSearchPermissionStatus, `打开授权页失败：${error.message}。可点击浏览器工具栏的 betterLD 图标，进入「页面 → 搜索」。`, "error");
+    } finally {
+      externalSearchPermissionBusy = false;
+      syncExternalSearchControl(state.settings.externalSearchEngine);
+    }
+  }
+
+  async function requestExternalSearchPermission(engine) {
+    if (externalSearchPermissionBusy) return;
+    const entry = config.externalSearch.engines[engine];
+    externalSearchPermissionBusy = true;
+    // 授权完成前控件保留生效值，其他设置的即时保存不会提前启用外部搜索。
+    syncExternalSearchControl(state.settings.externalSearchEngine);
+    setStatusMessage(externalSearchPermissionStatus, `等待 ${entry.label} 访问授权…`);
+    try {
+      // 必须在用户选择或按钮点击的同步调用链中申请权限。
+      const granted = await api.permissions.request({ origins: [`${new URL(entry.url).origin}/*`] });
+      if (!granted) throw new Error("所选搜索引擎的访问权限未获授权");
+      syncExternalSearchControl(engine);
+      await save(readForm());
+      setStatusMessage(externalSearchPermissionStatus, `已启用 ${entry.label} 外部搜索，访问权限已授予。`, "success");
+    } catch (error) {
+      setStatusMessage(externalSearchPermissionStatus, `外部搜索未启用：${error.message}`, "error");
+      console.error("[betterLD] external search permission failed", error);
+    } finally {
+      externalSearchPermissionBusy = false;
+      syncExternalSearchControl(state.settings.externalSearchEngine);
+    }
   }
 
   async function requestWebdavPermission(url) {
@@ -2154,6 +2245,10 @@
   initializeDnsGuide();
   renderRail();
   showCategory(config.settingsCategories[0].id);
+  if (!isEmbedded && location.hash === "#externalSearchEngine") {
+    const field = controlMap.get("externalSearchEngine").closest(".settings-field");
+    revealSearchEntry({ field });
+  }
 
   settingsPageBody.addEventListener("change", (event) => {
     if (!(event.target instanceof HTMLElement) || !event.target.matches("input, textarea, select")) {
@@ -2165,22 +2260,17 @@
     }
     updateDependencies();
     if (event.target.name === "externalSearchEngine") {
-      const control = event.target;
-      const entry = config.externalSearch.engines[control.value];
-      if (!entry) { commitSettings(); return; }
-      if (!api.permissions?.request) {
-        control.value = state.settings.externalSearchEngine;
-        setStatusMessage(status, "请在扩展设置页或工具栏弹窗中启用外部搜索并授予访问权限。", "error");
+      const engine = event.target.value;
+      if (engine === "off") {
+        setStatusMessage(externalSearchPermissionStatus, "");
+        commitSettings();
         return;
       }
-      // 权限申请留在选择手势内，避免异步保存后失去浏览器授权上下文。
-      api.permissions.request({ origins: [`${new URL(entry.url).origin}/*`] }).then((granted) => {
-        if (!granted) throw new Error("所选搜索引擎的访问权限未获授权");
-        commitSettings();
-      }).catch((error) => {
-        control.value = state.settings.externalSearchEngine;
-        setStatusMessage(status, `外部搜索未启用：${error.message}`, "error");
-      });
+      if (!canRequestExternalSearchPermission) {
+        openExternalSearchSettings();
+        return;
+      }
+      requestExternalSearchPermission(engine);
       return;
     }
     commitSettings();
@@ -2389,6 +2479,9 @@
         : null;
       state.syncMetadata = syncMetadata(stored[config.syncMetadataKey]);
       populate(stored[config.storageKey]);
+      if (!isEmbedded && location.hash === "#externalSearchEngine") {
+        controlMap.get("externalSearchEngine").parentElement.querySelector('.settings-segmented__item[aria-checked="true"]').focus();
+      }
       if (state.settings.syncEnabled) {
         await reconcileSyncSettings(state.settings, stored[config.syncMetadataKey]);
       }

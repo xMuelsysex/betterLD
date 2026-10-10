@@ -105,6 +105,11 @@
     return { ok: true, latestTag };
   }
 
+  async function handleOpenExternalSearchSettings(sender) {
+    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
+    return createTab({ url: api.runtime.getURL("src/options.html#externalSearchEngine"), active: true });
+  }
+
   // 外部搜索引擎兜底：只发 GET，不做解析、不自动申请权限、失败不换引擎
   async function handleExternalSearch(message, sender) {
     if (!isTrustedSender(sender)) {
@@ -115,7 +120,7 @@
     const label = config.externalSearch?.engines?.[engine]?.label || engine;
     const granted = await api.permissions.contains({ origins: [`${new URL(searchUrl).origin}/*`] });
     if (!granted) {
-      return { ok: false, error: `缺少 ${label} 的访问权限，请在设置窗口重新保存外部搜索引擎` };
+      return { ok: false, error: `缺少 ${label} 的访问权限，请在设置 → 页面 → 搜索 → 外部搜索中打开扩展授权页，或点击「重新申请访问权限」` };
     }
     const timeoutMs = config.externalSearch.timeoutMs;
     const controller = new AbortController();
@@ -183,6 +188,12 @@
     }
     if (message?.type === "open-dns-settings") {
       handleOpenDnsSettings(sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "open-external-search-settings") {
+      handleOpenExternalSearchSettings(sender)
         .then(sendResponse)
         .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
