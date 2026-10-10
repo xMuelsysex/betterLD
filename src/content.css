@@ -16,12 +16,6 @@
   --betterld-mask-rgb: 255 255 255;
   --betterld-mask-opacity: 0.42;
   --betterld-card-opacity: 0.82;
-  --betterld-card-side-gutter: 24px;
-  /* 卡片内部尺寸缩放单位：卡宽 × ratio，只设上限 max（与 betterld.config.js 的 cardScale 对应） */
-  --betterld-card-unit-ratio: 0.0459;
-  --betterld-card-unit-max: 22px;
-  --betterld-topic-grid-max-width: 1800px;
-  --betterld-grid-gap: 16px;
   --betterld-radius-sm: 12px;
   --betterld-radius-md: 16px;
   --betterld-radius-lg: 20px;
@@ -203,8 +197,8 @@ html[data-betterld-wallpaper-state] body :is(.d-header, .sidebar-wrapper) {
   background: transparent !important;
 }
 
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .d-header,
-body:is(.betterld-home, .betterld-topic-page, .betterld-categories-page) .sidebar-wrapper {
+body.betterld-shell .d-header,
+body.betterld-shell .sidebar-wrapper {
   position: relative;
   z-index: 2;
   background: transparent !important;
@@ -1849,11 +1843,6 @@ html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet:has(.c
   }
 }
 
-html[data-betterld-header-visual="solid"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
-  background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
-  box-shadow: var(--betterld-shadow-level-1);
-}
-
 /* 资料页复用同一材质；通知列表仍由 Discourse 管理点击、筛选和已读状态。 */
 html[data-betterld-wallpaper-state] body .user-main :is(.collapsed-info .details, .user-navigation, #user-content) {
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
@@ -2664,52 +2653,6 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   }
 }
 
-.betterld-topic-grid {
-  position: relative;
-  z-index: 1;
-  inline-size: 100%;
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--betterld-card-min-size, 280px)), 1fr));
-  gap: var(--betterld-grid-gap, 16px);
-  width: 100%;
-  /* 超宽屏下网格居中，两侧留白随视口变宽；窄屏仍由 100% 与内缩决定 */
-  max-width: min(100%, var(--betterld-topic-grid-max-width, 1800px));
-  margin: 20px auto 32px;
-  padding: 0 var(--betterld-card-side-gutter, 24px);
-  box-sizing: border-box;
-}
-
-.betterld-topic-card[data-filter-state="dimmed"] {
-  opacity: 0.4;
-  filter: grayscale(0.85);
-  transition: opacity var(--betterld-motion-standard), filter var(--betterld-motion-standard);
-}
-
-.betterld-topic-card[data-filter-state="dimmed"]:hover,
-.betterld-topic-card[data-filter-state="dimmed"]:focus-within {
-  opacity: 1;
-  filter: none;
-}
-
-.betterld-topic-card[data-filter-state="highlight"] {
-  border-color: color-mix(in srgb, var(--betterld-primary) 52%, transparent) !important;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--betterld-primary) 32%, transparent), var(--betterld-shadow-level-2);
-}
-
-.betterld-topic-card__hit {
-  padding: 0 2px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--betterld-primary) 30%, transparent);
-  color: inherit;
-}
-
-.betterld-topic-card__tag[data-filter-hit="true"],
-.betterld-topic-card__chip[data-filter-hit="true"] {
-  background: color-mix(in srgb, var(--betterld-primary) 30%, transparent) !important;
-  color: var(--betterld-primary) !important;
-  font-weight: 650;
-}
-
 .betterld-filter-bin {
   position: fixed;
   right: 20px;
@@ -2869,135 +2812,6 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
 }
 
-/* 卡片内部尺寸的缩放单位（阅读卡专用）：
-   单位 = 卡宽 × 比例（比例默认 0.0459；内容盒 ≈305px 时 14px），只设上限（默认 22px）、不设下限，
-   卡片变窄时单位按比例缩小。
-   比例与上限来自 betterld.config.js 的 cardScale，由 content.js 注入 root。
-   定义点必须在卡片的子元素上：容器自身的 100cqw 会落到外层容器/视口，而不是自身。 */
-.betterld-topic-card--reading .betterld-topic-card__reading-shell,
-.betterld-topic-card--reading .betterld-topic-card__menu {
-  /* 无容器查询单位时的回退：按最小卡宽算出的固定单位（Firefox 109 及更早） */
-  --betterld-card-unit: calc(var(--betterld-card-unit-ratio, 0.0459) * var(--betterld-card-min-size, 280px));
-}
-
-@supports (font-size: 1cqw) {
-  .betterld-topic-card--reading .betterld-topic-card__reading-shell,
-  .betterld-topic-card--reading .betterld-topic-card__menu {
-    --betterld-card-unit: min(calc(var(--betterld-card-unit-ratio, 0.0459) * 100cqw), var(--betterld-card-unit-max, 22px));
-  }
-}
-
-.betterld-topic-card {
-  --betterld-card-feedback-color: transparent;
-  --betterld-card-feedback-spread: 0px;
-  --betterld-card-elevation: var(--betterld-shadow-level-2);
-  min-width: 0;
-  min-height: var(--betterld-card-min-size, 280px);
-  aspect-ratio: 1 / 1;
-  container-type: inline-size;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-sizing: border-box;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
-  border-radius: var(--betterld-radius-xl);
-  background: rgb(var(--betterld-surface-container-high-rgb) / var(--betterld-card-opacity));
-  box-shadow: inset 0 0 0 100vmax var(--betterld-card-feedback-color), 0 0 0 var(--betterld-card-feedback-spread) var(--betterld-card-feedback-color), var(--betterld-card-elevation);
-  color: var(--betterld-on-surface) !important;
-  text-decoration: none !important;
-  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
-  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
-  transition: box-shadow var(--betterld-card-motion), border-color var(--betterld-card-motion);
-}
-
-.betterld-topic-card[hidden] {
-  display: none !important;
-}
-
-.betterld-topic-card__link {
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  color: inherit;
-  text-decoration: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .betterld-topic-card:hover {
-    --betterld-card-feedback-color: rgb(var(--betterld-outline-rgb) / var(--betterld-card-hover-opacity));
-    --betterld-card-feedback-spread: var(--betterld-card-hover-spread);
-    border-color: rgb(var(--betterld-outline-rgb) / 0.5);
-  }
-}
-
-.betterld-topic-card:active {
-  --betterld-card-feedback-color: rgb(var(--betterld-outline-rgb) / var(--betterld-card-active-opacity));
-  --betterld-card-feedback-spread: var(--betterld-card-hover-spread);
-}
-
-.betterld-topic-card:focus-visible,
-.betterld-topic-card__link:focus-visible {
-  outline: var(--betterld-focus-width) solid var(--betterld-primary);
-  outline-offset: var(--betterld-focus-offset);
-}
-
-.betterld-topic-card.is-unread {
-  border-color: color-mix(in srgb, var(--betterld-primary) 58%, transparent);
-}
-
-.betterld-topic-card__title {
-  display: -webkit-box;
-  overflow: hidden;
-  flex: 0 0 auto;
-  color: var(--betterld-on-surface);
-  font-weight: 720;
-  line-height: 1.28;
-  letter-spacing: -0.01em;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.betterld-topic-card__excerpt {
-  display: block;
-  min-height: 0;
-  overflow: hidden;
-  flex: 1 1 auto;
-  color: var(--betterld-on-surface-variant);
-  line-height: 1.58;
-}
-
-.betterld-topic-card__excerpt[data-state="loading"] {
-  color: color-mix(in srgb, var(--betterld-on-surface-variant) 68%, transparent);
-}
-
-.betterld-topic-card__excerpt[data-state="failed"] {
-  color: color-mix(in srgb, var(--betterld-on-surface-variant) 78%, transparent);
-  font-style: italic;
-}
-
-.betterld-topic-card__avatar {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--betterld-primary) 20%, transparent);
-  color: var(--betterld-primary);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.betterld-topic-card__avatar img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
 .betterld-topic-card__author {
   max-width: 100%;
   overflow: hidden;
@@ -3022,49 +2836,12 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   text-decoration: underline !important;
 }
 
-.betterld-topic-card__chip {
-  max-width: 100%;
-  overflow: hidden;
-  box-sizing: border-box;
-  padding: 3px 9px;
-  border: 1px solid color-mix(in srgb, var(--betterld-category-color, var(--betterld-primary)) 40%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--betterld-category-color, var(--betterld-primary)) 20%, transparent);
-  color: var(--betterld-on-surface);
-  font-size: 11px;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.betterld-topic-card__meta {
-  overflow: hidden;
-  color: var(--betterld-on-surface-variant);
-  line-height: 1.35;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.betterld-topic-card__badges {
-  min-height: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--betterld-card-unit) * 0.429);
-}
-
-/* 菜单定位与触发按钮跟随缩放单位；弹层是浮层，保持 M3 固定尺寸 */
+/* 菜单依附原生信息栏，浮层保持固定 Material 3 尺寸。 */
 .betterld-topic-card__menu {
-  position: absolute;
-  top: calc(var(--betterld-card-unit) * 0.857);
-  right: calc(var(--betterld-card-unit) * 0.857);
-  z-index: 30;
-}
-
-.betterld-topic-card[data-betterld-menu-open="true"] {
   position: relative;
-  z-index: 20;
-  overflow: visible;
+  flex: 0 0 auto;
+  z-index: 30;
+  --betterld-card-unit: 14px;
 }
 
 .betterld-topic-card__menu-trigger {
@@ -3263,131 +3040,28 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
 .betterld-topic-card__badge {
   display: inline-flex;
   align-items: center;
-  min-height: calc(var(--betterld-card-unit) * 1.571);
-  padding: calc(var(--betterld-card-unit) * 0.143) calc(var(--betterld-card-unit) * 0.571);
+  min-height: 22px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--betterld-primary) 18%, transparent);
   color: var(--betterld-primary);
-  font-size: calc(var(--betterld-card-unit) * 0.786);
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
-}
-
-html[data-betterld-show-topic-avatar="false"] .betterld-topic-card__avatar {
-  display: none;
 }
 
 html[data-betterld-show-topic-author="false"] .betterld-topic-card__author {
   display: none;
 }
 
-html[data-betterld-show-topic-category="false"] .betterld-topic-card__chip {
-  display: none;
-}
-
-html[data-betterld-show-topic-excerpt="false"] .betterld-topic-card__excerpt {
-  display: none;
-}
-
-html[data-betterld-show-topic-meta="false"] .betterld-topic-card__meta {
-  display: none;
-}
-
-/* 元信息与阅读卡统计的细分开关：只隐藏对应片段，元数据请求不变 */
-html[data-betterld-show-topic-tags="false"] .betterld-topic-card__tags {
-  display: none;
-}
-
-html[data-betterld-show-topic-replies="false"] .betterld-topic-card__meta-part[data-betterld-meta-part="replies"],
-html[data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta-part[data-betterld-meta-part="activity"] {
-  display: none;
-}
-
-html[data-betterld-show-topic-replies="false"] .betterld-topic-card__meta-separator,
-html[data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta-separator {
-  display: none;
-}
-
-html[data-betterld-show-topic-replies="false"][data-betterld-show-topic-activity-time="false"] .betterld-topic-card__meta {
-  display: none;
-}
-
-html[data-betterld-show-topic-replies="false"] .betterld-topic-card__reading-stat[data-betterld-stat="replies"],
-html[data-betterld-show-topic-likes="false"] .betterld-topic-card__reading-stat[data-betterld-stat="likes"],
-html[data-betterld-show-topic-views="false"] .betterld-topic-card__reading-stat[data-betterld-stat="views"] {
+html[data-betterld-show-topic-replies="false"] .betterld-topic-card__stat[data-betterld-stat="replies"],
+html[data-betterld-show-topic-likes="false"] .betterld-topic-card__stat[data-betterld-stat="likes"],
+html[data-betterld-show-topic-views="false"] .betterld-topic-card__stat[data-betterld-stat="views"] {
   display: none;
 }
 
 html[data-betterld-show-topic-watched-state="false"] .betterld-topic-card__badge[data-betterld-badge="watched"] {
   display: none;
-}
-
-html[data-betterld-show-topic-unread-state="false"] .betterld-topic-card.is-unread {
-  border-color: rgb(var(--betterld-outline-rgb) / 0.24);
-}
-
-html[data-betterld-show-topic-unread-state="false"] .betterld-topic-card__badge[data-betterld-badge="unread"],
-html[data-betterld-show-topic-pinned-state="false"] .betterld-topic-card__badge[data-betterld-badge="pinned"] {
-  display: none;
-}
-
-html[data-betterld-shadow-mode="none"] .betterld-topic-card {
-  --betterld-card-elevation: 0 0 0 transparent;
-}
-
-html[data-betterld-shadow-mode="custom"] .betterld-topic-card {
-  --betterld-card-elevation: var(--betterld-card-shadow, var(--betterld-shadow-level-2));
-}
-
-html[data-betterld-frosted-glass="false"] .betterld-topic-card {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-  grid-template-columns: repeat(var(--betterld-grid-columns-base, 1), minmax(0, 1fr));
-}
-
-@media (min-width: 560px) {
-  html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-    grid-template-columns: repeat(var(--betterld-grid-columns-sm, 2), minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 800px) {
-  html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-    grid-template-columns: repeat(var(--betterld-grid-columns-md, 3), minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1100px) {
-  html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-    grid-template-columns: repeat(var(--betterld-grid-columns-lg, 4), minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1400px) {
-  html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-    grid-template-columns: repeat(var(--betterld-grid-columns-xl, 5), minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1800px) {
-  html[data-betterld-grid-mode="fixed"] .betterld-topic-grid {
-    grid-template-columns: repeat(var(--betterld-grid-columns-xxl, 6), minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .betterld-topic-grid {
-    grid-template-columns: minmax(0, 1fr);
-    padding-inline: 16px;
-  }
-
-  /* 与同一断点下网格的窄屏内缩保持一致 */
-  body.betterld-shell .show-more.has-topics {
-    padding-inline: 16px;
-  }
 }
 
 body.betterld-shell :where(
@@ -3422,10 +3096,6 @@ body.betterld-shell :where(
   border-radius: var(--betterld-radius-sm);
 }
 
-body.betterld-shell .betterld-topic-card[data-excerpt-state="loading"] {
-  cursor: progress;
-}
-
 @keyframes betterld-background-enter {
   from {
     opacity: 0;
@@ -3455,28 +3125,6 @@ body.betterld-shell .betterld-topic-card[data-excerpt-state="loading"] {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes betterld-grid-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes betterld-card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
@@ -3579,7 +3227,7 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
     background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
   }
 
-  .betterld-topic-card {
+  .betterld-search-result {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: rgb(var(--betterld-surface-container-high-rgb) / 0.96);
@@ -3594,7 +3242,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
   .category-heading,
   .category-navigation .select-kit-body,
   .category-list > tbody > tr,
-  .betterld-topic-card
+  .betterld-search-result
 ) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -3619,7 +3267,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
     #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
     .category-heading,
     .category-list > tbody > tr,
-    .betterld-topic-card
+    .betterld-search-result
   ) {
     background: Canvas !important;
     border-color: CanvasText !important;
@@ -3640,9 +3288,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
   body:is(.betterld-topic-page, .betterld-categories-page) #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
   body.betterld-topic-page .category-heading,
   body.betterld-categories-page .category-list > tbody > tr,
-  .betterld-topic-grid,
-  .betterld-topic-card,
-  .betterld-topic-card__excerpt {
+  .betterld-search-result {
     animation: none !important;
     transition: none !important;
   }
@@ -3653,7 +3299,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
   body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:hover,
   body.betterld-shell .topic-create-button__combo:hover,
   body:is(.betterld-categories-page) .category-list > tbody > tr:hover,
-  .betterld-topic-card:hover {
+  .betterld-search-result:hover {
     transform: none !important;
   }
 }
@@ -3672,7 +3318,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
     .category-navigation .select-kit-header,
     .category-navigation .select-kit-body,
     .category-list > tbody > tr,
-    .betterld-topic-card
+    .betterld-search-result
   ) {
     animation: none !important;
     transition: none !important;
@@ -3680,19 +3326,16 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
 
   body.betterld-shell :where(
     .category-list > tbody > tr:hover,
-    .betterld-topic-card:hover
+    .betterld-search-result:hover
   ) {
     transform: none !important;
   }
 }
 
-html[data-betterld-header-visual="native"] body.betterld-shell .d-header {
-  background: revert !important;
-  box-shadow: revert !important;
-  -webkit-backdrop-filter: revert;
-  backdrop-filter: revert;
+html[data-betterld-header-visual="transparent"] body.betterld-shell .d-header {
+  background: transparent !important;
+  box-shadow: none !important;
 }
-
 html[data-betterld-header-visual="solid"] body.betterld-shell .d-header {
   background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
   box-shadow: var(--betterld-shadow-level-1);
@@ -3700,9 +3343,8 @@ html[data-betterld-header-visual="solid"] body.betterld-shell .d-header {
   backdrop-filter: none;
 }
 
-/* 参照 BewlyCat：模糊与薄色只在独立背景层渐隐，不遮罩文字或菜单。 */
-html[data-betterld-header-visual="frosted"] body:is(.betterld-shell, .betterld-unmanaged-page) .d-header,
-html[data-betterld-header-visual="native"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header {
+/* 默认与毛玻璃模式共用全站渐隐；不按页面路由枚举，也不改变存储模式。 */
+html:is([data-betterld-header-visual="frosted"], [data-betterld-header-visual="native"]) body.betterld-shell .d-header {
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
@@ -3711,8 +3353,7 @@ html[data-betterld-header-visual="native"] body.betterld-shell[data-betterld-top
   isolation: isolate;
   overflow: visible;
 }
-html[data-betterld-header-visual="frosted"] body:is(.betterld-shell, .betterld-unmanaged-page) .d-header::before,
-html[data-betterld-header-visual="native"] body.betterld-shell[data-betterld-topic-detail="true"] .d-header::before {
+html:is([data-betterld-header-visual="frosted"], [data-betterld-header-visual="native"]) body.betterld-shell .d-header::before {
   content: "";
   position: absolute;
   inset: 0 0 calc(-1 * var(--betterld-header-blur-fade));
@@ -3724,14 +3365,14 @@ html[data-betterld-header-visual="native"] body.betterld-shell[data-betterld-top
   -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - var(--betterld-header-blur-fade)), rgb(0 0 0 / 85.4%) calc(100% - var(--betterld-header-blur-fade) * .75), rgb(0 0 0 / 50%) calc(100% - var(--betterld-header-blur-fade) * .5), rgb(0 0 0 / 14.6%) calc(100% - var(--betterld-header-blur-fade) * .25), transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - var(--betterld-header-blur-fade)), rgb(0 0 0 / 85.4%) calc(100% - var(--betterld-header-blur-fade) * .75), rgb(0 0 0 / 50%) calc(100% - var(--betterld-header-blur-fade) * .5), rgb(0 0 0 / 14.6%) calc(100% - var(--betterld-header-blur-fade) * .25), transparent 100%);
 }
-html:is([data-betterld-frosted-glass="false"], [data-betterld-material="fallback"]) body:is(.betterld-shell, .betterld-unmanaged-page) .d-header::before {
+html:is([data-betterld-frosted-glass="false"], [data-betterld-material="fallback"]) body.betterld-shell .d-header::before {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgb(var(--betterld-surface-container-rgb) / .96);
 }
 @media (forced-colors: active) {
-  body:is(.betterld-shell, .betterld-unmanaged-page) .d-header::before { display: none; }
-  body:is(.betterld-shell, .betterld-unmanaged-page) .d-header { background: Canvas !important; }
+  body.betterld-shell .d-header::before { display: none; }
+  body.betterld-shell .d-header { background: Canvas !important; }
 }
 
 html[data-betterld-header-visible="false"] body.betterld-shell .d-header,
@@ -3864,20 +3505,7 @@ html[data-betterld-navigation-counts="false"] body.betterld-shell #navigation-ba
 
 }
 
-body.betterld-unmanaged-page #main-container,
-body.betterld-unmanaged-page .wrap,
-body.betterld-unmanaged-page .d-header,
-body.betterld-unmanaged-page .sidebar-wrapper {
-  position: relative;
-  z-index: 2;
-}
-
-body.betterld-unmanaged-page .d-header,
-body.betterld-unmanaged-page .sidebar-wrapper {
-  background: transparent !important;
-}
-
-html[data-betterld-font-scope="own"] :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-reply-tree, .betterld-floor-timeline, .betterld-action-rail, .betterld-settings-trigger, .betterld-touch-home, .betterld-topic-empty, .betterld-action-status) {
+html[data-betterld-font-scope="own"] :is(.betterld-search-result, .betterld-topic-drawer, .betterld-reply-tree, .betterld-floor-timeline, .betterld-action-rail, .betterld-settings-trigger, .betterld-touch-home, .betterld-topic-empty, .betterld-action-status) {
   font-family: var(--betterld-font-family, inherit);
 }
 
@@ -3886,7 +3514,7 @@ html[data-betterld-font-scope="managed"] body.betterld-shell :is(button, input, 
   font-family: var(--betterld-font-family, inherit);
 }
 
-html[data-betterld-remove-punctuation-indent="true"] :is(.betterld-topic-card, .betterld-topic-drawer) :is(.betterld-topic-card__title, .betterld-topic-card__excerpt, .betterld-topic-drawer__cooked) {
+html[data-betterld-remove-punctuation-indent="true"] :is(.betterld-search-result, .betterld-topic-drawer) :is(.betterld-topic-card__title, .blurb, .betterld-topic-drawer__cooked) {
   text-indent: 0 !important;
 }
 
@@ -3910,34 +3538,6 @@ html[data-betterld-touch-mode="true"] .betterld-touch-home {
 
 html[data-betterld-navigation-scroll="true"] body.betterld-shell #navigation-bar.nav.nav-pills a {
   flex: 0 0 auto;
-}
-
-html[data-betterld-header-visual="native"] body.betterld-unmanaged-page .d-header {
-  background: revert !important;
-  box-shadow: revert !important;
-  -webkit-backdrop-filter: revert;
-  backdrop-filter: revert;
-}
-
-html[data-betterld-header-visual="solid"] body.betterld-unmanaged-page .d-header {
-  background: rgb(var(--betterld-surface-container-rgb) / 0.96) !important;
-  box-shadow: var(--betterld-shadow-level-1);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-html[data-betterld-header-visible="false"] body.betterld-unmanaged-page .d-header,
-html[data-betterld-header-state="hidden"] body.betterld-unmanaged-page .d-header {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  transform: translateY(calc(-100% - 12px)) !important;
-}
-
-body.betterld-search-page .d-header,
-body.betterld-search-page .sidebar-wrapper {
-  position: relative;
-  z-index: 2;
-  background: transparent !important;
 }
 
 body.betterld-search-page .search-container {
@@ -3981,6 +3581,12 @@ body.betterld-search-page :is(.search-header, .search-info) {
 body.betterld-search-page .search-header :is(.search-bar, .search-filters) {
   background: transparent !important;
 }
+body.betterld-search-page :is(.search-types__type:not(.active), .sort-by > label) {
+  color: var(--betterld-on-surface-variant);
+}
+body.betterld-search-page .search-types__type.active {
+  color: var(--betterld-primary);
+}
 
 html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data-betterld-search-focus-dimming="true"] body.betterld-search-page::after {
   background: rgb(var(--betterld-mask-rgb) / 0.46);
@@ -3989,14 +3595,6 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
 html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data-betterld-search-focus-blur="true"] body.betterld-shell::before {
   filter: blur(calc(var(--betterld-background-blur) + 8px));
 }
-
-/* #region 搜索结果：卡片模式与翻页模式 */
-
-/* 阅读卡使用共享渲染器，保留隐藏的原站结果供分页和路由更新。 */
-html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries[hidden] {
-  display: none !important;
-}
-
 
 /* 翻页模式：站点自动加载被禁用，改用 betterLD 的显式按钮 */
 .betterld-search-more {
@@ -4128,14 +3726,14 @@ html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries[
 /* #endregion */
 
 @media (forced-colors: active) {
-  :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-action-rail__button, .betterld-settings-trigger, .betterld-touch-home, .betterld-action-status) {
+  :is(.betterld-search-result, .betterld-topic-drawer, .betterld-action-rail__button, .betterld-settings-trigger, .betterld-touch-home, .betterld-action-status) {
     background: Canvas !important;
     border-color: CanvasText !important;
     box-shadow: none !important;
     color: CanvasText !important;
   }
 
-  :is(.betterld-topic-card, .betterld-topic-drawer, .betterld-action-rail__button, .betterld-settings-trigger, .betterld-touch-home):focus-visible {
+  :is(.betterld-search-result, .betterld-topic-drawer, .betterld-action-rail__button, .betterld-settings-trigger, .betterld-touch-home):focus-visible {
     outline-color: Highlight !important;
   }
 }
@@ -4165,280 +3763,8 @@ html[data-betterld-search-mode="cards"] body.betterld-shell .fps-result-entries[
   }
 }
 
-/* 阅读卡网格（唯一卡片模式）：列轨道由文件上部的 .betterld-topic-grid 基础规则声明（track 下限接回 cardMinSize）；
-   这里只做网格项对齐，搜索页另有 auto-fill 规则保持列数稳定。
-   勿在此重复声明 grid-template-columns：本条源序在 @media (max-width:560px) 单列规则之后，会将其覆盖。 */
-.betterld-topic-grid {
-  align-items: stretch;
-}
-
-body.betterld-search-page .betterld-topic-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--betterld-card-min-size, 280px)), 1fr));
-}
-
-.betterld-topic-card--reading {
-  position: relative;
-  min-height: 210px;
-  /* 宽高比 1 / √2（0.7071 / 1）。 */
-  aspect-ratio: 0.7071 / 1;
-  overflow: hidden;
-  border-radius: 28px;
-  background: linear-gradient(145deg, rgb(var(--betterld-surface-rgb) / 0.92), rgb(var(--betterld-surface-container-high-rgb) / 0.78));
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-shell {
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  gap: calc(var(--betterld-card-unit) * 0.286);
-  padding: calc(var(--betterld-card-unit) * 0.571) calc(var(--betterld-card-unit) * 0.857) calc(var(--betterld-card-unit) * 0.429);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-header {
-  min-width: 0;
-  display: grid;
-  gap: calc(var(--betterld-card-unit) * 0.214);
-  padding-inline-end: calc(var(--betterld-card-unit) * 3.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-title {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--betterld-on-surface);
-  font-size: calc(var(--betterld-card-unit) * 1 * var(--betterld-card-title-scale, 1));
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  text-decoration: none !important;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-title:hover {
-  color: var(--betterld-primary);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-info-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--betterld-card-unit) * 0.571);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-identity {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--betterld-card-unit) * 0.429);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-avatar {
-  width: calc(var(--betterld-card-unit) * 2.143);
-  height: calc(var(--betterld-card-unit) * 2.143);
-  flex-basis: calc(var(--betterld-card-unit) * 2.143);
-  border: 2px solid rgb(var(--betterld-surface-rgb) / 0.78);
-  box-shadow: 0 2px 8px rgb(var(--betterld-shadow-color) / 0.16);
-  font-size: calc(var(--betterld-card-unit) * 1.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-details {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: calc(var(--betterld-card-unit) * 0.286);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-details .betterld-topic-card__author {
-  max-width: min(180px, 45cqw);
-  font-size: calc(var(--betterld-card-unit) * 0.857 * var(--betterld-card-author-scale, 1));
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-details .betterld-topic-card__meta {
-  max-width: none;
-  font-size: calc(var(--betterld-card-unit) * 0.714 * var(--betterld-card-meta-scale, 1));
-  text-align: left;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-details .betterld-topic-card__chip {
-  padding: calc(var(--betterld-card-unit) * 0.214) calc(var(--betterld-card-unit) * 0.643);
-  font-size: calc(var(--betterld-card-unit) * 0.786);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__participants {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  padding-inline: calc(var(--betterld-card-unit) * 0.286) calc(var(--betterld-card-unit) * 0.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__participants[hidden] {
-  display: none !important;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__participant {
-  width: calc(var(--betterld-card-unit) * 1.714);
-  height: calc(var(--betterld-card-unit) * 1.714);
-  flex-basis: calc(var(--betterld-card-unit) * 1.714);
-  margin-left: calc(var(--betterld-card-unit) * -0.5);
-  border: 1px solid rgb(var(--betterld-surface-rgb) / 0.9);
-  box-shadow: 0 2px 8px rgb(var(--betterld-shadow-color) / 0.14);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__participant:first-child {
-  margin-left: 0;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__tags {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: calc(var(--betterld-card-unit) * 0.286);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__tags[hidden] {
-  display: none !important;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__tag {
-  display: inline-flex;
-  align-items: center;
-  min-height: calc(var(--betterld-card-unit) * 1.429);
-  max-width: 130px;
-  overflow: hidden;
-  padding: calc(var(--betterld-card-unit) * 0.143) calc(var(--betterld-card-unit) * 0.429);
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
-  border-radius: 999px;
-  background: rgb(var(--betterld-surface-container-rgb) / 0.58);
-  color: var(--betterld-on-surface-variant);
-  font-size: calc(var(--betterld-card-unit) * 0.714);
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt {
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  box-sizing: border-box;
-  padding: calc(var(--betterld-card-unit) * 0.357) calc(var(--betterld-card-unit) * 0.571);
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.16);
-  border-radius: calc(var(--betterld-card-unit) * 0.857);
-  background: rgb(var(--betterld-surface-container-rgb) / 0.48);
-  color: var(--betterld-on-surface-variant);
-  font-size: calc(var(--betterld-card-unit) * 1);
-  line-height: 1.42;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt > :first-child {
-  margin-top: 0;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt > :last-child {
-  margin-bottom: 0;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt :is(h1, h2, h3, h4, h5, h6) {
-  margin: 0 0 calc(var(--betterld-card-unit) * 0.429);
-  color: var(--betterld-on-surface);
-  font-size: 1.05em;
-  line-height: 1.35;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt p {
-  margin: 0 0 calc(var(--betterld-card-unit) * 0.429);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt :is(ul, ol) {
-  margin: 0 0 calc(var(--betterld-card-unit) * 0.429);
-  padding-inline-start: calc(var(--betterld-card-unit) * 1.286);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt li + li {
-  margin-top: calc(var(--betterld-card-unit) * 0.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt blockquote {
-  margin: 0 0 calc(var(--betterld-card-unit) * 0.429);
-  padding: calc(var(--betterld-card-unit) * 0.286) calc(var(--betterld-card-unit) * 0.571);
-  border-inline-start: 3px solid var(--betterld-primary);
-  border-radius: 0 calc(var(--betterld-card-unit) * 0.571) calc(var(--betterld-card-unit) * 0.571) 0;
-  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt :not(pre) > code {
-  padding: calc(var(--betterld-card-unit) * 0.071) calc(var(--betterld-card-unit) * 0.286);
-  border-radius: calc(var(--betterld-card-unit) * 0.286);
-  background: rgb(var(--betterld-outline-rgb) / 0.14);
-  color: var(--betterld-on-surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.88em;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt pre {
-  max-width: 100%;
-  margin: 0 0 calc(var(--betterld-card-unit) * 0.429);
-  overflow: auto;
-  box-sizing: border-box;
-  padding: calc(var(--betterld-card-unit) * 0.571) calc(var(--betterld-card-unit) * 0.714);
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.18);
-  border-radius: calc(var(--betterld-card-unit) * 0.571);
-  background: rgb(19 27 43 / 0.92);
-  color: #e5edf8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: calc(var(--betterld-card-unit) * 0.714);
-  line-height: 1.35;
-  white-space: pre;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt a {
-  color: var(--betterld-primary);
-  text-decoration: underline;
-  text-underline-offset: calc(var(--betterld-card-unit) * 0.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__excerpt a:hover {
-  color: color-mix(in srgb, var(--betterld-primary) 76%, var(--betterld-on-surface));
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-footer {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--betterld-card-unit) * 0.571);
-  padding-top: calc(var(--betterld-card-unit) * 0.429);
-  border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.18);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-stats {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: calc(var(--betterld-card-unit) * 0.571);
-  color: var(--betterld-on-surface-variant);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-stats[hidden] {
-  display: none !important;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--betterld-card-unit) * 0.286);
-  font-size: calc(var(--betterld-card-unit) * 0.714);
-  line-height: 1.2;
-}
-
 /* 回复、点赞和浏览统计共用同一组 CSS 图标掩膜。 */
-.betterld-topic-card__reading-stat-icon {
+.betterld-topic-card__stat-icon {
   flex: 0 0 auto;
   width: 1em;
   height: 1em;
@@ -4454,160 +3780,18 @@ body.betterld-search-page .betterld-topic-grid {
 }
 
 /* 24×24 Material 轮廓图标：回复（chat_bubble_outline）/ 点赞（favorite_border）/ 浏览（visibility） */
-.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="comment"] {
+.betterld-topic-card__stat-icon[data-betterld-stat-icon="comment"] {
   --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z'/%3E%3C/svg%3E");
 }
 
-.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="heart"] {
+.betterld-topic-card__stat-icon[data-betterld-stat-icon="heart"] {
   --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z'/%3E%3C/svg%3E");
 }
 
-.betterld-topic-card__reading-stat-icon[data-betterld-stat-icon="views"] {
+.betterld-topic-card__stat-icon[data-betterld-stat-icon="views"] {
   --betterld-stat-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z'/%3E%3C/svg%3E");
 }
 
-.betterld-topic-card--reading .betterld-topic-card__reading-stat-icon {
-  color: var(--betterld-on-surface-variant);
-  font-size: calc(var(--betterld-card-unit) * 1.143);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-action {
-  min-height: calc(var(--betterld-card-unit) * 2);
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--betterld-card-unit) * 0.357);
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 0 calc(var(--betterld-card-unit) * 0.714);
-  border: 0;
-  border-radius: 999px;
-  background: var(--betterld-primary);
-  color: var(--betterld-on-primary) !important;
-  box-shadow: var(--betterld-shadow-active);
-  font-size: calc(var(--betterld-card-unit) * 0.786);
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none !important;
-  white-space: nowrap;
-  transition: transform var(--betterld-motion-fast), box-shadow var(--betterld-motion-fast), filter var(--betterld-motion-fast);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-action::after {
-  content: "↗";
-  font-size: calc(var(--betterld-card-unit) * 1);
-  font-weight: 500;
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-action:hover {
-  filter: brightness(1.06);
-  box-shadow: var(--betterld-shadow-level-1);
-  transform: translateY(-1px);
-}
-
-.betterld-topic-card--reading .betterld-topic-card__reading-action:focus-visible {
-  outline: var(--betterld-focus-width) solid var(--betterld-primary);
-  outline-offset: var(--betterld-focus-offset);
-}
-
-html[data-betterld-show-topic-meta="false"] .betterld-topic-card--reading .betterld-topic-card__reading-stats {
-  display: none;
-}
-
-/* 字号档位在卡片缩放单位的基础上乘一个系数：responsive 不写规则（直接由卡片尺寸决定）；
-   标题的 base 明确为 1.14（小 0.86 / 大 1.43，保证档位单调且互不相同）；
-   作者与元信息的 base 不写规则（系数 1），只写 small / large 两档。 */
-html[data-betterld-topic-title-size="small"] .betterld-topic-card__reading-title {
-  --betterld-card-title-scale: 0.86;
-}
-
-html[data-betterld-topic-title-size="base"] .betterld-topic-card__reading-title {
-  --betterld-card-title-scale: 1.14;
-}
-
-html[data-betterld-topic-title-size="large"] .betterld-topic-card__reading-title {
-  --betterld-card-title-scale: 1.43;
-}
-
-html[data-betterld-topic-author-size="small"] .betterld-topic-card__reading-details .betterld-topic-card__author {
-  --betterld-card-author-scale: 0.857;
-}
-
-html[data-betterld-topic-author-size="large"] .betterld-topic-card__reading-details .betterld-topic-card__author {
-  --betterld-card-author-scale: 1.143;
-}
-
-html[data-betterld-topic-meta-size="small"] .betterld-topic-card__reading-details .betterld-topic-card__meta {
-  --betterld-card-meta-scale: 0.909;
-}
-
-html[data-betterld-topic-meta-size="large"] .betterld-topic-card__reading-details .betterld-topic-card__meta {
-  --betterld-card-meta-scale: 1.091;
-}
-
-@media (max-width: 900px) {
-  .betterld-topic-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  /* 该媒体块同时涵盖「网格单列（仅 auto 模式）」与「卡片横幅化」。
-     横幅分支高度固定为 --betterld-reading-narrow-height，所以缩放单位上限是
-     config.cardScale.narrowUnitPx（14px = 改前阅读卡在该分支下的字号，卡变宽也不再变大）；
-     但卡片变窄时单位跟着按比例变窄。
-     注意 fixed 模式按 gridColumns 保持多列、搜索页用 auto-fill，此断点下并非单列，卡宽会变化，
-     单位跟随卡宽缩放。 */
-  .betterld-topic-card--reading .betterld-topic-card__reading-shell,
-  .betterld-topic-card--reading .betterld-topic-card__menu {
-    --betterld-card-unit: min(calc(var(--betterld-card-unit-ratio, 0.0459) * 100cqw), var(--betterld-reading-narrow-unit, 14px));
-  }
-
-  .betterld-topic-card--reading {
-    height: var(--betterld-reading-narrow-height, 250px);
-    aspect-ratio: auto;
-    min-height: var(--betterld-reading-narrow-height, 250px);
-  }
-}
-
-@media (max-width: 560px) {
-  .betterld-topic-card--reading .betterld-topic-card__reading-shell {
-    padding: 10px 12px 8px;
-  }
-
-  .betterld-topic-card--reading .betterld-topic-card__reading-footer {
-    align-items: flex-start;
-  }
-
-  .betterld-topic-card--reading .betterld-topic-card__reading-action {
-    min-height: 30px;
-    padding-inline: 10px;
-  }
-}
-
-@supports not (backdrop-filter: blur(1px)) {
-  .betterld-topic-card--reading {
-    background: rgb(var(--betterld-surface-container-high-rgb) / 0.96);
-  }
-}
-
-@media (forced-colors: active) {
-  .betterld-topic-card--reading .betterld-topic-card__excerpt,
-  .betterld-topic-card--reading .betterld-topic-card__tag,
-  .betterld-topic-card--reading .betterld-topic-card__reading-action {
-    background: Canvas;
-    border-color: CanvasText;
-    color: CanvasText !important;
-    box-shadow: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .betterld-topic-card--reading .betterld-topic-card__reading-action {
-    transition: none;
-  }
-
-  .betterld-topic-card--reading .betterld-topic-card__reading-action:hover {
-    transform: none;
-  }
-}
 
 /* 树已就绪时取代原站时间顺序帖子流；返回原帖回复时恢复原生交互。 */
 body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
@@ -5545,7 +4729,7 @@ body.betterld-shell .betterld-topic-list .topic-list-item {
   border: 0;
   box-shadow: none;
 }
-body.betterld-shell .betterld-topic-row > td {
+body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .betterld-external-search__card) {
   position: relative;
   z-index: 0;
   padding: 14px 20px !important;
@@ -5566,18 +4750,18 @@ body.betterld-shell .betterld-topic-row > td.main-link {
   border-start-end-radius: 20px;
   border-end-end-radius: 20px;
 }
-body.betterld-shell .betterld-topic-row:is(:hover, :focus-within) > td {
+body.betterld-shell :is(.betterld-topic-row:is(:hover, :focus-within) > td, .betterld-search-result:is(:hover, :focus-within), .betterld-external-search__card:is(:hover, :focus-within)) {
   background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity)));
 }
 /* 单元格的磨砂创建独立绘制层，聚焦菜单所在行保持在后续行之上。 */
-body.betterld-shell .betterld-topic-row:focus-within > td { z-index: 1; }
-body.betterld-shell .betterld-topic-row[hidden] { display: none !important; }
+body.betterld-shell :is(.betterld-topic-row:focus-within > td, .betterld-search-result:focus-within) { z-index: 1; }
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result)[hidden] { display: none !important; }
 body.betterld-shell .betterld-topic-row__info [hidden] { display: none !important; }
-body.betterld-shell .betterld-topic-row[data-filter-state="dimmed"] { opacity: 0.42; }
-body.betterld-shell .betterld-topic-row[data-filter-state="highlight"] > td {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result)[data-filter-state="dimmed"] { opacity: 0.42; }
+body.betterld-shell :is(.betterld-topic-row[data-filter-state="highlight"] > td, .betterld-search-result[data-filter-state="highlight"]) {
   border-color: var(--betterld-primary);
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__title {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__title {
   display: inline;
   font-size: var(--betterld-list-title-size, 17px);
   font-weight: 600;
@@ -5598,7 +4782,7 @@ body.betterld-shell .betterld-topic-row .discourse-tags {
   flex-wrap: wrap;
   gap: 4px;
 }
-body.betterld-shell .betterld-topic-row :is(.badge-category__wrapper, .discourse-tag) {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) :is(.badge-category__wrapper, .discourse-tag) {
   font-size: 12px;
   border-radius: 999px;
 }
@@ -5626,7 +4810,7 @@ body.betterld-shell .betterld-topic-row__avatar img {
   height: 100%;
   object-fit: contain;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__author {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__author {
   color: var(--betterld-on-surface-variant);
   font-size: var(--betterld-list-author-size, 13px);
   font-weight: 500;
@@ -5657,17 +4841,17 @@ body.betterld-shell .betterld-topic-row__stats {
   align-items: center;
   gap: 14px;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__reading-stat {
+body.betterld-shell .betterld-topic-row .betterld-topic-card__stat {
   display: inline-flex;
   gap: 5px;
   font-size: inherit;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__reading-stat-icon {
+body.betterld-shell .betterld-topic-row .betterld-topic-card__stat-icon {
   width: 14px;
   height: 14px;
   font-size: 14px;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__badge {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__badge {
   padding: 2px 8px;
   font-size: 11px;
   border-radius: 999px;
@@ -5690,26 +4874,26 @@ body.betterld-shell .betterld-topic-row__status {
   color: var(--betterld-on-surface-variant);
   font-size: 11px;
 }
-body.betterld-shell .betterld-topic-row [data-filter-hit="true"] {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) [data-filter-hit="true"] {
   background: color-mix(in srgb, var(--betterld-primary) 18%, transparent);
   color: var(--betterld-primary);
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__menu {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__menu {
   position: relative;
   inset: auto;
   flex: 0 0 auto;
   --betterld-card-unit: 14px;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__menu-trigger {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__menu-trigger {
   width: 28px;
   height: 28px;
   font-size: 20px;
 }
-body.betterld-shell .betterld-topic-row .betterld-topic-card__menu-panel {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__menu-panel {
   z-index: 10;
   min-width: 176px;
 }
-body.betterld-shell .betterld-topic-row :is(button, a):focus-visible {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) :is(button, a):focus-visible {
   outline: 2px solid var(--betterld-primary);
   outline-offset: 2px;
 }
@@ -5740,19 +4924,7 @@ body.betterld-has-library .betterld-action-status { bottom: 92px; }
 
 .betterld-external-search { margin-block: 24px; color: var(--betterld-on-surface); }
 .betterld-external-search h2 { font-size: 20px; }
-.betterld-external-search__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 16px;
-}
-.betterld-external-search__card {
-  min-width: 0;
-  padding: 20px;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / .24);
-  border-radius: var(--betterld-radius-lg);
-  background: rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity));
-  box-shadow: var(--betterld-shadow-level-1);
-}
+.betterld-external-search__results { display: flex; flex-direction: column; gap: 8px; }
 .betterld-external-search__card > a { color: var(--betterld-primary); font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
 .betterld-external-search__card p { margin-block: 12px; overflow-wrap: anywhere; }
 .betterld-external-search__card small,
@@ -5766,11 +4938,96 @@ html[data-betterld-topic-author-size="large"] { --betterld-list-author-size: 15p
 html[data-betterld-topic-meta-size="small"] { --betterld-list-meta-size: 11px; }
 html[data-betterld-topic-meta-size="large"] { --betterld-list-meta-size: 14px; }
 @media (max-width: 600px) {
-  body.betterld-shell .betterld-topic-row > td { padding: 12px !important; }
+  body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .betterld-external-search__card) { padding: 12px !important; }
   body.betterld-shell .betterld-topic-row > .main-link > [data-betterld-badge="watched"] {
     inset-block-start: 12px;
     inset-inline-end: 12px;
   }
   body.betterld-shell .betterld-topic-row__stats { gap: 8px; }
   body.betterld-shell .betterld-topic-row__time { flex-basis: calc(100% - 40px); }
+}
+
+/* 搜索原生结果：标题、作者头像、摘要/命中高亮和楼层链接原样保留。 */
+body.betterld-shell .fps-result-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+body.betterld-shell :is(.betterld-search-result, .betterld-external-search__card) {
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  border-inline: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
+  border-radius: 20px;
+  color: var(--betterld-on-surface);
+}
+body.betterld-shell .betterld-search-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  overflow: visible;
+}
+body.betterld-shell .betterld-search-result > .author {
+  flex: 0 0 24px;
+  width: 24px;
+  margin: 2px 0 0;
+}
+body.betterld-shell .betterld-search-result > .author img.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+body.betterld-shell .betterld-search-result .fps-topic {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  padding: 0;
+}
+body.betterld-shell .betterld-search-result .search-category {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+body.betterld-shell .betterld-search-result .discourse-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+body.betterld-shell .betterld-search-result .blurb {
+  max-width: none;
+  width: auto;
+  margin: 9px 0 0;
+  padding: 0;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+/* 原站子元素用自己的主题色，显式跟随当前 betterLD 材质，避免跨明暗模式时白字落在浅色表面。 */
+body.betterld-shell .betterld-search-result .topic-title { color: inherit; }
+body.betterld-shell .betterld-search-result :is(.badge-category__name, .discourse-tag, .date) {
+  color: var(--betterld-on-surface-variant);
+}
+body.betterld-shell .betterld-search-result .search-highlight {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--betterld-primary) 18%, transparent);
+  color: var(--betterld-on-surface);
+}
+body.betterld-shell .betterld-search-result .ai-result__icon { flex: 0 0 auto; color: var(--betterld-primary); }
+body.betterld-shell .betterld-search-result [hidden] { display: none !important; }
+html[data-betterld-show-topic-avatar="false"] .betterld-search-result > .author,
+html[data-betterld-show-topic-category="false"] .betterld-search-result .badge-category__wrapper,
+html[data-betterld-show-topic-tags="false"] .betterld-search-result .discourse-tags,
+html[data-betterld-show-topic-excerpt="false"] .betterld-search-result .blurb,
+html[data-betterld-show-topic-meta="false"] .betterld-search-result .blurb .date,
+html[data-betterld-show-topic-activity-time="false"] .betterld-search-result .blurb .date { display: none !important; }
+
+/* 与首页同步尊重全站毛玻璃开关；末尾覆盖材质声明的同等优先级。 */
+html:is([data-betterld-frosted-glass="false"], [data-betterld-material="fallback"]) body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .betterld-external-search__card) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }

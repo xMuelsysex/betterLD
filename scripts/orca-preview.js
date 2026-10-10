@@ -590,9 +590,8 @@ function buildInjection(port) {
   globalThis.__betterldPreviewInjected = { at: Date.now() };
 
   return {
-    topicCards: document.querySelectorAll(".betterld-topic-card").length,
+    searchResults: document.querySelectorAll(".betterld-search-result").length,
     topicRows: document.querySelectorAll(".betterld-topic-row").length,
-    grids: document.querySelectorAll(".betterld-topic-grid").length,
     home: document.body?.classList.contains("betterld-home") || false,
     tagsPage: document.body?.classList.contains("betterld-tags-page") || false,
     tableHidden: document.querySelector("table.topic-list")?.hidden ?? null,

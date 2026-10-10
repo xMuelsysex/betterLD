@@ -762,7 +762,6 @@
     fontMode: { default: "系统默认", recommended: "推荐字体栈", custom: "自定义字体" },
     fontScope: { own: "仅 betterLD 内容", managed: "已管理页面正文" },
     shadowMode: { default: "默认阴影", none: "关闭阴影", custom: "自定义阴影" },
-    gridMode: { auto: "自适应列数", fixed: "固定断点列数" },
     topicListLayoutMode: { native: "Material 3 主题列表" },
     replyTreeNameMode: { both: "昵称和用户名", nickname: "仅昵称", username: "仅用户名" },
     topicSortMode: { activity: "最新回复", created: "发布时间" },
@@ -770,7 +769,7 @@
     topicAuthorFontSize: { small: "小", base: "标准", large: "大" },
     topicMetaFontSize: { small: "小", base: "标准", large: "大" },
     topicNavigationAlignment: { left: "左对齐", center: "居中" },
-    headerVisualMode: { native: "原站样式", transparent: "透明", frosted: "毛玻璃", solid: "不透明" },
+    headerVisualMode: { native: "默认毛玻璃", transparent: "透明", frosted: "毛玻璃", solid: "不透明" },
     sidebarPosition: { original: "保留原位", right: "移动到右侧" },
     actionRailPosition: { left: "左侧", right: "右侧", bottom: "底部" },
     actionRailVisibility: { always: "始终显示", auto: "滚动时半隐藏", hidden: "默认隐藏" },
@@ -780,7 +779,6 @@
     notificationOpenMode: { page: "当前页面", newTab: "新标签页" },
     topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", highlight: "高亮命中项", include: "只显示命中项" },
     topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
-    searchMode: { native: "原生结果", cards: "阅读卡" },
     externalSearchEngine: { off: "关闭", bing: "Bing", duckduckgo: "DuckDuckGo" },
     searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
     searchPageWallpaperMode: { inherit: "继承全局", builtin: "内置图片", url: "远程图片" },
@@ -794,7 +792,6 @@
     fontMode: { default: "System default", recommended: "Recommended stack", custom: "Custom font" },
     fontScope: { own: "betterLD content only", managed: "Managed pages" },
     shadowMode: { default: "Default shadow", none: "No shadow", custom: "Custom shadow" },
-    gridMode: { auto: "Responsive columns", fixed: "Fixed breakpoint columns" },
     topicListLayoutMode: { native: "Material 3 topic list" },
     replyTreeNameMode: { both: "Nickname and username", nickname: "Nickname only", username: "Username only" },
     topicSortMode: { activity: "Latest reply", created: "Publish time" },
@@ -802,7 +799,7 @@
     topicAuthorFontSize: { small: "Small", base: "Base", large: "Large" },
     topicMetaFontSize: { small: "Small", base: "Base", large: "Large" },
     topicNavigationAlignment: { left: "Left", center: "Center" },
-    headerVisualMode: { native: "Native", transparent: "Transparent", frosted: "Frosted", solid: "Solid" },
+    headerVisualMode: { native: "Default frosted glass", transparent: "Transparent", frosted: "Frosted", solid: "Solid" },
     sidebarPosition: { original: "Original", right: "Right" },
     actionRailPosition: { left: "Left", right: "Right", bottom: "Bottom" },
     actionRailVisibility: { always: "Always", auto: "Partly hidden while scrolling", hidden: "Hidden by default" },
@@ -812,7 +809,6 @@
     notificationOpenMode: { page: "Current page", newTab: "New tab" },
     topicFilterMode: { hide: "Hide matches", dim: "Dim matches", highlight: "Highlight matches", include: "Show matches only" },
     topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
-    searchMode: { native: "Native results", cards: "Reading cards" },
     externalSearchEngine: { off: "Off", bing: "Bing", duckduckgo: "DuckDuckGo" },
     searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
     searchPageWallpaperMode: { inherit: "Inherit global", builtin: "Built-in image", url: "Remote image" },
@@ -822,9 +818,8 @@
   const englishFieldLabels = {
     externalSearchEngine: "External search (when site search is empty)",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
-    gridMode: "Grid mode", cardMinSize: "Card minimum width", cardSideGutter: "Card side gutter", gridGap: "Card gap", showTopicAvatar: "Show author avatar", showTopicAuthor: "Show author", showTopicCategory: "Show category", showTopicExcerpt: "Show excerpt", showTopicMeta: "Show topic metadata", showTopicUnreadState: "Show unread state", showTopicPinnedState: "Show pinned state", topicListLayoutMode: "Topic card style", replyTreeNameMode: "Reply author name", topicTitleFontSize: "Title size", topicAuthorFontSize: "Author size", topicMetaFontSize: "Metadata size",
-    topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions", enableUndoRefresh: "Enable undo refresh",
-    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchMode: "Search result mode", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
+    topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
+    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
     topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
   };
 
@@ -934,7 +929,6 @@
     "保存前会执行 CSSOM、选择器和属性白名单校验。": "CSSOM, selector, and property allowlist validation runs before saving.",
     "只接受 HTTPS 图片地址。": "Only HTTPS image URLs are accepted.",
     "按高度位置调整 betterLD 自有卡片阴影的透明度。": "Adjusts betterLD card shadow opacity by height position.",
-    "固定网格模式与自动布局在断点不足时使用的列数。": "Column counts used by fixed grid mode and by auto layout at each breakpoint.",
     "控制卡片菜单项的显隐与顺序。": "Controls visibility and order of card menu entries.",
     "控制主题导航入口的显隐与顺序。": "Controls visibility and order of topic navigation entries.",
     "控制浮动操作栏项目的显隐与顺序。": "Controls visibility and order of floating action rail entries.",
@@ -1032,15 +1026,11 @@
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
     { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
 
-    { key: "gridMode", type: "select", label: "网格模式", help: "自适应模式保留可用宽度和窄屏单列边界。" },
-    { key: "cardMinSize", type: "range", label: "卡片最小宽度", unit: "px", help: "自适应网格的最小轨道宽度。" },
-    { key: "cardSideGutter", type: "range", label: "卡片左右内缩", unit: "px", help: "保持页面内容与边缘的安全间距。" },
-    { key: "gridGap", type: "range", label: "卡片间距", unit: "px", help: "卡片网格的行列间距。" },
     { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
     { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "作者取自原站列表数据；缺失信息不再补发请求。" },
     { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },
-    { key: "showTopicExcerpt", type: "toggle", label: "显示搜索摘要", help: "仅控制搜索卡上的原站摘要，无额外正文请求。" },
-    { key: "showTopicTags", type: "toggle", label: "显示主题标签", help: "控制原生主题行与搜索卡上的标签。" },
+    { key: "showTopicExcerpt", type: "toggle", label: "显示搜索摘要", help: "仅控制搜索结果上的原站摘要，无额外正文请求。" },
+    { key: "showTopicTags", type: "toggle", label: "显示主题标签", help: "控制原生主题行与搜索结果上的标签。" },
     { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "回复数、点赞数、浏览数与活动时间的总开关；元信息本就从站点列表数据零请求取得，关闭只是不显示统计与活动时间。" },
     { key: "showTopicActivityTime", type: "toggle", label: "显示活动时间", help: "关闭后元信息只保留回复数，不减少请求。", dependsOn: ["showTopicMeta", true] },
     { key: "showTopicReplies", type: "toggle", label: "显示回复数", help: "控制列表与搜索卡中的回复数。", dependsOn: ["showTopicMeta", true] },
@@ -1059,7 +1049,7 @@
     { key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "与列表控制栏滚动收起协调。" },
     { key: "showTopicNavigationCounts", type: "toggle", label: "显示导航数量", help: "隐藏视觉数量但保留可访问语义。" },
     { key: "headerVisible", type: "toggle", label: "显示 Header", help: "不重建原站 Logo、搜索、通知或用户菜单。" },
-    { key: "headerVisualMode", type: "select", label: "Header 视觉", help: "只覆盖已确认的原生 Header surface。" },
+    { key: "headerVisualMode", type: "select", label: "Header 视觉", help: "默认与毛玻璃在所有页面使用渐变模糊；透明与不透明按所选模式显示。" },
     { key: "autoHideHeader", type: "toggle", label: "自动隐藏 Header", help: "移动端默认不隐藏，焦点进入 Header 时恢复。" },
     { key: "sidebarPosition", type: "select", label: "Sidebar 位置", help: "窄屏会保留原站移动抽屉。" },
     { key: "autoHideSidebar", type: "toggle", label: "自动隐藏 Sidebar", help: "仅宽屏启用，并保留悬停和键盘热区。" },
@@ -1075,9 +1065,8 @@
     { key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "使用 window.scrollTo，不改变路由。" },
     { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "合并站点「查看 N 个新的或更新的话题」，不重载页面。" },
     { key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "避免与原站按钮重复。" },
-    { key: "enableUndoRefresh", type: "toggle", label: "启用刷新撤销", help: "需要刷新前状态恢复链路支持。" },
 
-    { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "作用于原生主题行与搜索卡。" },
+    { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "作用于原生主题行与搜索结果。" },
     { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "隐藏、淡化或只显示命中项；白名单命中项永不受影响。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterMatchMode", type: "select", label: "关键词匹配方式", help: "整词匹配避免 AI、Go 这类短词误伤；正则模式下非法表达式会在保存时被拒绝。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterMaxAgeDays", type: "range", label: "隐藏旧主题（天）", unit: " 天", help: "隐藏超过该天数没有新回复的主题；0 表示不按时间过滤。", dependsOn: ["topicFilterEnabled", true] },
@@ -1086,7 +1075,6 @@
     { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后只隐藏命中项。", dependsOn: ["topicFilterEnabled", true] },
 
-    { key: "searchMode", type: "select", label: "搜索结果模式", help: "阅读卡复用搜索结果的作者和摘要，不额外请求；支持作者等过滤规则。原生模式保持站点结果页。" },
     { key: "externalSearchEngine", type: "select", label: "外部搜索（站内无结果时）", help: "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 主题。启用需要所选引擎的访问权限，搜索词会发送给该引擎。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
     { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
@@ -1578,30 +1566,6 @@
     renderOrderedEditor("[data-action-rail-editor]", "actionRailItemsConfig", config.actionRailItems);
     renderOrderedEditor("[data-card-menu-editor]", "topicCardContextMenuConfig", config.topicCardContextMenuActions);
 
-    const gridContainer = document.querySelector("[data-grid-columns-editor]");
-    if (gridContainer) {
-      const list = document.createElement("div");
-      list.className = "settings-stack-editor";
-      Object.keys(config.gridBreakpoints).forEach((key) => {
-        const row = document.createElement("label");
-        row.className = "settings-stack-row";
-        row.dataset.gridColumn = key;
-        const text = document.createElement("span");
-        text.className = "settings-stack-row__label";
-        text.textContent = `${key}（${config.gridBreakpoints[key]}px 起）`;
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = String(config.settingsLimits.gridColumn.min);
-        input.max = String(config.settingsLimits.gridColumn.max);
-        input.step = String(config.settingsLimits.gridColumn.step);
-        input.dataset.gridColumnInput = key;
-        input.setAttribute("aria-label", `${key}断点列数`);
-        row.append(text, input);
-        list.append(row);
-      });
-      gridContainer.replaceChildren(list);
-    }
-
     const rules = document.querySelector("[data-rule-editors]");
     if (rules) {
       (config.topicRuleGroups || []).forEach((group) => {
@@ -1658,12 +1622,6 @@
             output.textContent = displayRangeValue(definition, input.value);
           }
         }
-      }
-    });
-    Object.keys(settings.gridColumns || {}).forEach((key) => {
-      const input = document.querySelector(`[data-grid-column-input="${key}"]`);
-      if (input) {
-        input.value = String(settings.gridColumns[key]);
       }
     });
     (settings.shadowCurve || []).forEach((point) => {
@@ -1726,10 +1684,6 @@
       } else {
         values[definition.key] = input.value;
       }
-    });
-    values.gridColumns = {};
-    document.querySelectorAll("[data-grid-column-input]").forEach((input) => {
-      values.gridColumns[input.dataset.gridColumnInput] = Number(input.value);
     });
     values.shadowCurve = [...document.querySelectorAll("[data-shadow-curve-opacity]")].map((input) => ({
       position: Number(input.dataset.shadowCurveOpacity),

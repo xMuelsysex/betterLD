@@ -52,8 +52,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   fontRecommendedStack: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
   listControlsScrollThreshold: 8,
   scrollTopThreshold: 16,
-  excerptMaxCharacters: 2400,
-  excerptPlaceholder: "正文摘要不可用",
   authorLoadingLabel: "作者信息加载中…",
   authorPlaceholder: "作者信息不可用",
   topicRequestMinIntervalMs: 800,
@@ -121,9 +119,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicChallengeCooldownMs: 600000,
   topicRequestCooldownStorageKey: "betterld.request-cooldown",
   siteTopicListTimeoutMs: 1500,
-  undoRefreshStorageKey: "betterld.undo-refresh",
-  undoRefreshSnapshotMaxBytes: 700000,
-  undoRefreshSnapshotTtlMs: 600000,
   refreshScrollTopStorageKey: "betterld.refresh-scroll-top",
   refreshScrollTopWindowMs: 2500,
   searchLoadMoreTimeoutMs: 8000,
@@ -276,31 +271,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       darkOnPrimary: "#472900"
     }
   ]),
-  // 卡片网格的宽度上限：超过这个宽度后网格居中，两侧留白随视口变宽，避免卡片一直铺到窗口边缘。
-  // 取值与 gridBreakpoints.xxl 一致，但不与断点绑定：断点决定列数，这里只决定内容宽度。
-  topicGridMaxWidthPx: 1800,
   topicListMaxWidthPx: 1320,
   topicDetailWidthPercent: 80,
   topicTimelineSpacePx: 176,
-  // 卡片内部尺寸按卡片自身内容盒宽度缩放：缩放单位 = 卡片内容盒宽 × ratioPerWidth，
-  // 只设上限 maxPx、不设下限：卡片变窄时内容按比例缩小，宽度未到上限前单位一直跟随卡宽。
-  // 现有卡宽（内容盒约 305px）下为 14px，与改前阅读卡的固定尺寸逐项一致。
-  // ≤900px 视口走横幅分支，阅读卡高度固定为 narrowHeightPx（250px），该分支的缩放单位上限为
-  // narrowUnitPx（14px = 改前阅读卡在该分支下的字号），卡片更窄时同样按比例缩小。
-  cardScale: Object.freeze({
-    ratioPerWidth: 0.0459,
-    maxPx: 22,
-    narrowHeightPx: 250,
-    narrowUnitPx: 14
-  }),
-  gridBreakpoints: Object.freeze({
-    base: 0,
-    sm: 560,
-    md: 800,
-    lg: 1100,
-    xl: 1400,
-    xxl: 1800
-  }),
   topicNavigationItems: Object.freeze([
     "latest",
     "new",
@@ -332,7 +305,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     fontMode: Object.freeze(["default", "recommended", "custom"]),
     fontScope: Object.freeze(["own", "managed"]),
     shadowMode: Object.freeze(["default", "none", "custom"]),
-    gridMode: Object.freeze(["auto", "fixed"]),
     topicListLayoutMode: Object.freeze(["native"]),
     replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
@@ -350,7 +322,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     notificationOpenMode: Object.freeze(["page", "newTab"]),
     topicFilterMode: Object.freeze(["hide", "dim", "highlight", "include"]),
     topicFilterMatchMode: Object.freeze(["contains", "whole", "regex"]),
-    searchMode: Object.freeze(["native", "cards"]),
     externalSearchEngine: Object.freeze(["off", "bing", "duckduckgo"]),
     searchResultsPaginationMode: Object.freeze(["scroll", "pagination"]),
     searchPageWallpaperMode: Object.freeze(["inherit", "builtin", "url"]),
@@ -365,7 +336,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     { key: "topicTitleRules", title: "标题规则", empty: "暂无标题规则", help: "匹配主题标题。" },
     { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配主题所属分类名称。" },
     { key: "topicTagRules", title: "标签规则", empty: "暂无标签规则", help: "匹配主题标签；分类页面行内可能不渲染标签。" },
-    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "主题列表匹配创建者；搜索阅读卡匹配搜索命中帖的作者，直接使用搜索结果，不额外请求。" },
+    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "主题列表匹配创建者；搜索结果匹配搜索命中帖的作者，直接使用搜索结果，不额外请求。" },
     { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "命中白名单的主题永远不参与过滤。" }
   ]),
   settingsCategories: Object.freeze([
@@ -453,14 +424,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "search",
           title: "搜索",
-          description: "原生搜索与阅读卡；站内无结果时可选外部引擎补充 LinuxDo 主题。",
+          description: "Material 3 原生搜索结果；保留命中摘要，站内无结果时可选外部引擎补充 LinuxDo 主题。",
           keys: [
-            "searchMode",
             "externalSearchEngine",
-            "gridMode",
-            "cardMinSize",
-            "cardSideGutter",
-            "gridGap",
             "showTopicExcerpt",
             "searchHistoryEnabled",
             "searchHistoryPanelEnabled",
@@ -515,7 +481,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
             "showBackToTopButton",
             "showRefreshButton",
             "separateNavigationActions",
-            "enableUndoRefresh"
           ]
         },
         {
@@ -650,18 +615,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     customCssEnabled: false,
     customCss: "",
     wallpaperRemoteCacheDays: 0,
-    gridMode: "auto",
-    cardMinSize: 280,
-    cardSideGutter: 24,
-    gridGap: 16,
-    gridColumns: {
-      base: 1,
-      sm: 2,
-      md: 3,
-      lg: 4,
-      xl: 5,
-      xxl: 6
-    },
     showTopicAvatar: true,
     showTopicAuthor: true,
     showTopicCategory: true,
@@ -713,7 +666,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showBackToTopButton: false,
     showRefreshButton: false,
     separateNavigationActions: true,
-    enableUndoRefresh: false,
     topicCardOpenMode: "currentTab",
     navigationOpenMode: "currentTab",
     searchOpenMode: "currentTab",
@@ -733,7 +685,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     topicCategoryRules: [],
     topicTagRules: [],
     topicWhitelistRules: [],
-    searchMode: "native",
     externalSearchEngine: "off",
     searchHistoryEnabled: false,
     searchHistoryPanelEnabled: false,
@@ -767,10 +718,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     userCardCoverMaskOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
     shadowHeight: Object.freeze({ min: 0, max: 2, step: 0.1 }),
     shadowCurveOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
-    cardMinSize: Object.freeze({ min: 240, max: 480, step: 8 }),
-    cardSideGutter: Object.freeze({ min: 16, max: 48, step: 4 }),
-    gridGap: Object.freeze({ min: 8, max: 32, step: 4 }),
-    gridColumn: Object.freeze({ min: 1, max: 12, step: 1 }),
     fontFamily: Object.freeze({ maxLength: 200 }),
     customCss: Object.freeze({ maxLength: 64 * 1024 }),
     ruleKeyword: Object.freeze({ maxLength: 200 }),

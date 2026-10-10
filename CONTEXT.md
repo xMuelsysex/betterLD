@@ -23,7 +23,7 @@
 - **Definition**：旧首页卡片封面/正文区域已废弃；原生行只展示主题信息。
 
 ### Topic Title and Opening Excerpt
-- **Definition**：首页只保留原生主题标题。搜索卡摘要直接来自原站搜索载荷。
+- **Definition**：首页只保留原生主题标题。搜索结果摘要直接来自原站搜索载荷。
 - **Rules/Invariants**：首页不自动读取首帖，无滚动/停顿/悬停正文请求与自动重试。
 
 ### Author Identity
@@ -32,16 +32,16 @@
 - **Rules/Invariants**：作者 ID 同时是该用户的链接入口，指向 `/u/{username}` 用户主页；只有拿到真实用户名（ASCII 用户名形态）才生成链接，加载中/失败占位文案与显示名不生成链接，链接形态与参数由 `betterld.config.js` 的 `userProfilePath` 统一提供。
 - **Rules/Invariants**：作者链接的点击不进入主题导航（不触发卡片的打开方式设置），也不改变卡片其余区域的原有链接行为。
 
-### Adaptive Card Grid
-- **Definition**：网格、卡宽与缩放参数只用于可选的搜索结果卡片。
-- **Rules/Invariants**：首页不再生成网格；搜索卡现有缩放尺寸保留，`gridMode/cardMinSize/gridGap/cardSideGutter/showTopicExcerpt` 设置集中在搜索分类。
+### Native Search Result
+- **Definition**：搜索页保留 Discourse `.fps-result`，采用与首页原生行共用的 Material 3 圆角材质、状态层、字号与操作菜单。
+- **Rules/Invariants**：搜索阅读卡、网格/列数/卡宽/缩放与布局切换已废弃，旧设置读入时忽略。标题、命中楼层链接、头像、分类/标签、`.blurb` 摘要及搜索高亮保持原节点与分页；只追加作者、已看和菜单信息栏，不补主题或用户请求。摘要显隐继续由搜索分类的 `showTopicExcerpt` 控制；搜索作者与时间代表命中帖，不推断主题创建者。
 
 ### Excerpt Failure State
 - **Definition**：首页已删除自动摘要与作者回退请求、缓存写入、冷却后重排。
 - **Rules/Invariants**：树状回复等必要请求仍保留原站挑战/限速的跨页面冷却，不与列表元信息读取关联。旧摘要本机缓存不再读写，也不主动删除用户存储。
 
 ### Card Navigation
-- **Definition**：原生标题及搜索卡保留浏览器修饰键、右键与键盘语义。
+- **Definition**：原生标题及搜索结果保留浏览器修饰键、右键与键盘语义。
 - **Rules/Invariants**：主题打开方式可选当前页、新标签页、后台、网页抽屉；首页行不再提供独立「预览」按钮，菜单保留预览。手动网页预览设置同站主题 iframe 的 src，关闭移除 src 并回焦触发链接；iframe 占满弹窗标题与底部操作之间的空间，不受原站 iframe 高度上限限制。仅插件标记 `data-betterld-topic-preview` 的同站 frame 运行 betterLD 样式与树状回复，并在预览内隐藏左侧栏、释放正文空间；不修改原站侧栏偏好，完整主题与其他帖子嵌入保持原样。
 
 ### Section Level
@@ -51,7 +51,7 @@
 - **Definition**：不改变帖子语义和身份信息，只改善页面视觉层次和氛围的效果集合。
 - **Rules/Invariants**：首版默认启用可调整的背景图片、页面遮罩和模糊效果；背景图片的加载和呈现方式参考 BewlyCat；没有可用背景图片时仍保持可用的明暗对应渐变视觉。
 - **Rules/Invariants**：背景、遮罩与 Header/Sidebar 这套壳层视觉在 betterLD 运行的所有 linux.do 页面生效，由唯一类 `body.betterld-shell` 界定，不按页面类型枚举；页面级类（首页/话题列表/分类/标签/搜索）只用于主题卡片、导航胶囊与分类盒子等页面级能力。
-- **Rules/Invariants**：顶栏保留渐变模糊背景层；侧栏采用边界清晰的圆角、描边与阴影面板，侧栏背景层不作边缘渐隐，仍遵循原有封面模糊开关。
+- **Rules/Invariants**：顶栏默认（`native`）与毛玻璃模式共用全站壳层渐变模糊背景层，不以搜索/列表/用户等页面枚举限制；透明与不透明模式显式生效，关闭毛玻璃仍遵循原材质设置；侧栏采用边界清晰的圆角、描边与阴影面板，侧栏背景层不作边缘渐隐，仍遵循原有封面模糊开关。
 - **Rules/Invariants**：壳层页面里站点自带的页面级底板（`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`）必须透明，壁纸与遮罩在该区域可见。
 - **Rules/Invariants**：壳层页面里站点的纯白表面一律换成两种 betterLD 材质面之一，不再保留站点自己的白底：站点内容卡片（原生主题表行、`.badge-card`、`.latest-topic-list-item`、`.user-main .details`、分类盒子 `.category-box`、标签面板、用户页 `.user-main`）用 `surface-rgb / 0.56` + 模糊 + betterLD 描边/圆角/阴影；浮层与输入控件（`.user-card/.group-card/.category-card`、`.select-kit-body`、`.fk-d-menu__inner-content`、`.d-modal__container`、`#dialog-holder .dialog-content`、`#reply-control`、搜索框、导航行的类别/标签下拉 header）用 `surface-container-rgb / 0.96（搜索框 0.82）`；站点标签胶囊 `a.discourse-tag.box` 沿用卡片标签写法（`surface-container-rgb / 0.58` + 999px 圆角 + betterLD 描边），不用站点的 `--primary-low` 灰底。新增站点组件时沿用这两种写法，不引入第三种白底。
 - **Rules/Invariants**：站点自己的二级导航条（用户页 `.user-navigation .nav-pills`、私信页 `.messages-nav`）与主题列表导航共用同一套胶囊规则（选择器组写在一处，不复制声明）；站点按钮 `.btn-default`/`.btn-primary`/`.btn-danger` 统一为 betterLD 形态，只改背景、描边、圆角与文字色，保持原几何尺寸，`.btn-icon`/`.btn-flat`/`.btn-transparent` 不受影响。
@@ -59,7 +59,7 @@
 - **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
 - **Rules/Invariants**：原站编辑器、通用弹窗/对话框/Toast、偏好表单和 select-kit、聊天容器/输入、AI 会话输入、徽章详情/登录注册/关注流复用这两种材质。只改变容器和控件观感，保持原尺寸、布局、焦点/禁用/错误/选中语义，不重建表单或改提交行为；普通按钮不覆盖组合按钮与帖子正文/预览/日历内的控件。
 - **Rules/Invariants**：通知列表头像旁的类型角标保留原站 SVG，使用高对比 Material 3 圆角方形表面；未读为主色填充/on-primary，已读为实色表面/on-surface，图标显式继承填充颜色。只改视觉，不变通知类型、链接及原站已读行为。
-- **Rules/Invariants**：betterLD 自有设置/首页/主题/顶部/刷新/撤销刷新工具使用内联 Material SVG，不请求图标字体、不批量替换原站图标。默认字体范围 `own` 仅影响插件自有内容；用户选择 `managed` 后应用到全站壳层及原生控件，保留代码字体与第三方组件自身字体。
+- **Rules/Invariants**：betterLD 自有设置/首页/主题/顶部/刷新工具使用内联 Material SVG，不请求图标字体、不批量替换原站图标。默认字体范围 `own` 仅影响插件自有内容；用户选择 `managed` 后应用到全站壳层及原生控件，保留代码字体与第三方组件自身字体。
 
 ### BewlyCat Wallpaper Selection
 - **Definition**：首页背景图片的来源选择模型，包含网站随机图片、内置图片和用户自定义图片 3 类来源。
@@ -74,7 +74,7 @@
 - **Rules/Invariants**：真实 linux.do 是所有页面（列表、主题详情、用户、分类、标签、搜索等）上改造效果的验收基准，不用静态页面代替；betterLD 在真实页面上按页面类型启用对应的页面级能力，壳层视觉则全页面生效，不因离开首页而恢复站点原生外观。
 
 ### Reading Topic Card
-- **Definition**：首页阅读卡已废弃；搜索结果可继续选择卡片形式，仅消费搜索结果自身的作者与摘要。
+- **Definition**：首页与搜索阅读卡均已废弃，统一采用 Material 3 原生条目；搜索结果自身的命中摘要与高亮保留。
 
 ### Markdown Opening Preview
 - **Definition**：首页已停用首帖 Markdown 预览。手动预览以真实网页为权威；Markdown 渲染器留给项目既有使用路径。
@@ -85,7 +85,7 @@
 - **Rules/Invariants**：首页与主题列表以整个浏览器视口中线居中；可见桌面侧栏两边对称预留空间，收起侧栏恢复列表宽度上限。新/更新话题提示按文字宽度收紧为居中胶囊，保留原站点击刷新与消息更新行为。
 
 ### Incremental Topic Grid Update
-- **Definition**：主题行增量同步由 Discourse 管理，betterLD 幂等追加信息栏；搜索卡沿用既有增量网格。
+- **Definition**：主题行与搜索结果增量同步由 Discourse 管理，betterLD 幂等追加信息栏，不重建源结果或标题/摘要节点。
 - **Rules/Invariants**：原生模型刷新后重读数据、更新信息与过滤。插件信息栏变更不触发源列表同步，原站新增/重排/标题更新仍被观察；主题页标题与树同宽，以整个浏览器视口的物理中线（`innerWidth / 2`，含滚动条）居中；桌面两侧对称预留侧栏/时间轴空间，窄窗口时间轴独占一行。原生列表的背景、模糊与圆角统一绘制在单元格，行本身透明，展开菜单保持在后续行之上。刷新新行从插入起与增强行保持同一 table 布局、列显隐及材质归属；新增行同轮 DOM 提交幂等增强，不等待尾部防抖。
 
 ### Settings Window
@@ -119,7 +119,7 @@
 
 ### Filtered Topics Bin
 - **Definition**：右下角浮层，列出当前页面被过滤隐藏的主题，支持单条还原与全部还原。
-- **Rules/Invariants**：还原是页面级覆盖，不写入存储；规则集（行为、匹配方式、等级、天数、白名单与四轴规则）变化时覆盖自动失效，避免过滤器静默停摆；关闭垃圾桶后命中项在卡片构建阶段就不再生成。
+- **Rules/Invariants**：还原是页面级覆盖，不写入存储；规则集（行为、匹配方式、等级、天数、白名单与四轴规则）变化时覆盖自动失效，避免过滤器静默停摆；关闭垃圾桶后原生条目仍按规则隐藏，不改变源结果与分页。
 
 ### Server-side Ignore
 - **Definition**：调用 Discourse 的 `PUT /u/{username}/notification_level.json` 在账号层面忽略某个用户。
@@ -130,7 +130,7 @@
 - **Rules/Invariants**：请求统一经后台 service worker 发出并按 origin 申请权限，不依赖页面 CORS；地址只接受 https，http 仅允许环回地址；WebDAV 密码只保存在本地，不进入浏览器同步投影与设置导出文件；下载采用追加 + 去重，不是覆盖。
 
 ### Watched Topic Mark
-- **Definition**：原生主题行右上角与搜索卡中的「已看」标记，数据来自本机浏览记录（`visitedTopicStorageKey` 里的主题 id 列表，访问 `/t/{slug}/{id}` 时追加）。
+- **Definition**：原生主题行右上角与搜索结果中的「已看」标记，数据来自本机浏览记录（`visitedTopicStorageKey` 里的主题 id 列表，访问 `/t/{slug}/{id}` 时追加）。
 - **Rules/Invariants**：只读本机记录，不读也不写 Discourse 的已读状态；列表不进入浏览器同步投影；超过 `visitedTopicMaxEntries` 时丢弃最早的记录；
   标记只按主题 id 匹配，不根据页面上的未读类名推断；启动与跨标签变化均读同一份本机记录，位置变化保持原显隐设置生效。
 

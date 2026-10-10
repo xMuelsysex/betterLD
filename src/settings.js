@@ -116,7 +116,6 @@
     "showBackToTopButton",
     "showRefreshButton",
     "separateNavigationActions",
-    "enableUndoRefresh",
     "drawerCloseOnOverlay",
     "drawerCloseOnEscape",
     "topicFilterEnabled",
@@ -141,9 +140,6 @@
     "surfaceBlurPx",
     "userCardCoverMaskOpacity",
     "shadowHeight",
-    "cardMinSize",
-    "cardSideGutter",
-    "gridGap",
     "topicFilterMaxAgeDays"
   ];
   const textKeys = ["fontFamily", "customCss", "webdavUsername", "webdavPassword"];
@@ -286,16 +282,6 @@
     return result;
   }
 
-  function normalizeGridColumns(value) {
-    const source = isPlainObject(value) ? value : {};
-    const result = {};
-    for (const key of Object.keys(config.gridBreakpoints || defaults.gridColumns || {})) {
-      const fallback = Number(defaults.gridColumns?.[key] || 1);
-      result[key] = Math.round(bounded(source[key], limits.gridColumn, fallback));
-    }
-    return result;
-  }
-
   function normalizeOrderedConfig(value, allowed, fallback) {
     if (!Array.isArray(value)) {
       return clone(fallback);
@@ -427,7 +413,7 @@
     }
     for (const key of rangedKeys) {
       result[key] = bounded(source[key], limits[key], defaults[key]);
-      if (key === "cardMinSize" || key === "cardSideGutter" || key === "gridGap" || key === "shadowHeight" || key === "topicFilterMaxAgeDays") {
+      if (key === "shadowHeight" || key === "topicFilterMaxAgeDays") {
         result[key] = Number(result[key].toFixed(key === "shadowHeight" ? 1 : 0));
       }
     }
@@ -441,7 +427,6 @@
     result.themeScheduleEnd = safeTime(source.themeScheduleEnd, defaults.themeScheduleEnd);
     result.themeColor = safeColor(source.themeColor, defaults.themeColor);
     result.darkModeBaseColor = safeColor(source.darkModeBaseColor, defaults.darkModeBaseColor);
-    result.gridColumns = normalizeGridColumns(source.gridColumns);
     result.shadowCurve = normalizeShadowCurve(source.shadowCurve);
     result.topicNavigationConfig = normalizeNavigationConfig(source.topicNavigationConfig);
     result.actionRailItemsConfig = normalizeOrderedConfig(source.actionRailItemsConfig, actionRailItems, defaults.actionRailItemsConfig);
