@@ -4699,6 +4699,18 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   color: var(--betterld-primary);
 }
 
+.betterld-reply-tree__return-all {
+  position: fixed;
+  z-index: 100;
+  top: calc(var(--header-offset, 52px) + 12px);
+  right: 24px;
+  box-shadow: 0 4px 16px rgb(var(--betterld-shadow-color) / 0.2);
+}
+
+.betterld-reply-tree__return-all::before {
+  content: "←";
+}
+
 .betterld-reply-tree__status,
 .betterld-reply-tree__date {
   color: var(--betterld-on-surface-variant);

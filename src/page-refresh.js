@@ -152,19 +152,24 @@
     }));
   }
 
-  function resetReplyAuthors() {
-    for (const entry of replyAuthors.values()) {
+  function resetReplyAuthors(postIds) {
+    const ids = postIds || [...replyAuthors.keys()];
+    for (const id of ids) {
+      const entry = replyAuthors.get(id);
+      if (!entry) continue;
       entry.user.off("status-changed", entry, entry.onStatus);
       if (entry.tracking) entry.user.statusManager.stopTrackingStatus();
       for (const view of entry.views) view.message?.destroy();
       if (entry.ownsUser) entry.user.destroy();
+      replyAuthors.delete(id);
     }
-    replyAuthors.clear();
-    // 同话题的新树也必须收到模型投影，不能沿用上一棵树的同步签名。
-    replySignature = "";
+    // 只有换树/离开话题才清同步签名；原位更新单楼不制造额外回流。
+    if (!postIds) replySignature = "";
   }
 
-  document.addEventListener("betterld:reply-author-reset", resetReplyAuthors);
+  document.addEventListener("betterld:reply-author-reset", (event) => {
+    resetReplyAuthors(event.detail ? JSON.parse(event.detail).postIds : undefined);
+  });
 
   function renderReplyAuthorStatus(entry, view) {
     view.message?.destroy();
@@ -397,9 +402,12 @@
       if (replyTopicId !== topicId) replySignature = "";
       replyTopicId = topicId;
       const stream = topic.postStream;
+      // 筛选刷新期间 filter 已切换而 stream 仍属旧视图，完成后再投影同一份数据。
+      if (stream.loadingFilter) return;
       const data = {
         topicId,
         stream: [...stream.stream],
+        topReplies: stream.filter === "summary",
         user_badges: topic.user_badges,
         posts: stream.posts.map((post) => ({
           ...Object.fromEntries(postFields.map((key) => [key, post[key]])),

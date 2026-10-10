@@ -155,6 +155,8 @@
 - **Rules/Invariants**：楼层正文与楼内 Boost 内容按原站 cooked 原样呈现：服务端能下发的任何内容都不在树里被单独剔除或改写（含 B 站等 iframe 播放器、object/embed 嵌入、内联矢量图、表单、帖子自带样式，以及 data:/blob: 资源），避免出现「原站可见、树里消失」；显示的尺寸与行为同样以原站为准。
 - **Rules/Invariants**：树内除按原站 cooked 原样呈现内容外，还按原站 DOM 复刻 Discourse 客户端的增强：`[!Type]±` callout 折叠、`spoiler` 剧透（点击/键盘显示）、`hashtag` 图标、代码块复制与全屏按钮、语法高亮（借用原站 highlight.js，经主世界桥接）、图片灯箱（树内浮层）；各增强幂等，树重建时随 cooked 重新应用。
 - **Rules/Invariants**：引用有两种独立能力，都对齐原站：一是每个引用都带「展开/收起」按钮，展开时按 `data-topic`/`data-post` 取被引用帖的完整内容替换引用片段、收起时还原；二是内容高度超过 `replyTreeQuoteCollapseHeightPx` 的引用额外提供限高折叠。展开失败要可见并可重试。
+- **Rules/Invariants**：分页、实时同步、回应与作者信息更新按楼层原位合并，未变 cooked 保留已连接的正文节点及客户端混排、引用/剧透展开、播放器状态；仅正文实际编辑时替换正文。作者订阅按变化楼层释放，离开话题或换树才全部释放。
+- **Rules/Invariants**：热门回复沿用原站 `postStream.filter === "summary"` 与筛选完成后的 stream；顶栏下方持续显示「返回全部回复」，点击完整导航至移除 `filter` 参数的同主题当前楼层网页，恢复全部回复并保留楼层定位，不依赖原站局部 JSON 刷新。筛选不删除已加载的普通回复缓存。
 
 ### Reply Author Details
 - **Definition**：树状回复保留原站作者头像徽章、状态表情、用户头衔与姓名旁整组 poster-icon 徽章。

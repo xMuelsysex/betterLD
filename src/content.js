@@ -5194,15 +5194,23 @@
     return wrapper;
   }
 
+  function syncReplyTreeChildren(parent, children) {
+    children.forEach((child, index) => {
+      if (parent.children[index] !== child) parent.insertBefore(child, parent.children[index] || null);
+    });
+    const kept = new Set(children);
+    [...parent.children].forEach((child) => { if (!kept.has(child)) child.remove(); });
+  }
+
   function renderReplyTree(tree) {
     const anchor = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].find((item) => {
       const bounds = item.querySelector('.betterld-reply-tree__card').getBoundingClientRect();
       return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
     });
     const anchorTop = anchor?.getBoundingClientRect().top;
-    const focusedBoostInput = Boolean(document.activeElement?.closest?.(".betterld-reply-tree__boost-editor"));
+    const focusedBoostInput = document.activeElement?.closest?.(".betterld-reply-tree__boost-editor") ? document.activeElement : null;
     closeReplyReactionPicker(tree);
-    const posts = [...tree.posts.values()].sort((a, b) => a.post_number - b.post_number);
+    const posts = tree.stream.map((id) => tree.posts.get(id)).filter(Boolean).sort((a, b) => a.post_number - b.post_number);
     const byNumber = new Map(posts.map((post) => [post.post_number, post]));
     const topicOwnerId = byNumber.get(1)?.user_id;
     const currentUserId = preloadedCurrentUser()?.id;
@@ -5214,10 +5222,35 @@
       children.get(key)?.push(post);
     }
 
-    document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
-    const list = createElement("ol", "betterld-reply-tree__list");
+    const existingItems = new Map([...tree.content.querySelectorAll(".betterld-reply-tree__item")]
+      .map((item) => [Number(item.dataset.postNumber), item]));
+    const previousPosts = tree.renderedPosts || new Map();
+    const renderedPosts = new Map();
+    const signatureFor = (post) => {
+      const badgeIds = tree.userBadges?.users?.[post.user_id]?.badge_ids;
+      return JSON.stringify([post, state.currentSettings.replyTreeNameMode, topicOwnerId, currentUserId,
+        badgeIds?.map((id) => tree.userBadges.badges[id]), byNumber.has(Number(post.reply_to_post_number)),
+        tree.boostEditor?.postNumber === post.post_number]);
+    };
+    const changedAuthors = new Set();
+    for (const [number, rendered] of previousPosts) {
+      const post = byNumber.get(number);
+      if (!post || signatureFor(post) !== rendered.signature) changedAuthors.add(rendered.id);
+    }
+    if (changedAuthors.size) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-author-reset", {
+        detail: JSON.stringify({ postIds: [...changedAuthors] })
+      }));
+    }
+    const list = tree.content.firstElementChild || createElement("ol", "betterld-reply-tree__list");
     function renderPost(post) {
-      const item = createElement("li", "betterld-reply-tree__item");
+      const existing = existingItems.get(post.post_number);
+      const previous = previousPosts.get(post.post_number);
+      const signature = signatureFor(post);
+      const editing = tree.boostEditor?.postNumber === post.post_number;
+      renderedPosts.set(post.post_number, { id: post.id, signature, cooked: post.cooked, boosts: post.boosts, canBoost: post.can_boost, editing });
+      if (existing && previous?.signature === signature) return syncChildren(existing, post);
+      const item = existing || createElement("li", "betterld-reply-tree__item");
       item.dataset.postNumber = String(post.post_number);
       const card = createElement("article", "betterld-reply-tree__card");
       const avatarWrap = createElement("div", "topic-avatar betterld-reply-tree__avatar-wrap");
@@ -5293,9 +5326,14 @@
       if (Number(post.reply_to_post_number) > 1 && !byNumber.has(Number(post.reply_to_post_number))) {
         head.append(createElement("span", "betterld-reply-tree__date", `回复 #${post.reply_to_post_number}（父楼尚未载入）`));
       }
-      const cooked = createElement("div", "betterld-reply-tree__cooked cooked");
-      cooked.append(...replyCooked(post.cooked).childNodes);
-      body.append(head, cooked);
+      // 分页、回应与作者变化保留未变正文及其混排、播放器、引用/剧透状态。
+      const previousBody = existing?.firstElementChild.querySelector(".betterld-reply-tree__body");
+      let cooked = previousBody?.querySelector(":scope > .betterld-reply-tree__cooked");
+      if (!cooked || previous.cooked !== post.cooked) {
+        cooked = createElement("div", "betterld-reply-tree__cooked cooked");
+        cooked.append(...replyCooked(post.cooked).childNodes);
+      }
+      body.append(head);
       const actions = createElement("div", "betterld-reply-tree__actions");
       actions.setAttribute("role", "group");
       actions.setAttribute("aria-label", `#${post.post_number} 帖子操作`);
@@ -5402,34 +5440,57 @@
       reply.append(createElement("span", "betterld-reply-tree__action-label", "回复"));
       actions.append(reply);
       body.append(actions);
-      const boosts = replyTreeBoostSection(tree, post);
-      if (boosts) body.append(boosts);
-      card.append(avatarWrap, body);
-      item.append(card);
+      const boostsChanged = !previous || JSON.stringify(previous.boosts) !== JSON.stringify(post.boosts)
+        || previous.canBoost !== post.can_boost || previous.editing !== editing;
+      const boosts = boostsChanged ? replyTreeBoostSection(tree, post) : null;
+      if (existing) {
+        existing.firstElementChild.firstElementChild.replaceWith(avatarWrap);
+        previousBody.firstElementChild.replaceWith(head);
+        if (cooked.parentElement !== previousBody) previousBody.children[1].replaceWith(cooked);
+        previousBody.querySelector(":scope > .betterld-reply-tree__actions").replaceWith(actions);
+        if (boostsChanged) {
+          previousBody.querySelector(":scope > .betterld-reply-tree__boosts")?.remove();
+          if (boosts) previousBody.append(boosts);
+        }
+      } else {
+        body.insertBefore(cooked, actions);
+        if (boosts) body.append(boosts);
+        card.append(avatarWrap, body);
+        item.append(card);
+      }
+      return syncChildren(item, post);
+    }
+    function syncChildren(item, post) {
       const replies = children.get(post.post_number) || [];
       if (replies.length) {
-        const button = createElement("button", "betterld-reply-tree__collapse", tree.collapsed.has(post.post_number) ? "+" : "−");
-        button.type = "button";
+        let button = item.querySelector(":scope > .betterld-reply-tree__collapse");
+        let branch = item.querySelector(":scope > .betterld-reply-tree__children");
+        if (!button) {
+          button = createElement("button", "betterld-reply-tree__collapse");
+          button.type = "button";
+          branch = createElement("ol", "betterld-reply-tree__list betterld-reply-tree__children");
+          button.addEventListener("click", () => {
+            if (tree.collapsed.has(post.post_number)) tree.collapsed.delete(post.post_number);
+            else tree.collapsed.add(post.post_number);
+            renderReplyTree(tree);
+          });
+          item.append(button, branch);
+        }
+        button.textContent = tree.collapsed.has(post.post_number) ? "+" : "−";
         button.setAttribute("aria-label", `${tree.collapsed.has(post.post_number) ? "展开" : "收起"} #${post.post_number} 的 ${replies.length} 条回复`);
         button.setAttribute("aria-expanded", String(!tree.collapsed.has(post.post_number)));
-        const branch = createElement("ol", "betterld-reply-tree__list betterld-reply-tree__children");
         branch.hidden = tree.collapsed.has(post.post_number);
-        button.addEventListener("click", () => {
-          branch.hidden = !branch.hidden;
-          if (branch.hidden) tree.collapsed.add(post.post_number);
-          else tree.collapsed.delete(post.post_number);
-          button.textContent = branch.hidden ? "+" : "−";
-          button.setAttribute("aria-expanded", String(!branch.hidden));
-          button.setAttribute("aria-label", `${branch.hidden ? "展开" : "收起"} #${post.post_number} 的 ${replies.length} 条回复`);
-        });
-        item.append(button, branch);
-        replies.forEach((reply) => branch.append(renderPost(reply)));
+        syncReplyTreeChildren(branch, replies.map(renderPost));
+      } else {
+        item.querySelector(":scope > .betterld-reply-tree__collapse")?.remove();
+        item.querySelector(":scope > .betterld-reply-tree__children")?.remove();
       }
       return item;
     }
     const rootPost = byNumber.get(1);
-    if (rootPost) list.append(renderPost(rootPost));
-    tree.content.replaceChildren(list);
+    syncReplyTreeChildren(list, rootPost ? [renderPost(rootPost)] : []);
+    if (!list.parentElement) tree.content.append(list);
+    tree.renderedPosts = renderedPosts;
     if (tree.bridgeReady) {
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
@@ -5438,8 +5499,8 @@
       if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
     }
     tree.panel.hidden = false;
-    // 重渲染会重建编辑器节点，输入焦点与光标位置要恢复，否则同步回流一次就把正在输入的光标顶掉。
-    if (focusedBoostInput && tree.boostEditor) focusReplyTreeBoostInput(tree);
+    // 未变编辑器保留光标；仅编辑器实际被替换时恢复输入焦点。
+    if (focusedBoostInput && !focusedBoostInput.isConnected && tree.boostEditor) focusReplyTreeBoostInput(tree);
     if (state.replyTreeNativeTopicId !== tree.topicId) {
       tree.streamElement.dataset.betterldReplySource = "true";
       tree.topicContainer.dataset.betterldReplyTreeActive = "true";
@@ -5560,13 +5621,19 @@
       tree.status.textContent = `回复实时同步失败：${data.error}`;
       return;
     }
+    if (typeof data.topReplies === "boolean") {
+      tree.topReplies = data.topReplies;
+      tree.returnAll.hidden = !tree.topReplies;
+    }
     if (!data.stream.length) return;
+    const streamChanged = JSON.stringify(tree.stream) !== JSON.stringify(data.stream);
     const added = data.stream.filter((id) => !tree.stream.includes(id));
     tree.stream = data.stream;
     const streamIds = new Set(tree.stream);
-    let changed = mergeReplyUserBadges(tree, data.user_badges);
+    const badgesChanged = mergeReplyUserBadges(tree, data.user_badges);
+    let changed = streamChanged || badgesChanged;
     for (const [id] of tree.posts) {
-      if (!streamIds.has(id)) {
+      if (!tree.topReplies && !streamIds.has(id)) {
         tree.posts.delete(id);
         tree.loaded.delete(id);
         changed = true;
@@ -5687,6 +5754,17 @@
     if (tree?.topicId === data.topicId && !tree.contentContainer.hidden) jumpReplyTree(tree, data.postNumber, data.postId, data.requestId);
   });
 
+  function returnAllReplyTreePosts(tree) {
+    const postNumber = tree.contentContainer.hidden
+      ? Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 1
+      : replyTreeCurrentPost(tree).postNumber;
+    const url = new URL(location.href);
+    url.pathname = postNumber === 1 ? `/t/topic/${tree.topicId}` : topicReplyUrl(tree.topicId, postNumber);
+    url.searchParams.delete("filter");
+    // 完整网页导航退出原站筛选，避免局部刷新再次被站点质询拦住。
+    location.assign(url.href);
+  }
+
   function syncReplyTree() {
     const topicId = topicIdFromPath();
     document.body.dataset.betterldTopicDetail = String(Boolean(topicId));
@@ -5739,6 +5817,9 @@
     const toggle = createElement("button", "betterld-reply-tree__toggle", "返回树状回复");
     toggle.type = "button";
     toggle.hidden = state.replyTreeNativeTopicId !== topicId;
+    const returnAll = createElement("button", "betterld-reply-tree__toggle betterld-reply-tree__return-all", "返回全部回复");
+    returnAll.type = "button";
+    returnAll.hidden = !previous?.topReplies;
     const content = createElement("div", "betterld-reply-tree__content");
     content.hidden = state.replyTreeNativeTopicId === topicId;
     const replies = createElement("div");
@@ -5750,10 +5831,10 @@
     moreButton.type = "button";
     moreButton.hidden = !previous?.autoLoadPaused;
     content.append(replies, status, sentinel, moreButton);
-    panel.append(toggle, content);
+    panel.append(toggle, returnAll, content);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { topicId, panel, toggle, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { topicId, panel, toggle, returnAll, topReplies: previous?.topReplies || false, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
@@ -5770,6 +5851,7 @@
       if (state.replyTree === tree) tree.status.textContent = `回复实时同步与楼层跳转不可用：${error.message}`;
     });
     tree.relativeTimeTimer = setInterval(() => refreshReplyTreeTimes(tree), config.replyTreeTimeRefreshMs);
+    returnAll.addEventListener("click", () => returnAllReplyTreePosts(tree));
     toggle.addEventListener("click", () => {
       state.replyTreeNativeTopicId = "";
       toggle.hidden = true;
