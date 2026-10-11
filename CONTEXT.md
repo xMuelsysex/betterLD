@@ -34,7 +34,7 @@
 
 ### Native Search Result
 - **Definition**：搜索页保留 Discourse `.fps-result`，采用与首页原生行共用的 Material 3 圆角材质、状态层、字号与操作菜单。
-- **Rules/Invariants**：搜索阅读卡、网格/列数/卡宽/缩放与布局切换已废弃，旧设置读入时忽略。标题、命中楼层链接、头像、分类/标签、`.blurb` 摘要及搜索高亮保持原节点与分页；只追加作者、已看和菜单信息栏，不补主题或用户请求。摘要显隐继续由搜索分类的 `showTopicExcerpt` 控制；搜索作者与时间代表命中帖，不推断主题创建者。
+- **Rules/Invariants**：搜索阅读卡、网格/列数/卡宽/缩放与旧布局设置已废弃，旧设置读入时忽略。搜索和首页共用信息栏骨架、列表宽度与位置规则，分类/标签下保留原站 `.blurb` 摘要；原站头像与日期镜像到下方作者/时间栏，已看位于右上，统计/稍后再看/菜单靠右。标题、命中楼层链接、原站摘要/高亮与分页保留原节点，不补主题或用户请求；统计只读原站预载与搜索模型已有字段。摘要显隐继续由搜索分类的 `showTopicExcerpt` 控制；搜索作者与时间代表命中帖，不推断主题创建者。
 
 ### Excerpt Failure State
 - **Definition**：首页已删除自动摘要与作者回退请求、缓存写入、冷却后重排。
@@ -80,9 +80,9 @@
 - **Definition**：首页已停用首帖 Markdown 预览。手动预览以真实网页为权威；Markdown 渲染器留给项目既有使用路径。
 
 ### Card Presentation Style
-- **Definition**：`topicListLayoutMode` 只允许 `native`，旧 `reading` 设置读入后归一为 `native`。
-- **Rules/Invariants**：不再提供首页布局切换按钮或下拉；首页采用 Material 3 原生列表。
-- **Rules/Invariants**：首页与主题列表以整个浏览器视口中线居中；可见桌面侧栏两边对称预留空间，收起侧栏恢复列表宽度上限。新/更新话题提示按文字宽度收紧为居中胶囊，保留原站点击刷新与消息更新行为。
+- **Definition**：`topicListAppearance` 提供 `material`（美化后，默认）与 `original`（美化前／原站样式），统一控制首页、搜索结果、帖底推荐与相关列表；设置位于「页面 → 主题列表 → 列表样式」。旧阅读网格布局键读入时忽略。
+- **Rules/Invariants**：美化后使用同一 Material 3 原生条目与幂等信息栏，分类胶囊共用材质/文本色并保留分类图标颜色，作者/参与者头像按原站 `#data-discourse-setup[data-cdn]` 解析模板；美化前撤下新增信息栏、标记、样式类及过滤显隐，保留原站节点并放行原生主题导航。重新开启时恢复一次增强，无重复菜单/信息栏；顶栏、壁纸、收藏面板及独立搜索控件设置继续生效。
+- **Rules/Invariants**：首页、搜索与主题列表以整个浏览器视口中线居中；可见桌面侧栏两边对称预留空间，收起侧栏恢复列表宽度上限。帖底推荐/相关沿用主题页现有容器宽度，不套用首页侧栏居中规则；数据只来自已下载的主题预载与 `controller:topic.model.suggestedTopics/relatedTopics`。新/更新话题提示按文字宽度收紧为居中胶囊，保留原站点击刷新与消息更新行为。
 
 ### Incremental Topic Grid Update
 - **Definition**：主题行与搜索结果增量同步由 Discourse 管理，betterLD 幂等追加信息栏，不重建源结果或标题/摘要节点。

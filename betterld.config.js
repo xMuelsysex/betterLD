@@ -305,7 +305,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     fontMode: Object.freeze(["default", "recommended", "custom"]),
     fontScope: Object.freeze(["own", "managed"]),
     shadowMode: Object.freeze(["default", "none", "custom"]),
-    topicListLayoutMode: Object.freeze(["native"]),
+    topicListAppearance: Object.freeze(["material", "original"]),
     replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),
@@ -389,8 +389,9 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "card",
           title: "主题列表",
-          description: "Material 3 原生列表的信息显隐与字号；正文仅手动打开真实网页预览。",
+          description: "首页、搜索与帖底推荐共用样式切换、信息显隐与字号。",
           keys: [
+            "topicListAppearance",
             "topicSortMode",
             "showTopicAvatar",
             "showTopicAuthor",
@@ -628,7 +629,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicUnreadState: true,
     showTopicPinnedState: true,
     showTopicWatchedState: true,
-    topicListLayoutMode: "native",
+    topicListAppearance: "material",
     replyTreeNameMode: "both",
     topicSortMode: "activity",
     topicCardContextMenuConfig: [

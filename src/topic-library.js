@@ -436,10 +436,10 @@
   function sync() {
     if (!document.body) return;
     createPanel();
-    for (const row of document.querySelectorAll(".betterld-topic-row")) {
+    for (const row of document.querySelectorAll(".betterld-topic-row, .betterld-search-result")) {
       const host = row.querySelector(".betterld-topic-row__actions");
       const id = row.dataset.topicId;
-      const title = row.querySelector("a.title")?.textContent.trim();
+      const title = row.querySelector("a.title, a.search-link")?.textContent.trim();
       if (host && id && title) attachButton(host, "later", { id, title, href: `${location.origin}/t/topic/${id}` });
     }
     syncTopicButton();

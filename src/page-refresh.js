@@ -531,14 +531,21 @@
     const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
     const name = owner.lookup("service:router")?.currentRouteName;
     const model = name ? owner.lookup(`route:${name}`)?.currentModel : null;
-    const list = model?.list ?? model;
+    let list = model?.list ?? model;
+    if (name === "full-page-search") list = owner.lookup("controller:full-page-search")?.model;
+    if (name?.startsWith("topic.")) {
+      const topic = owner.lookup("controller:topic")?.model;
+      list = { topics: [...arrayOrEmpty(topic?.suggestedTopics), ...arrayOrEmpty(topic?.relatedTopics)] };
+    }
     const topics = Array.isArray(list?.topics) ? list.topics
       : Array.isArray(list?.topic_list?.topics) ? list.topic_list.topics : null;
     if (!topics?.length) return null;
-    const users = Array.isArray(list?.users) ? list.users
-      : Array.isArray(model?.users) ? model.users : [];
+    const users = [
+      ...arrayOrEmpty(list?.users ?? model?.users),
+      ...topics.flatMap((topic) => arrayOrEmpty(topic.posters).map((poster) => poster.user).filter(Boolean))
+    ];
     return {
-      // 参与者头像要原样的 avatar_template（含 {size} 占位），消费端自己替换尺寸并校验同源。
+      // 头像保留模板（含 {size} 占位），消费端按原站 CDN 配置解析资产地址。
       users: users.map((user) => ({
         id: user.id,
         username: user.username,
@@ -551,7 +558,7 @@
           creator_avatar_template: stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate),
           excerpt: stringOrEmpty(topic.excerpt),
           posters: arrayOrEmpty(topic.posters).map((poster) => ({
-            user_id: poster.user_id ?? poster.userId,
+            user_id: poster.user?.id ?? poster.user_id ?? poster.userId,
             description: stringOrEmpty(poster.description)
           })),
           posts_count: numberOrNull(topic.posts_count ?? topic.postsCount),

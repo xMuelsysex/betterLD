@@ -762,7 +762,7 @@
     fontMode: { default: "系统默认", recommended: "推荐字体栈", custom: "自定义字体" },
     fontScope: { own: "仅 betterLD 内容", managed: "已管理页面正文" },
     shadowMode: { default: "默认阴影", none: "关闭阴影", custom: "自定义阴影" },
-    topicListLayoutMode: { native: "Material 3 主题列表" },
+    topicListAppearance: { material: "美化后", original: "美化前（原站样式）" },
     replyTreeNameMode: { both: "昵称和用户名", nickname: "仅昵称", username: "仅用户名" },
     topicSortMode: { activity: "最新回复", created: "发布时间" },
     topicTitleFontSize: { responsive: "响应式", small: "小", base: "标准", large: "大" },
@@ -792,7 +792,7 @@
     fontMode: { default: "System default", recommended: "Recommended stack", custom: "Custom font" },
     fontScope: { own: "betterLD content only", managed: "Managed pages" },
     shadowMode: { default: "Default shadow", none: "No shadow", custom: "Custom shadow" },
-    topicListLayoutMode: { native: "Material 3 topic list" },
+    topicListAppearance: { material: "Beautified", original: "Original site style" },
     replyTreeNameMode: { both: "Nickname and username", nickname: "Nickname only", username: "Username only" },
     topicSortMode: { activity: "Latest reply", created: "Publish time" },
     topicTitleFontSize: { responsive: "Responsive", small: "Small", base: "Base", large: "Large" },
@@ -818,7 +818,7 @@
   const englishFieldLabels = {
     externalSearchEngine: "External search (when site search is empty)",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
-    topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
+    topicListAppearance: "Topic list appearance", topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
     topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
     topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
   };
@@ -1026,6 +1026,7 @@
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
     { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
 
+    { key: "topicListAppearance", type: "select", label: "列表样式", help: "首页、搜索结果与帖子底部推荐统一选择美化后或原站样式；保留顶栏与壁纸设置。" },
     { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
     { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "作者取自原站列表数据；缺失信息不再补发请求。" },
     { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },

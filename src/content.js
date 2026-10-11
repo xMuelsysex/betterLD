@@ -56,6 +56,7 @@
     metadataCooldownUntil: 0,
     topicListMetadata: new Map(),
     preloadedTopicListSeeded: false,
+    topicLinks: new WeakSet(),
     topicListSync: null,
     topicListSyncAgain: false,
 
@@ -344,7 +345,6 @@
       || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
     );
     root.dataset.betterldMaterial = materialSupported ? "ready" : "fallback";
-    root.dataset.betterldTopicListLayout = settings.topicListLayoutMode;
     root.dataset.betterldShadowMode = settings.shadowMode;
     root.dataset.betterldFrostedGlass = String(settings.frostedGlassEnabled);
     root.dataset.betterldShowTopicAvatar = String(settings.showTopicAvatar);
@@ -411,7 +411,7 @@
     applyColorMode();
     applyCustomCss(settings);
     resetFilterOverrides(settings);
-    syncManagedCardContent();
+    syncHomepage();
     syncCardMenus();
     syncFloatingActions();
     syncNavigationSettings();
@@ -2095,7 +2095,6 @@
         try {
           await storageSet({ [config.storageKey]: settings });
           applyVisualSettings(settings);
-          syncManagedCardContent();
           showActionStatus(`已屏蔽 @${author}，本地作者隐藏规则已生效`, "success");
         } catch (error) {
           console.error("[betterLD] local author rule save failed", error);
@@ -2175,6 +2174,7 @@
   }
 
   function handleTopicCardClick(event, card, topicUrl) {
+    if (state.currentSettings.topicListAppearance !== "material") return;
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
@@ -2504,10 +2504,19 @@
     let entries;
     try {
       const preloaded = JSON.parse(node.textContent);
-      if (!preloaded.topic_list) {
-        return;
-      }
-      entries = topicListEntries(JSON.parse(preloaded.topic_list));
+      if (isSearchPage() && preloaded.search) {
+        const search = JSON.parse(preloaded.search);
+        entries = topicListEntries({ users: search.users, topic_list: { topics: search.topics } });
+      } else if (topicIdFromPath() && preloaded[`topic_${topicIdFromPath()}`]) {
+        const topic = JSON.parse(preloaded[`topic_${topicIdFromPath()}`]);
+        const topics = [...(topic.suggested_topics || []), ...(topic.related_topics || [])];
+        const users = topics.flatMap((item) => (item.posters || []).map((poster) => poster.user).filter(Boolean));
+        entries = topicListEntries({ users, topic_list: { topics: topics.map((item) => ({
+          ...item, posters: (item.posters || []).map((poster) => ({ ...poster, user_id: poster.user?.id ?? poster.user_id }))
+        })) } });
+      } else if (preloaded.topic_list) {
+        entries = topicListEntries(JSON.parse(preloaded.topic_list));
+      } else return;
     } catch (error) {
       console.warn("[betterLD] 预载主题列表解析失败", error);
       return;
@@ -2520,6 +2529,21 @@
 
   function managedCards() {
     return [...document.querySelectorAll(".betterld-topic-row, .betterld-search-result")];
+  }
+
+  // 原站头像模板是路径，实际资产域名由页面自身的 Discourse CDN 配置决定。
+  function topicAvatarUrl(template, size) {
+    if (!template) return "";
+    try {
+      const cdn = document.getElementById("data-discourse-setup")?.dataset.cdn;
+      const base = new URL(cdn || location.origin);
+      const url = new URL(String(template).replace("{size}", String(size)), base);
+      return url.protocol === "https:" && [location.origin, base.origin].includes(url.origin)
+        && /^\/(user_avatar|letter_avatar)\//.test(url.pathname) ? url.href : "";
+    } catch (error) {
+      console.warn("[betterLD] 列表头像路径无效", error);
+      return "";
+    }
   }
 
   function applyTopicListMetadata(card) {
@@ -2537,13 +2561,19 @@
         if (menu) renderCardMenuActions(menu, card);
       }
       const avatar = card.querySelector(".betterld-topic-row__avatar");
-      if (avatar && metadata.authorAvatar && avatar.dataset.template !== metadata.authorAvatar) {
-        avatar.dataset.template = metadata.authorAvatar;
-        const image = document.createElement("img");
-        image.src = safeSiteUrl(metadata.authorAvatar.replace("{size}", "48"));
-        image.alt = "";
-        image.loading = "lazy";
-        avatar.replaceChildren(image);
+      const avatarUrl = topicAvatarUrl(metadata.authorAvatar, 48);
+      if (avatar && avatar.dataset.source !== avatarUrl) {
+        avatar.dataset.source = avatarUrl;
+        avatar.replaceChildren();
+        if (avatarUrl) {
+          const image = document.createElement("img");
+          image.src = avatarUrl;
+          image.alt = "";
+          image.loading = "lazy";
+          avatar.append(image);
+        }
+      }
+      if (avatar) {
         avatar.href = card.dataset.authorHref;
         avatar.dataset.userCard = metadata.author;
       }
@@ -2567,6 +2597,10 @@
 
   function applyTopicListMetadataToAll() {
     document.querySelectorAll(".betterld-topic-row").forEach(applyTopicListMetadata);
+    document.querySelectorAll(".betterld-search-result").forEach((row) => {
+      const metadata = state.topicListMetadata.get(row.dataset.topicId);
+      if (metadata) setTopicStats(row, metadata.stats);
+    });
   }
 
   function uncoveredTopicCards() {
@@ -2590,16 +2624,14 @@
   }
 
   function syncTopicListMetadata() {
-    if (isSearchPage()) return;
+    if (state.currentSettings.topicListAppearance !== "material") return;
     if (state.topicListSync) {
       state.topicListSyncAgain = true;
       return;
     }
     state.topicListSync = Promise.resolve()
       .then(async () => {
-        if (!isTopicListPage()) {
-          return;
-        }
+        if (!isTopicListPage() && !isSearchPage() && !topicIdFromPath()) return;
         // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次
         seedPreloadedTopicList();
         applyTopicListMetadataToAll();
@@ -2675,7 +2707,7 @@
     const entries = (Array.isArray(participants) ? participants : [])
       .map((entry) => ({
         username: cleanText(entry?.username),
-        url: safeSiteUrl(String(entry?.avatarTemplate || "").replace("{size}", "40"))
+        url: topicAvatarUrl(entry?.avatarTemplate, 48)
       }))
       .filter((entry) => entry.url);
     const signature = JSON.stringify(entries);
@@ -2722,20 +2754,6 @@
     document.querySelectorAll(".betterld-search-result[data-filter-override], .betterld-topic-row[data-filter-override]").forEach((card) => {
       delete card.dataset.filterOverride;
     });
-  }
-
-  function syncManagedCardContent() {
-    managedCards().forEach((card) => {
-      if (card.classList.contains("betterld-search-result")) {
-        enhanceSearchResult(card);
-      } else {
-        applyTopicListMetadata(card);
-        applyCardFilter(card);
-      }
-      card.setAttribute("aria-busy", "false");
-    });
-    document.querySelectorAll(".fps-result-entries").forEach(syncFilterEmptyState);
-    syncTopicListMetadata();
   }
 
   function escapeRegExp(value) {
@@ -2997,7 +3015,7 @@
   }
 
   function topicContainers() {
-    const root = mainRoot();
+    const root = topicIdFromPath() ? document.querySelector(".more-topics__lists") : mainRoot();
     if (!root) {
       return [];
     }
@@ -3239,6 +3257,43 @@
     return state.refreshPromise;
   }
 
+  function bindTopicLink(title, row) {
+    if (!title) return;
+    title.classList.add("betterld-topic-card__link", "betterld-topic-card__title");
+    if (state.topicLinks.has(title)) return;
+    state.topicLinks.add(title);
+    title.addEventListener("click", (event) => handleTopicCardClick(event, row, event.currentTarget.href));
+  }
+
+  // 首页、搜索与帖底推荐共用信息栏骨架；搜索只在分类和信息栏之间多保留原站摘要。
+  function ensureTopicInfo(row, main, topic) {
+    const existing = main.querySelector(".betterld-topic-row__info");
+    if (existing) return existing;
+    const info = createElement("div", "betterld-topic-row__info");
+    const avatar = createElement("a", "betterld-topic-row__avatar trigger-user-card");
+    avatar.setAttribute("aria-label", "查看作者");
+    const author = createElement("a", "betterld-topic-card__author trigger-user-card");
+    author.hidden = true;
+    const time = createElement("time", "betterld-topic-row__time");
+    time.dataset.betterldMetaPart = "activity";
+    time.hidden = true;
+    const participants = createElement("span", "betterld-topic-card__participants");
+    participants.dataset.betterldTopicParticipants = "true";
+    const posters = row.querySelector(".posters");
+    if (posters) participants.append(...[...posters.querySelectorAll("a")].map((link) => link.cloneNode(true)));
+    const stats = createElement("span", "betterld-topic-row__stats");
+    stats.dataset.betterldTopicStats = "true";
+    const watched = createElement("span", "betterld-topic-card__badge", "已看");
+    watched.dataset.betterldBadge = "watched";
+    const status = createElement("span", "betterld-topic-row__status");
+    status.hidden = true;
+    const actions = createElement("span", "betterld-topic-row__actions");
+    actions.append(stats, status, createCardMenu(row, row, topic));
+    info.append(avatar, author, time, participants, actions);
+    main.append(watched, info);
+    return info;
+  }
+
   // 保留 Discourse 管理的行与原始链接；只在 main-link 内增加独立信息栏。
   function enhanceTopicRow(row) {
     const topic = topicInfo(row);
@@ -3252,37 +3307,9 @@
     row.dataset.filterCategory = category.name;
     row.dataset.filterTags = topicTags(row, category.name).join(" ");
     row.dataset.filterLevel = String(topicLevel(row));
-    const title = main.querySelector("a.title");
-    if (title && !title.classList.contains("betterld-topic-card__link")) {
-      title.classList.add("betterld-topic-card__link", "betterld-topic-card__title");
-      title.addEventListener("click", (event) => handleTopicCardClick(event, row, row.dataset.topicHref));
-    }
-    let info = main.querySelector(".betterld-topic-row__info");
-    if (!info) {
-      row.dataset.authorState = "loading";
-      info = createElement("div", "betterld-topic-row__info");
-      const avatar = createElement("a", "betterld-topic-row__avatar trigger-user-card");
-      avatar.setAttribute("aria-label", "查看主题作者");
-      const author = createElement("a", "betterld-topic-card__author");
-      author.hidden = true;
-      const time = createElement("time", "betterld-topic-row__time");
-      time.dataset.betterldMetaPart = "activity";
-      time.hidden = true;
-      const participants = createElement("span", "betterld-topic-card__participants");
-      participants.dataset.betterldTopicParticipants = "true";
-      // 原生参与者头像保留全部链接及原站用户卡片触点。
-      const posters = row.querySelector(".posters");
-      if (posters) participants.append(...[...posters.querySelectorAll("a")].map((link) => link.cloneNode(true)));
-      const stats = createElement("span", "betterld-topic-row__stats");
-      stats.dataset.betterldTopicStats = "true";
-      const watched = createElement("span", "betterld-topic-card__badge", "已看");
-      watched.dataset.betterldBadge = "watched";
-      const status = createElement("span", "betterld-topic-row__status");
-      const actions = createElement("span", "betterld-topic-row__actions");
-      actions.append(stats, status, createCardMenu(row, row, topic));
-      info.append(avatar, author, time, participants, actions);
-      main.append(watched, info);
-    }
+    bindTopicLink(main.querySelector("a.title"), row);
+    if (!main.querySelector(".betterld-topic-row__info")) row.dataset.authorState = "loading";
+    const info = ensureTopicInfo(row, main, topic);
     const status = info.querySelector(".betterld-topic-row__status");
     const statusText = cleanText(row.querySelector(".topic-status-data")?.textContent);
     if (status.textContent !== statusText) status.textContent = statusText;
@@ -3291,6 +3318,28 @@
     applyTopicListMetadata(row);
     applyCardFilter(row);
     row.setAttribute("aria-busy", "false");
+  }
+
+  function restoreOriginalTopicLists() {
+    closeCardMenus();
+    for (const row of managedCards()) {
+      row.querySelector(".betterld-topic-row__info")?.remove();
+      row.querySelector('[data-betterld-badge="watched"]')?.remove();
+      row.querySelectorAll(".betterld-topic-card__link").forEach((title) => title.classList.remove("betterld-topic-card__link", "betterld-topic-card__title"));
+      row.querySelectorAll("[data-filter-hit]").forEach((node) => node.removeAttribute("data-filter-hit"));
+      if (row.dataset.filterState) row.hidden = false;
+      row.removeAttribute("aria-busy");
+      row.classList.remove("betterld-topic-row", "betterld-search-result");
+      for (const key of ["filterState", "filterOverride", "filterAuthor", "filterActivity", "filterTitle", "filterCategory", "filterTags", "filterLevel", "topicHref", "authorState", "authorHref", "categoryHref", "betterldSearchResult", "betterldMenuOpen"]) delete row.dataset[key];
+    }
+    document.querySelectorAll(".betterld-topic-list, .betterld-search-results").forEach((container) => {
+      container.classList.remove("betterld-topic-list", "betterld-search-results");
+      delete container.dataset.betterldFilterEmpty;
+    });
+    document.querySelectorAll(".betterld-topic-empty").forEach((node) => node.remove());
+    state.filterBin.clear();
+    state.filterBinHost?.remove();
+    state.filterBinHost = null;
   }
 
   function syncNativeTopicLists() {
@@ -3303,15 +3352,15 @@
     } finally {
       state.mutating = false;
     }
-    globalThis.BETTERLD_LIBRARY.sync();
     syncTopicListMetadata();
   }
 
   function syncHomepage() {
     syncExternalSearch();
+    if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
+    else if (isSearchPage()) syncNativeSearchResults();
+    else if (isTopicListPage() || topicIdFromPath()) syncNativeTopicLists();
     globalThis.BETTERLD_LIBRARY.sync();
-    if (isSearchPage()) syncNativeSearchResults();
-    else if (isTopicListPage()) syncNativeTopicLists();
     applyListControlsScrollState();
   }
 
@@ -3329,28 +3378,24 @@
     row.dataset.filterTags = topicTags(row, category.name).join(" ");
     row.dataset.filterLevel = String(topicLevel(row));
     row.dataset.betterldSearchResult = "true";
-    const title = main.querySelector("a.search-link");
-    if (title && !title.classList.contains("betterld-topic-card__link")) {
-      title.classList.add("betterld-topic-card__link", "betterld-topic-card__title");
-      title.addEventListener("click", (event) => handleTopicCardClick(event, row, event.currentTarget.href));
-    }
-    let info = main.querySelector(".betterld-topic-row__info");
-    if (!info) {
-      info = createElement("div", "betterld-topic-row__info");
-      const author = createElement("a", "betterld-topic-card__author trigger-user-card");
-      const watched = createElement("span", "betterld-topic-card__badge", "已看");
-      watched.dataset.betterldBadge = "watched";
-      const actions = createElement("span", "betterld-topic-row__actions");
-      actions.append(createCardMenu(row, row, topic));
-      info.append(author, watched, actions);
-      main.append(info);
-    }
+    bindTopicLink(main.querySelector("a.search-link"), row);
+    const info = ensureTopicInfo(row, main, topic);
     const author = cleanText(row.querySelector(".author [data-user-card]")?.dataset.userCard);
     const authorState = author ? "ready" : "unavailable";
     if (row.dataset.filterAuthor !== author || row.dataset.authorState !== authorState || info.querySelector(".betterld-topic-card__author").textContent !== author) {
       setAuthor(row, author, authorState);
     }
     info.querySelector(".betterld-topic-card__author").dataset.userCard = author;
+    const avatar = info.querySelector(".betterld-topic-row__avatar");
+    const source = row.querySelector(".author a[data-user-card]");
+    const image = source?.querySelector("img");
+    if (image && avatar.dataset.source !== image.src) {
+      avatar.dataset.source = image.src;
+      avatar.replaceChildren(image.cloneNode(true));
+    }
+    avatar.hidden = !image;
+    avatar.href = userProfileHref(author);
+    avatar.dataset.userCard = author;
     const authorHref = userProfileHref(author);
     const categoryHref = topicCategoryHref(row);
     if (row.dataset.authorHref !== authorHref || row.dataset.categoryHref !== categoryHref) {
@@ -3362,16 +3407,24 @@
     const timestamp = Number(date?.dataset.time);
     const activityAt = date?.getAttribute("datetime") || (Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp).toISOString() : "");
     const activity = Date.parse(activityAt);
-    row.dataset.filterActivity = Number.isFinite(activity) ? String(activity) : "";
-    info.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
+    if (Number.isFinite(activity) && row.dataset.filterActivity !== String(activity)) setTopicActivity(row, activityAt);
+    if (!Number.isFinite(activity)) {
+      row.dataset.filterActivity = "";
+      info.querySelector(".betterld-topic-row__time").hidden = true;
+    }
+    const metadata = state.topicListMetadata.get(topic.id);
+    if (metadata) setTopicStats(row, metadata.stats);
+    main.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
     applyCardFilter(row);
   }
 
   function syncNativeSearchResults() {
     document.querySelectorAll(".fps-result-entries").forEach((container) => {
+      container.classList.add("betterld-search-results");
       container.querySelectorAll(".fps-result").forEach(enhanceSearchResult);
       syncFilterEmptyState(container);
     });
+    syncTopicListMetadata();
   }
 
   function scheduleSync() {
@@ -3414,7 +3467,7 @@
     syncNavigationState();
     applyChromeSettings();
     syncFloatingActions();
-    if (topicListPage || isSearchPage()) {
+    if (topicListPage || isSearchPage() || topicIdFromPath()) {
       scheduleSync();
     }
   }
@@ -5480,7 +5533,7 @@
 
   const domObserver = new MutationObserver((records) => {
     // 新主题在同一轮 DOM 提交中增强，保持原站新行与增强行的表格布局一致。
-    if (isTopicListPage()) {
+    if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || topicIdFromPath())) {
       const rows = new Set();
       for (const record of records) {
         for (const node of record.addedNodes) {
@@ -5492,6 +5545,7 @@
         }
       }
       rows.forEach((row) => {
+        if (topicIdFromPath() && !row.closest(".more-topics__lists")) return;
         row.closest(".topic-list")?.classList.add("betterld-topic-list");
         enhanceTopicRow(row);
       });
