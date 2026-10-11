@@ -605,6 +605,7 @@
   }
 
   function applyThemeTokens(settings) {
+    const root = document.documentElement;
     const fromWallpaper = settings.wallpaperThemeColor && state.wallpaperColor;
     const primary = fromWallpaper ? wallpaperPrimary() : settings.themeColor;
     root.dataset.betterldWallpaperColor = fromWallpaper ? "ready" : "manual";
@@ -616,7 +617,7 @@
       setThemeProperty("--betterld-primary-rgb", primaryRgb.split(" ").join(", "));
       setThemeProperty("--betterld-on-primary", contrastColor(primary));
     }
-    if (document.documentElement.dataset.betterldMode === "dark" && backgroundRgb) {
+    if (root.dataset.betterldMode === "dark" && backgroundRgb) {
       setThemeProperty("--betterld-background-rgb", backgroundRgb);
     } else {
       setThemeProperty("--betterld-background-rgb", "");
