@@ -120,6 +120,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .betterld-export-progress {

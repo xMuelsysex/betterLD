@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.74",
+  "version": "0.1.75",
   "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
   "permissions": [
     "storage"
@@ -19,6 +19,7 @@
   "background": {
     "scripts": [
       "betterld.config.js",
+      "src/offline-assets.js",
       "src/webdav.js",
       "src/external-search.js",
       "src/library-entry.js",
@@ -38,6 +39,7 @@
         "src/markdown.js",
         "src/external-search.js",
         "src/library-entry.js",
+        "src/offline-assets.js",
         "src/topic-library.js",
         "src/topic-export.js",
         "src/content.js"

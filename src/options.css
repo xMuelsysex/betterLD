@@ -637,6 +637,28 @@ body {
   color: var(--settings-error-color);
 }
 
+/* 离线导出授权域名列表：独立权限入口，不写入设置参数 */
+.settings-origin-list {
+  display: grid;
+  gap: var(--settings-space-2);
+  margin: var(--settings-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-origin-list__item label {
+  display: flex;
+  align-items: center;
+  gap: var(--settings-space-2);
+  color: var(--settings-text-1);
+  font-size: var(--settings-font-size-control);
+  line-height: var(--settings-line-height-control);
+}
+
+.settings-origin-list__item span {
+  overflow-wrap: anywhere;
+}
+
 /* #endregion */
 
 /* #region 控件：开关 */

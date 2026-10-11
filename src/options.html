@@ -273,6 +273,19 @@
                       </div>
                     </div>
                     <div class="settings-group-card">
+                      <p class="settings-group-card__title">HTML 导出离线归档授权</p>
+                      <p class="settings-group-card__desc">完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。</p>
+                      <div class="settings-group-card__surface">
+                        <ul id="topic-export-origin-list" class="settings-origin-list"></ul>
+                        <p id="topic-export-origin-empty" class="settings-inline-note">暂无待授权域名；导出失败时缺失的域名会出现在这里。</p>
+                        <div class="settings-actions">
+                          <button id="topic-export-grant" class="settings-button settings-button--tonal" type="button">授权所选域名</button>
+                          <button id="topic-export-refresh" class="settings-button settings-button--tonal" type="button">刷新域名列表</button>
+                        </div>
+                      </div>
+                      <p id="topic-export-origin-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                    </div>
+                    <div class="settings-group-card">
                       <p class="settings-group-card__title">筛选规则文件</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">

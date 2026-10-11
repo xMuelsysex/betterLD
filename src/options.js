@@ -63,6 +63,9 @@
   let externalSearchPermissionStatus;
   let externalSearchPermissionBusy = false;
   const canRequestExternalSearchPermission = !isEmbedded && typeof api.permissions?.request === "function";
+  let topicExportOrigins = [];
+  let topicExportGrantBusy = false;
+  const canRequestTopicExportPermission = !isEmbedded && typeof api.permissions?.request === "function";
 
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
@@ -829,6 +832,11 @@
     "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。": "In-page settings cannot show the browser permission dialog. Open the extension settings below, then choose Bing or DuckDuckGo and allow access.",
     "重新申请访问权限": "Request access again",
     "打开扩展授权页": "Open extension permission settings",
+    "HTML 导出离线归档授权": "Offline HTML export permission",
+    "完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。": "A fully offline HTML export embeds post images, media, attachments, and author avatars, so it needs access to the domains hosting them. Only the exact domains listed below are requested; no all-sites permission is used.",
+    "暂无待授权域名；导出失败时缺失的域名会出现在这里。": "No domains are waiting for permission. Domains missing during an export appear here.",
+    "授权所选域名": "Grant selected domains",
+    "刷新域名列表": "Refresh domain list",
     "首页视觉设置": "Home visual settings",
     "调整 LinuxDo 首页卡片、导航和页面外观。所有修改在点击“保存设置”后生效。": "Adjust LinuxDo cards, navigation, and page visuals. Changes apply after saving.",
     "搜索设置": "Search settings",
@@ -1118,6 +1126,11 @@
   const aboutStorage = document.querySelector("#about-storage");
   const settingsImportFile = document.querySelector("#settings-import-file");
   const rulesImportFile = document.querySelector("#rules-import-file");
+  const topicExportOriginList = document.querySelector("#topic-export-origin-list");
+  const topicExportOriginEmpty = document.querySelector("#topic-export-origin-empty");
+  const topicExportGrantButton = document.querySelector("#topic-export-grant");
+  const topicExportRefreshButton = document.querySelector("#topic-export-refresh");
+  const topicExportOriginStatus = document.querySelector("#topic-export-origin-status");
 
   function fieldOptions(definition) {
     if (definition.options) {
@@ -1817,6 +1830,91 @@
     syncSegmentIndicators();
   }
 
+  function topicExportOrigin(value) {
+    const origin = String(value);
+    const url = new URL(origin);
+    if (url.protocol !== "https:" || url.origin !== origin) {
+      throw new Error(`离线导出授权域名无效：${origin}`);
+    }
+    return origin;
+  }
+
+  async function loadTopicExportOrigins() {
+    const key = config.topicExport.offlinePermissionStorageKey;
+    const stored = await storageGet(key);
+    const value = stored[key];
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error("离线导出授权域名存储格式异常");
+    }
+    // 存储值同样按精确 https origin 校验，避免被改写的存储绕过请求范围。
+    topicExportOrigins = (value || []).map(topicExportOrigin);
+    renderTopicExportOrigins();
+  }
+
+  function renderTopicExportOrigins() {
+    topicExportOriginList.replaceChildren(...topicExportOrigins.map((origin) => {
+      const item = document.createElement("li");
+      item.className = "settings-origin-list__item";
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.value = origin;
+      checkbox.dataset.topicExportOrigin = origin;
+      const text = document.createElement("span");
+      text.textContent = origin;
+      label.append(checkbox, text);
+      item.append(label);
+      return item;
+    }));
+    topicExportOriginEmpty.hidden = topicExportOrigins.length > 0;
+    // 网页内设置不能弹权限窗口，此时按钮用于打开完整扩展设置页，列表为空也可点。
+    topicExportGrantButton.disabled = topicExportGrantBusy
+      || (canRequestTopicExportPermission && !topicExportOrigins.length);
+  }
+
+  async function openTopicExportSettings() {
+    try {
+      const response = await sendRuntimeMessage({ type: "open-topic-export-settings" });
+      if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
+      setStatusMessage(topicExportOriginStatus, "已打开扩展授权页：高级 → 导入与导出。", "success");
+    } catch (error) {
+      setStatusMessage(topicExportOriginStatus, `打开授权页失败：${error.message}`, "error");
+      console.error("[betterLD] topic export settings page failed", error);
+    }
+  }
+
+  async function grantTopicExportOrigins() {
+    if (topicExportGrantBusy) return;
+    const requested = [...topicExportOriginList.querySelectorAll("input[data-topic-export-origin]")]
+      .filter((input) => input.checked)
+      .map((input) => topicExportOrigin(input.value));
+    if (!requested.length) {
+      setStatusMessage(topicExportOriginStatus, "请先勾选需要授权的域名。", "error");
+      return;
+    }
+    topicExportGrantBusy = true;
+    renderTopicExportOrigins();
+    try {
+      // 必须在点击的同步调用链里申请精确 origins，不申请全部网站权限。
+      const granted = await api.permissions.request({ origins: requested.map((origin) => `${origin}/*`) });
+      if (!granted) throw new Error("浏览器没有授予所选域名的访问权限");
+      const remaining = [];
+      for (const origin of topicExportOrigins) {
+        if (!await api.permissions.contains({ origins: [`${origin}/*`] })) remaining.push(origin);
+      }
+      await storageSet({ [config.topicExport.offlinePermissionStorageKey]: remaining });
+      topicExportOrigins = remaining;
+      setStatusMessage(topicExportOriginStatus, "已授权所选域名，可以回到主题页重新导出。", "success");
+    } catch (error) {
+      setStatusMessage(topicExportOriginStatus, `授权失败：${error.message}`, "error");
+      console.error("[betterLD] topic export permission request failed", error);
+    } finally {
+      topicExportGrantBusy = false;
+      renderTopicExportOrigins();
+    }
+  }
+
   async function openExternalSearchSettings() {
     if (externalSearchPermissionBusy) return;
     externalSearchPermissionBusy = true;
@@ -2204,9 +2302,31 @@
     const field = controlMap.get("externalSearchEngine").closest(".settings-field");
     revealSearchEntry({ field });
   }
+  topicExportGrantButton.textContent = canRequestTopicExportPermission ? "授权所选域名" : "打开扩展授权页";
+  topicExportGrantButton.addEventListener("click", () => {
+    if (canRequestTopicExportPermission) grantTopicExportOrigins();
+    else openTopicExportSettings();
+  });
+  topicExportRefreshButton.addEventListener("click", () => {
+    loadTopicExportOrigins().catch((error) => {
+      setStatusMessage(topicExportOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    });
+  });
+  loadTopicExportOrigins().catch((error) => {
+    setStatusMessage(topicExportOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    console.error("[betterLD] topic export origins load failed", error);
+  });
+  if (!isEmbedded && location.hash === "#topicExportOffline") {
+    showCategory("advanced", "data");
+    topicExportOriginList.closest(".settings-group-card").scrollIntoView({ block: "start" });
+  }
 
   settingsPageBody.addEventListener("change", (event) => {
     if (!(event.target instanceof HTMLElement) || !event.target.matches("input, textarea, select")) {
+      return;
+    }
+    // 离线导出授权区是独立权限入口，勾选不写入设置参数。
+    if (event.target.closest("#topic-export-origin-list")) {
       return;
     }
     if (event.target.type === "file") {

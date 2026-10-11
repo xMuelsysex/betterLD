@@ -59,7 +59,22 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestTimeoutMs: 30000,
   topicRequestWindowMs: 8000,
   topicRequestMaxPerWindow: 10,
-  topicExport: Object.freeze({ filenamePrefix: "linuxdo", filenameTitleMaxLength: 80, objectUrlRevokeMs: 3000, bridgeTimeoutMs: 1500, htmlMaxDepth: 8, maxRangePosts: 10000 }),
+  topicExport: Object.freeze({
+    filenamePrefix: "linuxdo",
+    filenameTitleMaxLength: 80,
+    objectUrlRevokeMs: 3000,
+    bridgeTimeoutMs: 1500,
+    htmlMaxDepth: 8,
+    maxRangePosts: 10000,
+    // 完全离线 HTML 导出：头像按原站模板的 {size} 取值，资源由后台串行下载后内嵌为 data URL。
+    // 单个资源上限是二进制字节；后台一次消息返回 base64（约 4/3），须低于浏览器消息序列化上限。
+    avatarSize: 96,
+    offlineFetchTimeoutMs: 20000,
+    offlineMaxAssetBytes: 32 * 1024 * 1024,
+    // 内嵌资源总量上限：按 base64 后长度乘以引用次数累计，即最终文件里的资源写入量。
+    offlineMaxTotalBytes: 256 * 1024 * 1024,
+    offlinePermissionStorageKey: "betterld.topic-export-origins"
+  }),
   replyTreePageSize: 20,
   replyTreeLoadAheadPx: 400,
   replyTreeTimeRefreshMs: 60000,

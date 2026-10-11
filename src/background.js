@@ -2,6 +2,7 @@
   const api = globalThis.browser || globalThis.chrome;
   if (typeof importScripts === "function") {
     if (!globalThis.BETTERLD_CONFIG) importScripts(api.runtime.getURL("betterld.config.js"));
+    if (!globalThis.BETTERLD_OFFLINE_ASSETS) importScripts("offline-assets.js");
     if (!globalThis.BETTERLD_LIBRARY_ENTRY) importScripts("library-entry.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
     // 只借 searchUrl 构造引擎请求地址；后台没有 DOMParser，HTML 解析留在内容脚本
@@ -11,6 +12,7 @@
   const config = globalThis.BETTERLD_CONFIG;
   const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
   const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
+  const offlineAssets = globalThis.BETTERLD_OFFLINE_ASSETS;
   const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch);
   if (!api?.runtime?.onMessage || !api.tabs?.create) {
     return;
@@ -148,6 +150,152 @@
     }
   }
 
+  // ---- 完全离线 HTML 导出的资源归档 ----
+
+  // 原站自有上传可能需要登录会话才能读取，其他资源域名一律不带凭据。
+  const offlineCredentialOrigins = new Set(["https://linux.do", "https://www.linux.do"]);
+
+  function offlinePermissionKey() {
+    return config.topicExport.offlinePermissionStorageKey;
+  }
+
+  async function rememberOfflineOrigins(origins) {
+    const key = offlinePermissionKey();
+    const stored = await api.storage.local.get(key);
+    const value = stored[key];
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error("离线导出授权域名存储格式异常，原数据保持不变");
+    }
+    // 存储值同样按精确 https origin 校验，避免被改写的存储绕过请求范围。
+    const known = new Set((value || []).map(offlineOrigin));
+    const added = origins.map(offlineOrigin).filter((origin) => !known.has(origin));
+    if (!added.length) return;
+    await api.storage.local.set({ [key]: [...known, ...added] });
+  }
+
+  function offlineOrigin(value) {
+    const origin = String(value);
+    const url = new URL(origin);
+    if (url.protocol !== "https:" || url.origin !== origin) {
+      throw new Error(`离线导出只接受 https 资源域名：${origin}`);
+    }
+    return origin;
+  }
+
+  function offlineOriginPattern(value) {
+    return `${offlineOrigin(value)}/*`;
+  }
+
+  function offlineAssetMimeType(contentType, url) {
+    const value = String(contentType || "").split(";")[0].trim().toLowerCase();
+    if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(value)) {
+      throw new Error(`资源没有返回可用的 MIME 类型：${url}`);
+    }
+    if (value === "text/html" || value === "application/xhtml+xml") {
+      throw new Error(`资源返回了 HTML 页面，可能是错误页：${url}`);
+    }
+    return value;
+  }
+
+  async function readBoundedBody(response, maxBytes, url) {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      const buffer = new Uint8Array(await response.arrayBuffer());
+      if (buffer.length > maxBytes) throw new Error(`资源大小超过单文件上限 ${maxBytes} 字节：${url}`);
+      return buffer;
+    }
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error(`资源大小超过单文件上限 ${maxBytes} 字节：${url}`);
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return bytes;
+  }
+
+  // 后台可能是 Chrome service worker 或 Firefox 后台页，两者都有 btoa，不能依赖 FileReader。
+  function encodeBase64(bytes) {
+    const chunkSize = 0x8000;
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  // 下载的 SVG 会作为 data URL 内嵌，必须自包含：脚本、foreignObject、事件属性与外部引用都显式失败。
+  async function handleTopicExportCheckOrigins(message, sender) {
+    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
+    if (!Array.isArray(message.origins) || !message.origins.length) {
+      return { ok: false, error: "离线导出没有提供资源域名清单" };
+    }
+    const patterns = message.origins.map((origin) => offlineOriginPattern(origin));
+    const missing = [];
+    for (const [index, pattern] of patterns.entries()) {
+      if (!await api.permissions.contains({ origins: [pattern] })) missing.push(String(message.origins[index]));
+    }
+    if (missing.length) await rememberOfflineOrigins(missing);
+    return { ok: true, missing };
+  }
+
+  async function handleTopicExportAsset(message, sender) {
+    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
+    const target = new URL(String(message.url || ""));
+    if (target.protocol !== "https:") return { ok: false, error: `离线导出只接受 https 资源地址：${target.href}` };
+    if (!await api.permissions.contains({ origins: [offlineOriginPattern(target.origin)] })) {
+      await rememberOfflineOrigins([target.origin]);
+      return { ok: false, missingOrigin: target.origin, error: `缺少 ${target.origin} 的访问权限` };
+    }
+    const { offlineFetchTimeoutMs, offlineMaxAssetBytes } = config.topicExport;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), offlineFetchTimeoutMs);
+    try {
+      const response = await fetch(target.href, {
+        method: "GET",
+        credentials: offlineCredentialOrigins.has(target.origin) ? "include" : "omit",
+        // 跟随重定向会把归档目标换成别的地址（可能换域），这里直接失败并报告，不做多级抓取。
+        redirect: "error",
+        signal: controller.signal
+      });
+      if (!response.ok) return { ok: false, error: `HTTP ${response.status}` };
+      const mimeType = offlineAssetMimeType(response.headers.get("content-type"), target.href);
+      offlineAssets.assertAssetMimeType(mimeType, message.kinds, target.href);
+      const declared = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declared) && declared > offlineMaxAssetBytes) {
+        return { ok: false, error: `资源大小 ${declared} 字节超过单文件上限 ${offlineMaxAssetBytes} 字节` };
+      }
+      const bytes = await readBoundedBody(response, offlineMaxAssetBytes, target.href);
+      if (mimeType === "image/svg+xml") offlineAssets.assertSelfContainedSvgBytes(bytes, target.href);
+      return { ok: true, mimeType, size: bytes.length, dataUrl: `data:${mimeType};base64,${encodeBase64(bytes)}` };
+    } catch (error) {
+      if (controller.signal.aborted) return { ok: false, error: `资源请求超时（${offlineFetchTimeoutMs}ms）` };
+      // redirect: "error" 下要求重定向的地址只会以网络错误失败，明确报告而不是静默当成空资源。
+      if (error instanceof TypeError) {
+        return { ok: false, error: `资源需要重定向或无法直连，离线归档不跟随重定向：${target.href}` };
+      }
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function handleOpenTopicExportSettings(sender) {
+    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
+    return createTab({ url: api.runtime.getURL("src/options.html#topicExportOffline"), active: true });
+  }
+
   let libraryQueue = Promise.resolve();
 
   async function toggleLibrary(message, sender) {
@@ -195,6 +343,24 @@
       handleOpenExternalSearchSettings(sender)
         .then(sendResponse)
         .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "open-topic-export-settings") {
+      handleOpenTopicExportSettings(sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "topic-export-check-origins") {
+      handleTopicExportCheckOrigins(message, sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : "资源域名权限检查失败" }));
+      return true;
+    }
+    if (message?.type === "topic-export-asset") {
+      handleTopicExportAsset(message, sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : "资源归档失败" }));
       return true;
     }
     if (message?.type === "external-search") {
