@@ -9,7 +9,7 @@
   let replySignature = "";
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -389,6 +389,14 @@
   // 原帖的正文组件承载站点全部插件装饰：惰性媒体、投票、图表、公式等。
   // 必须在 Ember runloop 内挂载；树节点移除后同时销毁宿主与装饰器。
   const cookedHosts = new Map();
+  const postMenuHosts = new Map();
+  function releasePostMenu(entry) {
+    window.require("@ember/runloop").join(() => {
+      entry.host.destroy();
+      window.require("@ember/destroyable").destroy(entry.behavior);
+      if (entry.ownsPost) entry.post.destroy();
+    });
+  }
   function releaseCookedHost(entry) {
     window.require("@ember/runloop").join(() => {
       entry.host.destroy();
@@ -396,6 +404,12 @@
     });
   }
   const cookedObserver = new MutationObserver(() => {
+    for (const [id, entry] of postMenuHosts) {
+      if (!entry.element.isConnected) {
+        releasePostMenu(entry);
+        postMenuHosts.delete(id);
+      }
+    }
     for (const [id, entry] of cookedHosts) {
       if (!entry.element.isConnected) {
         releaseCookedHost(entry);
@@ -461,6 +475,80 @@
     }
   });
 
+  document.addEventListener("betterld:reply-menu-mount", (event) => {
+    const { id, topicId, post: data } = JSON.parse(event.detail);
+    let host;
+    let post;
+    let behavior;
+    let ownsPost = false;
+    const join = window.require("@ember/runloop").join;
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      const topic = controller.model;
+      if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
+      const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(id)}"]`);
+      if (!element) throw new Error("帖子操作入口已移除");
+      const loaded = topic.postStream.posts.find((entry) => String(entry.id) === String(data.id));
+      ownsPost = !loaded;
+      post = loaded || window.require("discourse/models/post").default.create({ ...data, topic_id: topic.id, topic, store: owner.lookup("service:store") });
+      const Native = window.require("discourse/components/post/menu").default;
+      // 已在树操作栏提供的动作保留一份；其余顺序、权限与插件注册交给原站。
+      const existingActions = new Set(["like", "copyLink", "reply", "replies", "showMore", "discourse-reactions-actions", "discourse-boosts-action"]);
+      class MoreMenu extends Native {
+        constructor(...args) {
+          super(...args);
+          this.collapsed = false;
+        }
+        get availableButtons() {
+          return super.availableButtons.filter((button) => !existingActions.has(button.key));
+        }
+        get extraControls() {
+          return super.extraControls.filter((button) => !existingActions.has(button.key));
+        }
+      }
+      const Post = window.require("discourse/components/post").default;
+      behavior = new Post(owner, { post });
+      const args = {
+        post, canCreatePost: topic.details.can_create_post,
+        showReadIndicator: controller.showReadIndicator,
+        copyLink: behavior.copyLink, share: behavior.share, toggleLike: behavior.toggleLike,
+        showFlags: () => controller.send("showPostFlags", post),
+        showLogin: () => owner.lookup("route:application").send("showLogin"),
+        showPagePublish: () => controller.send("showPagePublish", post),
+        editPost: () => controller.send("editPost", post),
+        deletePost: (...args) => controller.send("deletePost", post, ...args),
+        recoverPost: () => controller.send("recoverPost", post),
+        replyToPost: () => controller.send("replyToPost", post)
+      };
+      for (const action of ["changeNotice", "changePostOwner", "grantBadge", "lockPost", "permanentlyDeletePost", "rebakePost", "togglePostType", "toggleWiki", "unhidePost", "unlockPost"]) {
+        args[action] = (...values) => controller.send(action, post, ...values);
+      }
+      const Component = window.require("@ember/component");
+      const Container = window.require("discourse/components/render-glimmer-container").default;
+      const curry = window.require("ember-curry-component").default;
+      const Host = Component.default.extend({
+        layout: Component.getComponentTemplate(Container),
+        renderGlimmer: { _registrations: [{ element, component: curry(MoreMenu, args, owner), data: {} }] }
+      });
+      join(() => {
+        host = Host.create(owner.ownerInjection());
+        host.appendTo(document.body);
+      });
+      postMenuHosts.set(id, { element, host, post, ownsPost, behavior });
+      element.dataset.betterldMenuMounted = "true";
+      document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id }) }));
+    } catch (error) {
+      join(() => {
+        if (host) host.destroy();
+        if (behavior) window.require("@ember/destroyable").destroy(behavior);
+        if (ownsPost && post) post.destroy();
+      });
+      console.error("[betterLD] native post menu mount failed", error);
+      document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id, error: error.message }) }));
+    }
+  });
+
   document.addEventListener("betterld:export-topic-request", (event) => {
     const { id, topicId } = JSON.parse(event.detail);
     try {
@@ -502,12 +590,20 @@
       const stream = topic.postStream;
       // 筛选刷新期间 filter 已切换而 stream 仍属旧视图，完成后再投影同一份数据。
       if (stream.loadingFilter) return;
+      const posts = new Map(stream.posts.map((post) => [String(post.id), post]));
+      const streamIds = new Set(stream.stream.map(String));
+      // 未挂载到原帖的分页楼层，其书签/编辑状态仍由这份原站模型投影回树。
+      for (const entry of postMenuHosts.values()) {
+        if (entry.ownsPost && String(entry.post.topic_id) === topicId && streamIds.has(String(entry.post.id)) && !posts.has(String(entry.post.id))) {
+          posts.set(String(entry.post.id), entry.post);
+        }
+      }
       const data = {
         topicId,
         stream: [...stream.stream],
         topReplies: stream.filter === "summary",
         user_badges: topic.user_badges,
-        posts: stream.posts.map((post) => ({
+        posts: [...posts.values()].map((post) => ({
           ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
           // 原站通过 User 模型接收状态变更；null 也要投影，以移除树里已取消的状态。
           user_status: replyAuthors.has(post.id) ? replyAuthors.get(post.id).user.status ?? null

@@ -3486,17 +3486,6 @@
     tree.toggle.textContent = "返回树状回复";
   }
 
-  // 树里只有「更多帖子操作」还会用原站触发器（Boost 已改为在树内直接写）。
-  const replyActionSelectors = {
-    more: ".post-action-menu__show-more"
-  };
-
-  function nativeReplyAction(postNumber, action) {
-    // 选择器含多个候选项，必须先锁定该楼的操作区，否则逗号后的选择器会逃出作用域（例如命中树自己的按钮）。
-    const menu = document.querySelector(`article#post_${postNumber} .post__menu-area`);
-    return menu?.querySelector(replyActionSelectors[action]) || null;
-  }
-
   function promptReplyTreeLogin(tree) {
     tree.status.textContent = "请登录后使用帖子操作。";
     document.querySelector(".d-header .login-button")?.click();
@@ -3534,107 +3523,50 @@
     }
   }
 
-  // 原站 boost 弹层带 closeOnScroll：触发器滚动后弹层会被这次滚动立刻关掉，所以点击必须等滚动事件派发完。
-  // 不用 rAF：它依赖渲染管线，标签页隐藏或渲染停摆时不会触发，点击会静默失效。
-  function afterScrollSettles(callback) {
-    let settled = false;
-    let quietTimer;
-    let limitTimer;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(quietTimer);
-      clearTimeout(limitTimer);
-      window.removeEventListener("scroll", onScroll);
-      callback();
-    };
-    const onScroll = () => {
-      clearTimeout(quietTimer);
-      quietTimer = setTimeout(finish, config.replyTreeScrollSettleMs);
-    };
-    limitTimer = setTimeout(finish, config.replyTreeScrollSettleTimeoutMs);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-  }
-
-  function nativeMenuOpened() {
-    const menu = document.querySelector(".fk-d-menu__inner-content");
-    if (!menu) return false;
-    const bounds = menu.getBoundingClientRect();
-    return bounds.width > 0 && bounds.height > 0;
-  }
-
-  function openNativeReplyAction(tree, post, action) {
+  async function openReplyTreeMore(tree, post, button) {
     tree.status.textContent = "";
-    const postNumber = post.post_number;
-    if (!document.querySelector(".current-user")) {
-      promptReplyTreeLogin(tree);
+    const body = button.closest(".betterld-reply-tree__body");
+    let menu = body.querySelector(":scope > .betterld-reply-tree__native-menu");
+    if (menu) {
+      menu.hidden = !menu.hidden;
+      button.setAttribute("aria-expanded", String(!menu.hidden));
       return;
     }
-    showNativeReply(tree);
-    let observer;
-    let timer;
-    let attempts = 0;
-    let pending = false;
-    let scrolled = false;
-    const finish = () => {
-      observer?.disconnect();
-      clearTimeout(timer);
-    };
-    const clickTrigger = () => {
-      const button = nativeReplyAction(postNumber, action);
-      if (!button) {
-        pending = false;
-        return;
-      }
-      attempts += 1;
-      button.click();
-      // 弹层可能被后续滚动事件关掉、也可能随楼层卸载而消失，校验一次再决定是否重试。
-      setTimeout(() => {
-        pending = false;
-        if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;
-        if (!nativeMenuOpened()) {
-          if (attempts < config.replyTreeActionAttempts) activate();
-          else tree.status.textContent = `原站 #${postNumber} 的菜单没能打开，请返回树状回复后重试。`;
-        }
-      }, config.replyTreeActionVerifyMs);
-    };
-    const activate = () => {
-      if (topicIdFromPath() !== tree.topicId || state.replyTreeNativeTopicId !== tree.topicId) {
-        finish();
-        return;
-      }
-      const button = nativeReplyAction(postNumber, action);
-      if (!button || pending) return;
-      pending = true;
-      finish();
-      // 重试时不再滚动：滚动本身会派发新的滚动事件，把刚打开的弹层又关掉。
-      if (scrolled) {
-        clickTrigger();
-        return;
-      }
-      scrolled = true;
-      button.closest("article")?.scrollIntoView({ block: "center" });
-      afterScrollSettles(() => {
-        if (state.replyTreeNativeTopicId !== tree.topicId || topicIdFromPath() !== tree.topicId) return;
-        clickTrigger();
+    menu = createElement("div", "betterld-reply-tree__native-menu");
+    menu.dataset.betterldMenuId = crypto.randomUUID();
+    menu.id = `betterld-post-menu-${menu.dataset.betterldMenuId}`;
+    button.setAttribute("aria-controls", menu.id);
+    button.setAttribute("aria-expanded", "true");
+    body.insertBefore(menu, body.querySelector(":scope > .betterld-reply-tree__boosts"));
+    button.disabled = true;
+    try {
+      await loadPageRefreshBridge();
+      await new Promise((resolve, reject) => {
+        const id = menu.dataset.betterldMenuId;
+        const finish = (error) => {
+          clearTimeout(timer);
+          document.removeEventListener("betterld:reply-menu-mounted", onResult);
+          if (error) reject(error); else resolve();
+        };
+        const onResult = (event) => {
+          const result = JSON.parse(event.detail);
+          if (result.id === id) finish(result.error ? new Error(result.error) : null);
+        };
+        const timer = setTimeout(() => finish(new Error("原站帖子操作加载超时")), config.replyTreeActionTimeoutMs);
+        document.addEventListener("betterld:reply-menu-mounted", onResult);
+        document.dispatchEvent(new CustomEvent("betterld:reply-menu-mount", {
+          detail: JSON.stringify({ id, topicId: tree.topicId, post })
+        }));
       });
-    };
-    if (!nativeReplyAction(postNumber, action)) {
-      // 楼层没在原站渲染时先切到原帖：导航会让 Discourse 载入并渲染该楼，触发器随后出现。
-      const link = tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card .betterld-reply-tree__number`);
-      link.click();
-      timer = setTimeout(() => {
-        finish();
-        if (state.replyTreeNativeTopicId === tree.topicId && topicIdFromPath() === tree.topicId) {
-          const currentTree = state.replyTree;
-          if (currentTree?.topicId === tree.topicId) currentTree.status.textContent = `原站 #${postNumber} 的操作未载入，请重试。`;
-        }
-      }, config.replyTreeActionTimeoutMs);
+    } catch (error) {
+      menu.remove();
+      button.setAttribute("aria-expanded", "false");
+      button.removeAttribute("aria-controls");
+      console.error("[betterLD] native post menu failed", error);
+      if (state.replyTree === tree) tree.status.textContent = `帖子操作加载失败：${error.message}`;
+    } finally {
+      button.disabled = false;
     }
-    observer = new MutationObserver(activate);
-    observer.observe(document.querySelector("#main-outlet"), { childList: true, subtree: true });
-    activate();
   }
 
   function replyTreeReactionSettings(tree) {
@@ -4369,7 +4301,11 @@
       if (post.can_boost !== false && !post.boosts?.length) {
         actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openReplyTreeBoostEditor(tree, post)));
       }
-      actions.append(replyTreeActionButton("更多帖子操作", "ellipsis", () => openNativeReplyAction(tree, post, "more")));
+      const more = replyTreeActionButton("更多帖子操作", "ellipsis", () => openReplyTreeMore(tree, post, more), "betterld-reply-tree__action--more");
+      const nativeMenu = previousBody?.querySelector(":scope > .betterld-reply-tree__native-menu");
+      more.setAttribute("aria-expanded", String(Boolean(nativeMenu && !nativeMenu.hidden)));
+      if (nativeMenu) more.setAttribute("aria-controls", nativeMenu.id);
+      actions.append(more);
       const reply = replyTreeActionButton(`回复 #${post.post_number}`, "reply", () => openReplyTreeComposer(tree, post), "betterld-reply-tree__action--reply");
       reply.append(createElement("span", "betterld-reply-tree__action-label", "回复"));
       actions.append(reply);
