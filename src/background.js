@@ -2,12 +2,14 @@
   const api = globalThis.browser || globalThis.chrome;
   if (typeof importScripts === "function") {
     if (!globalThis.BETTERLD_CONFIG) importScripts(api.runtime.getURL("betterld.config.js"));
+    if (!globalThis.BETTERLD_LIBRARY_ENTRY) importScripts("library-entry.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
     // 只借 searchUrl 构造引擎请求地址；后台没有 DOMParser，HTML 解析留在内容脚本
     if (!globalThis.BETTERLD_EXTERNAL_SEARCH) importScripts("external-search.js");
   }
 
   const config = globalThis.BETTERLD_CONFIG;
+  const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
   const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
   const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch);
   if (!api?.runtime?.onMessage || !api.tabs?.create) {
@@ -153,20 +155,17 @@
     if (typeof message.remove !== "boolean") throw new Error("收藏增删意图必须为布尔值");
     if (!["later", "favorites"].includes(message.group)) throw new Error("未知收藏分类");
     const topic = message.topic;
-    if (!topic || !/^\d+$/.test(String(topic.id)) || typeof topic.title !== "string" || !topic.title.trim()) throw new Error("主题信息不完整");
-    if (!isLinuxDoPage(topic.href)) throw new Error("收藏链接必须是 LinuxDo 主题");
-    const url = new URL(topic.href);
-    const match = /^\/t\/(?:(?!\d+(?:\/|$))[^/]+\/)?([1-9]\d*)(?:\/(?:[1-9]\d*|last))?\/?$/.exec(url.pathname);
-    if (match?.[1] !== String(topic.id)) throw new Error("收藏链接与主题编号不一致");
+    entry.validate(topic);
+    if (message.group === "later" && topic.postNumber !== undefined) throw new Error("稍后再看只保存主题");
     const stored = await api.storage.local.get(config.libraryStorageKey);
     const library = stored[config.libraryStorageKey] ?? { later: [], favorites: [] };
     if (!Array.isArray(library.later) || !Array.isArray(library.favorites)) throw new Error("收藏存储格式异常，原数据保持不变");
     const items = library[message.group];
-    const existing = items.findIndex((item) => String(item.id) === String(topic.id));
+    const existing = items.findIndex((item) => entry.key(item) === entry.key(topic));
     if (message.remove) {
       if (existing >= 0) items.splice(existing, 1);
     } else if (existing < 0) {
-      items.unshift({ id: String(topic.id), title: topic.title.trim().slice(0, config.libraryTitleMaxLength), href: `${url.origin}/t/topic/${topic.id}`, savedAt: Date.now() });
+      items.unshift({ id: String(topic.id), ...(topic.postNumber === undefined ? {} : { postNumber: topic.postNumber }), title: topic.title.trim().slice(0, config.libraryTitleMaxLength), href: entry.href(topic), savedAt: Date.now() });
     }
     await api.storage.local.set({ [config.libraryStorageKey]: library });
     return { ok: true, library };

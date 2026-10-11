@@ -584,6 +584,7 @@ function buildInjection(port) {
   injectStyle(document, nonce);
 
   runScript(await sourceText("src/external-search.js"));
+  runScript(await sourceText("src/library-entry.js"));
   runScript(await sourceText("src/topic-library.js"));
   runScript(await sourceText("src/topic-export.js"));
   const moduleStyle = document.createElement("style");

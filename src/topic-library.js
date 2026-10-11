@@ -4,6 +4,7 @@
   if (window !== window.top && !window.frameElement?.matches("iframe[data-betterld-topic-preview]")) return;
   const api = globalThis.browser || globalThis.chrome;
   const config = globalThis.BETTERLD_CONFIG;
+  const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
   const groups = { later: "稍后再看", favorites: "收藏" };
   let library = { later: [], favorites: [] };
   let ready = false;
@@ -19,6 +20,7 @@
   let drag = null;
   let suppressClick = false;
   const pending = new Set();
+  const failedBookmarks = new Map();
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -42,11 +44,8 @@
     if (!value || !Array.isArray(value.later) || !Array.isArray(value.favorites)) throw new Error("收藏存储格式异常，原数据保持不变");
     for (const items of [value.later, value.favorites]) {
       for (const item of items) {
-        const url = new URL(item.href);
-        if (!/^[1-9]\d*$/.test(String(item.id)) || typeof item.title !== "string" || !item.title.trim()
-          || !["https://linux.do", "https://www.linux.do"].includes(url.origin)
-          || !/^\/t\/(?:(?!\d+(?:\/|$))[^/]+\/)?([1-9]\d*)(?:\/(?:[1-9]\d*|last))?\/?$/.test(url.pathname)
-          || !Number.isFinite(item.savedAt)) throw new Error("收藏条目信息异常，原数据保持不变");
+        entry.validate(item);
+        if (!Number.isFinite(item.savedAt)) throw new Error("收藏保存时间异常，原数据保持不变");
       }
     }
     return value;
@@ -79,7 +78,7 @@
   }
 
   async function change(group, topic, remove) {
-    const key = `${group}:${topic.id}`;
+    const key = `${group}:${entry.key(topic)}`;
     if (!ready || pending.has(key)) return;
     pending.add(key);
     syncButtons();
@@ -87,10 +86,12 @@
       const response = await send({ type: "library-toggle", group, topic, remove });
       if (!response?.ok) throw new Error(response?.error || "收藏写入没有返回结果");
       await readLibrary();
+      return ready;
     } catch (error) {
       errorMessage = `保存失败：${error.message}`;
       console.error("[betterLD] library write failed", error);
       showPanel();
+      return false;
     } finally {
       pending.delete(key);
       syncTopicButton();
@@ -99,8 +100,8 @@
     }
   }
 
-  function saved(group, id) {
-    return library[group].some((item) => String(item.id) === String(id));
+  function saved(group, topic) {
+    return library[group].some((item) => entry.key(item) === entry.key(topic));
   }
 
   function setText(node, text) {
@@ -111,8 +112,8 @@
     document.querySelectorAll(".betterld-library-save").forEach((button) => {
       const group = button.dataset.libraryGroup;
       const id = button.dataset.libraryId;
-      const selected = saved(group, id);
-      const disabled = !ready || pending.has(`${group}:${id}`);
+      const selected = saved(group, { id });
+      const disabled = !ready || pending.has(`${group}:${entry.key({ id })}`);
       if (button.disabled !== disabled) button.disabled = disabled;
       const pressed = String(selected);
       if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
@@ -328,7 +329,7 @@
 
   function render() {
     if (!panel) return;
-    status.textContent = errorMessage || "本机保存 · 与 LinuxDo 原生书签独立";
+    status.textContent = errorMessage || "本机保存 · 树内书签同步到收藏，移除本地收藏不影响原站书签";
     status.dataset.error = String(Boolean(errorMessage));
     for (const tab of tabs.children) {
       const active = tab.dataset.group === activeGroup;
@@ -338,6 +339,14 @@
     }
     list.setAttribute("aria-labelledby", `betterld-library-tab-${activeGroup}`);
     list.replaceChildren();
+    if (failedBookmarks.size) {
+      const retry = element("button", "betterld-library-save", "重试同步楼层书签");
+      retry.type = "button";
+      retry.addEventListener("click", () => {
+        for (const data of failedBookmarks.values()) queueBookmark(data);
+      });
+      list.append(retry);
+    }
     if (!ready) {
       const retry = element("button", "betterld-library-save", "重试读取收藏库");
       retry.type = "button";
@@ -347,18 +356,25 @@
       return;
     }
     if (!library[activeGroup].length) {
-      list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子底部操作栏点击「收藏」，主题就会保存在这里。"));
+      list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子底部点击「收藏」，或在树状回复中添加书签，可保存主题或对应楼层。"));
       positionPanel();
       return;
     }
     for (const topic of library[activeGroup]) {
       const row = element("div", "betterld-library-item");
-      const link = element("a", "betterld-library-link", topic.title);
+      const label = topic.postNumber === undefined ? topic.title : `${topic.title} · #${topic.postNumber} 楼`;
+      const link = element("a", "betterld-library-link", label);
       link.href = topic.href;
+      link.addEventListener("click", (event) => {
+        if (topic.postNumber === undefined || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        location.assign(entry.href(topic));
+      });
       const remove = element("button", "betterld-library-remove", "移除");
       remove.type = "button";
       remove.setAttribute("aria-label", `从${groups[activeGroup]}移除：${topic.title}`);
-      remove.disabled = pending.has(`${activeGroup}:${topic.id}`);
+      remove.disabled = pending.has(`${activeGroup}:${entry.key(topic)}`);
       const group = activeGroup;
       remove.addEventListener("click", () => change(group, topic, true));
       row.append(link, remove);
@@ -446,6 +462,44 @@
     syncTopicButton();
     syncButtons();
   }
+
+  // 书签桥接只接收成功后的模型状态；不根据按钮点击创建本地收藏。
+  let bookmarkQueue = Promise.resolve();
+  const bookmarkVersions = new Map();
+  function queueBookmark(data) {
+    const key = data.topic ? entry.key(data.topic) : "invalid";
+    const version = (bookmarkVersions.get(key) || 0) + 1;
+    bookmarkVersions.set(key, version);
+    if (failedBookmarks.has(key)) failedBookmarks.set(key, data);
+    const request = bookmarkQueue.then(async () => {
+      if (bookmarkVersions.get(key) !== version) return;
+      if (typeof data.bookmarked !== "boolean") throw new Error("书签状态无效");
+      entry.validate(data.topic);
+      if (data.topic.postNumber === undefined) throw new Error("书签缺少楼层编号");
+      if (!ready) await readLibrary();
+      if (!ready) throw new Error(errorMessage);
+      if (saved("favorites", data.topic) !== data.bookmarked) {
+        const success = await change("favorites", data.topic, !data.bookmarked);
+        if (!success) throw new Error(errorMessage || "收藏写入未完成，请重试");
+      }
+      failedBookmarks.delete(entry.key(data.topic));
+      if (!failedBookmarks.size) errorMessage = "";
+      render();
+    });
+    bookmarkQueue = request.catch((error) => {
+      if (bookmarkVersions.get(key) !== version) return;
+      if (data.topic) failedBookmarks.set(key, data);
+      errorMessage = `书签同步失败：${error.message}`;
+      console.error("[betterLD] bookmark library sync failed", error);
+      showPanel();
+      syncTopicButton();
+      render();
+    });
+  }
+
+  document.addEventListener("betterld:reply-bookmark", (event) => {
+    queueBookmark(JSON.parse(event.detail));
+  });
 
   globalThis.BETTERLD_LIBRARY = Object.freeze({ sync });
   api.storage.onChanged.addListener((changes, area) => {

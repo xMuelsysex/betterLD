@@ -4124,6 +4124,9 @@
     }
     tree.renderPending = false;
     tree.positionedPost = null;
+    for (const post of tree.posts.values()) {
+      if (typeof post.bookmarked === "boolean") syncReplyBookmark(tree, post, post.bookmarked);
+    }
     const anchor = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].find((item) => {
       const bounds = item.querySelector('.betterld-reply-tree__card').getBoundingClientRect();
       return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
@@ -4589,6 +4592,7 @@
         if (!Array.isArray(data?.post_stream?.posts)) throw new Error("回复分页数据格式不正确");
         ids.forEach((id) => tree.loaded.add(id));
       }
+      if (data.title) tree.title = cleanText(data.title);
       mergeReplyUserBadges(tree, data.user_badges);
       const streamIds = new Set(tree.stream);
       [...data.post_stream.posts, ...nearbyPosts].forEach((post) => {
@@ -4761,6 +4765,39 @@
     }
   }
 
+  function syncReplyBookmark(tree, post, bookmarked, changed = false) {
+    const previous = tree.bookmarkStates.get(String(post.id));
+    if (previous === bookmarked) return;
+    // 首次未加书签的楼不删除用户独立保存的本地收藏；已保存或发生变化时才镜像。
+    if (!bookmarked && previous === undefined && !changed) {
+      tree.bookmarkStates.set(String(post.id), false);
+      return;
+    }
+    const title = tree.title || cleanText(document.querySelector(`#topic-title h1, .d-header .header-title .topic-link[data-topic-id="${tree.topicId}"]`)?.textContent);
+    if (!title) {
+      tree.status.textContent = "书签同步失败：主题标题尚未加载";
+      return;
+    }
+    tree.bookmarkStates.set(String(post.id), bookmarked);
+    document.dispatchEvent(new CustomEvent("betterld:reply-bookmark", {
+      detail: JSON.stringify({ bookmarked, topic: {
+        id: tree.topicId, postNumber: post.post_number, title,
+        href: `${location.origin}${topicReplyUrl(tree.topicId, post.post_number)}`
+      } })
+    }));
+  }
+
+  document.addEventListener("betterld:reply-bookmark-changed", (event) => {
+    const data = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (!tree || data.topicId !== tree.topicId) return;
+    const post = tree.posts.get(data.postId);
+    if (!post) return;
+    if (data.title) tree.title = cleanText(data.title);
+    post.bookmarked = data.bookmarked;
+    syncReplyBookmark(tree, post, data.bookmarked, true);
+  });
+
   document.addEventListener('betterld:reply-data', (event) => {
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
@@ -4869,7 +4906,7 @@
     panel.append(toggle, returnAll, content);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { topicId, panel, toggle, returnAll, topReplies: previous?.topReplies || false, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, topReplies: previous?.topReplies || false, contentContainer: content, streamElement: stream, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });

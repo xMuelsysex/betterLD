@@ -401,6 +401,7 @@
     const errors = [];
     window.require("@ember/runloop").join(() => {
       const resources = entry.host ? [["host", () => entry.host.destroy()]] : [];
+      if (menu && entry.bookmarkEvents) resources.push(["bookmark-events", () => entry.bookmarkEvents.off("bookmarks:changed", entry, entry.onBookmark)]);
       if (menu && entry.behavior) resources.push(["behavior", () => window.require("@ember/destroyable").destroy(entry.behavior)]);
       if (entry.ownsPost) resources.push(["post", () => entry.post.destroy()]);
       for (const [key, release] of resources) {
@@ -589,7 +590,15 @@
         host = Host.create(owner.ownerInjection());
         host.appendTo(document.body);
       });
-      postMenuHosts.set(id, { element, host, post, ownsPost, behavior });
+      const bookmarkEvents = owner.lookup("service:app-events");
+      const entry = { element, host, post, ownsPost, behavior, bookmarkEvents, onBookmark(data, target) {
+        if (target?.target !== "post" || String(target.targetId) !== String(post.id)) return;
+        document.dispatchEvent(new CustomEvent("betterld:reply-bookmark-changed", {
+          detail: JSON.stringify({ topicId, title: topic.title, postId: post.id, postNumber: post.post_number, bookmarked: Boolean(data) })
+        }));
+      } };
+      bookmarkEvents.on("bookmarks:changed", entry, entry.onBookmark);
+      postMenuHosts.set(id, entry);
       element.dataset.betterldMenuMounted = "true";
       document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id }) }));
     } catch (error) {
