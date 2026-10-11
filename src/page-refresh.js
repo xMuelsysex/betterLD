@@ -9,7 +9,7 @@
   let replySignature = "";
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -386,6 +386,104 @@
     }
   });
 
+  // 原帖的正文组件承载站点全部插件装饰：惰性媒体、投票、图表、公式等。
+  // 必须在 Ember runloop 内挂载；树节点移除后同时销毁宿主与装饰器。
+  const cookedHosts = new Map();
+  function releaseCookedHost(entry) {
+    window.require("@ember/runloop").join(() => {
+      entry.host.destroy();
+      if (entry.ownsPost) entry.post.destroy();
+    });
+  }
+  const cookedObserver = new MutationObserver(() => {
+    for (const [id, entry] of cookedHosts) {
+      if (!entry.element.isConnected) {
+        releaseCookedHost(entry);
+        cookedHosts.delete(id);
+      }
+    }
+  });
+  cookedObserver.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener("betterld:reply-cooked-mount", (event) => {
+    const { topicId, bodies } = JSON.parse(event.detail);
+    const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+    const topic = owner.lookup("controller:topic")?.model;
+    if (String(topic?.id) !== topicId) return;
+    const Component = window.require("@ember/component");
+    const Native = window.require("discourse/components/post/cooked-html").default;
+    const Container = window.require("discourse/components/render-glimmer-container").default;
+    const curry = window.require("ember-curry-component").default;
+    const join = window.require("@ember/runloop").join;
+    for (const body of bodies) {
+      const element = document.querySelector(`[data-betterld-cooked-id="${CSS.escape(body.id)}"]`);
+      if (!element) continue;
+      const existing = cookedHosts.get(body.id);
+      if (existing?.element === element) continue;
+      if (existing) {
+        releaseCookedHost(existing);
+        cookedHosts.delete(body.id);
+      }
+      let host;
+      let post;
+      let ownsPost = false;
+      try {
+        const loaded = topic.postStream.posts.find((post) => String(post.id) === String(body.post.id));
+        ownsPost = body.post.embeddedPost || !loaded || loaded.cooked !== body.post.cooked;
+        post = ownsPost ? owner.factoryFor("model:post").create({ ...body.post, topic_id: topic.id, topic }) : loaded;
+        const Host = Component.default.extend({
+          layout: Component.getComponentTemplate(Container),
+          renderGlimmer: { _registrations: [{
+            element,
+            component: curry(Native, { post, streamElement: true, className: "cooked", embeddedPost: body.post.embeddedPost, selectionBarrier: false }, owner),
+            data: {}
+          }] }
+        });
+        join(() => {
+          host = Host.create(owner.ownerInjection());
+          element.replaceChildren();
+          host.appendTo(document.body);
+        });
+        cookedHosts.set(body.id, { element, host, post, ownsPost });
+        element.dataset.betterldCookedMounted = "true";
+      } catch (error) {
+        join(() => {
+          if (host) host.destroy();
+          if (ownsPost && post) post.destroy();
+        });
+        element.dataset.betterldCookedMounted = "error";
+        const notice = document.createElement("p");
+        notice.className = "notice error";
+        notice.setAttribute("role", "alert");
+        notice.textContent = `原站正文增强失败：${error.message}。请返回原帖查看。`;
+        element.append(notice);
+        console.error("[betterLD] native cooked mount failed", error);
+      }
+    }
+  });
+
+  document.addEventListener("betterld:export-topic-request", (event) => {
+    const { id, topicId } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const topic = owner.lookup("controller:topic").model;
+      if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
+      const stream = topic.postStream;
+      if (stream.loadingFilter) throw new Error("主题正在切换筛选，请稍后导出");
+      document.dispatchEvent(new CustomEvent("betterld:export-topic-result", {
+        detail: JSON.stringify({ id, payload: {
+          id: topic.id, title: topic.title, posts_count: topic.posts_count,
+          filtered: Boolean(stream.filter),
+          post_stream: { stream: [...stream.stream], posts: stream.posts.map((post) =>
+            Object.fromEntries(postFields.map((key) => [key, post[key]]))) }
+        } })
+      }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:export-topic-result", {
+        detail: JSON.stringify({ id, error: error.message })
+      }));
+    }
+  });
+
   document.addEventListener("betterld:reply-sync", (event) => {
     const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
     try {
@@ -646,47 +744,5 @@
         })
       }));
     }
-  });
-  // 原站把 highlight.js 打在 Discourse bundle 里，页面全局没有 hljs，只能走模块加载器。
-  // 上下文传过来的代码块带 data-betterld-highlight-pending，逐个着色后由本函数移除。
-  let highlightJsInstance = null;
-
-  async function resolveHighlightJs() {
-    if (highlightJsInstance) return highlightJsInstance;
-    if (typeof window.require !== "function") return null;
-    const mod = window.require("discourse/lib/highlight-syntax");
-    const ensure = mod?.ensureHighlightJs || mod?.default?.ensureHighlightJs;
-    if (typeof ensure !== "function") return null;
-    const instance = await ensure.call(mod.default ?? mod);
-    const hljs = instance?.default ?? instance;
-    if (hljs && typeof hljs.highlightElement === "function") highlightJsInstance = hljs;
-    return highlightJsInstance;
-  }
-
-  document.addEventListener("betterld:highlight-code", async (event) => {
-    const { id } = JSON.parse(event.detail);
-    const pending = [...document.querySelectorAll("[data-betterld-highlight-pending]")];
-    let error = "";
-    try {
-      const hljs = await resolveHighlightJs();
-      if (!hljs) throw new Error("原站 highlight.js 不可用");
-      pending.forEach((code) => {
-        // hljs 见到 data-highlighted 会直接跳过，先摘掉再着色，最后保证标记仍在。
-        code.removeAttribute("data-highlighted");
-        try {
-          hljs.highlightElement(code);
-        } catch (failure) {
-          console.warn("[betterLD] 代码块高亮失败", failure);
-        }
-        if (code.getAttribute("data-highlighted") !== "yes") code.setAttribute("data-highlighted", "yes");
-      });
-    } catch (failure) {
-      error = failure?.message || "代码高亮失败";
-      console.warn("[betterLD] 代码高亮失败", failure);
-    }
-    pending.forEach((code) => code.removeAttribute("data-betterld-highlight-pending"));
-    document.dispatchEvent(new CustomEvent("betterld:highlighted", {
-      detail: JSON.stringify({ id, count: pending.length, error })
-    }));
   });
 })();

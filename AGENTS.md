@@ -14,6 +14,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - `betterld.config.js`：首版运行参数与设置默认值的唯一参数文件。
 - `src/content.js`：原生主题行增强、原生搜索增强、真实网页预览、树状回复和视觉设置应用。
 - `src/content.css`：Material 3 风格 Token、原生条目材质和背景效果。
+- `src/topic-export.js`、`src/topic-export.css`：HTML / Markdown 帖子导出与对话框；转换来源及完整 MIT 声明保留在模块头部。
 - `src/options.html`、`src/options.js`、`src/options.css`：扩展设置页与工具栏弹窗。
 
 ## 开发命令
@@ -46,6 +47,8 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - Git 自动合并仅表示文本无冲突；整合后核对双方功能、调用点、配置和文档一致性，按受影响范围使用既有语法/差异检查及包加载预览，不新增或擅自运行测试。版本冲突统一采用整合者确定的正式版本，不简单取最大值后再逐工作树加一。
 
 ## 代码约定
+
+- 树楼层与 Boost 正文统一复用原站 `PostCookedHtml`，不另维护媒体/引用/代码等装饰规则；插件预览的树和原帖共用居中轨道。导出范围/请求/媒体引用约定以 `CONTEXT.md`「Topic Export」为权威。
 
 - 首版不引入运行时依赖或构建步骤；开发时可直接加载项目根目录，打包交付的验收必须使用 `dist/betterLD/`。
 - LinuxDo 原有 DOM 只做精确覆盖和可恢复替换；插件自有设置 UI 保持独立。

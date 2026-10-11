@@ -1,0 +1,198 @@
+/* betterLD 帖子导出：入口按钮与导出对话框。全部选择器限定在 betterld-export 命名空间内，不触碰正文样式。 */
+
+.betterld-export-trigger {
+  flex: none;
+  white-space: nowrap;
+}
+
+.betterld-export-trigger svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+/* 页脚缺失时入口落在标题块里，靠右对齐，避免和标题抢宽度。 */
+.betterld-export-trigger[data-betterld-export-host="title"] {
+  margin-inline-start: auto;
+}
+
+.betterld-export-dialog {
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  border-radius: 28px;
+  background: rgb(var(--betterld-surface-container-rgb));
+  color: var(--betterld-on-surface);
+  box-shadow: var(--betterld-shadow-level-3);
+  font-family: var(--betterld-font-family, inherit);
+  font-size: 14px;
+}
+
+.betterld-export-dialog::backdrop {
+  background: rgb(10 8 16 / 0.46);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.betterld-export-dialog:focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: var(--betterld-focus-offset);
+}
+
+.betterld-export-form {
+  display: grid;
+  gap: 16px;
+}
+
+.betterld-export-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.betterld-export-subject {
+  margin: 0;
+  color: var(--betterld-on-surface-variant);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.betterld-export-subject:empty {
+  display: none;
+}
+
+.betterld-export-field {
+  display: grid;
+  gap: 6px;
+}
+
+.betterld-export-field[hidden] {
+  display: none;
+}
+
+.betterld-export-label {
+  color: var(--betterld-on-surface-variant);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.betterld-export-select,
+.betterld-export-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.45);
+  border-radius: 12px;
+  background: rgb(var(--betterld-surface-rgb));
+  color: var(--betterld-on-surface);
+  font: inherit;
+  line-height: 1.4;
+}
+
+.betterld-export-select:focus-visible,
+.betterld-export-input:focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+
+.betterld-export-select:disabled,
+.betterld-export-input:disabled {
+  opacity: 0.5;
+}
+
+.betterld-export-note {
+  margin: 0;
+  color: var(--betterld-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.betterld-export-progress,
+.betterld-export-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.betterld-export-progress {
+  color: var(--betterld-on-surface-variant);
+}
+
+.betterld-export-progress:empty,
+.betterld-export-error:empty {
+  display: none;
+}
+
+.betterld-export-error {
+  color: var(--betterld-error);
+}
+
+.betterld-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.betterld-export-button {
+  min-height: 40px;
+  padding: 8px 20px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.betterld-export-button--primary {
+  border-color: transparent;
+  background: var(--betterld-primary);
+  color: var(--betterld-on-primary);
+}
+
+.betterld-export-button:focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+
+.betterld-export-button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.betterld-export-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 560px) {
+  .betterld-export-dialog {
+    width: calc(100vw - 24px);
+    padding: 20px;
+  }
+}
+
+@media (forced-colors: active) {
+  .betterld-export-dialog,
+  .betterld-export-select,
+  .betterld-export-input,
+  .betterld-export-button {
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .betterld-export-button--primary {
+    background: Highlight;
+    color: HighlightText;
+  }
+}

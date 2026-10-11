@@ -388,7 +388,6 @@
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
     root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
     root.style.setProperty("--betterld-sidebar-top-gap", `${config.sidebarTopGapPx}px`);
-    root.style.setProperty("--betterld-reply-quote-collapse-height", `${config.replyTreeQuoteCollapseHeightPx}px`);
     root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
     root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);
     root.style.setProperty("--betterld-shadow-level-2-hover", `0 ${4 * settings.shadowHeight}px 10px rgb(var(--betterld-shadow-color) / 0.12), 0 ${18 * settings.shadowHeight}px 36px rgb(var(--betterld-shadow-color) / 0.20)`);
@@ -3356,6 +3355,7 @@
   }
 
   function syncHomepage() {
+    syncTopicExport();
     syncExternalSearch();
     if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
     else if (isSearchPage()) syncNativeSearchResults();
@@ -3474,589 +3474,6 @@
 
   function topicReplyUrl(topicId, postNumber) {
     return `/t/topic/${topicId}/${postNumber}`;
-  }
-
-  // 与原站保持一致：cooked 由 Discourse 服务端生成并 sanitize，这里不再做客户端清理，
-  // 否则 iframe（B 站播放器等）、内联 SVG、表单、帖子自带样式等内容会与原站不符。
-  function replyCooked(markup) {
-    const doc = new DOMParser().parseFromString(String(markup || ""), "text/html");
-    doc.body.querySelectorAll("img").forEach((node) => {
-      node.loading = "lazy";
-    });
-    return enhanceReplyContent(doc.body);
-  }
-
-  // 原站的 callout / 剧透 / hashtag 由 Discourse 客户端 JS 增强，服务端 cooked 里没有对应结构，
-  // 树里也就拿不到原站的交互与样式。这里按原站 DOM 复刻（类名、data 属性、图标 sprite 照抄）。
-  const replySvgNamespace = "http://www.w3.org/2000/svg";
-  const replyCalloutPattern = /^\[!([A-Za-z]+)\]([+-]?)\s*(.*)$/s;
-
-  // 元素在游离状态下绑定事件，随 cooked 一起进树；树重建时会重新解析 → 自动重新绑定。
-  function replyIconElement(doc, icon, className) {
-    const svg = doc.createElementNS(replySvgNamespace, "svg");
-    svg.setAttribute("class", className);
-    svg.setAttribute("width", "1em");
-    svg.setAttribute("height", "1em");
-    svg.setAttribute("aria-hidden", "true");
-    const use = doc.createElementNS(replySvgNamespace, "use");
-    use.setAttribute("href", `#${icon}`);
-    svg.append(use);
-    return svg;
-  }
-
-  function replyCalloutType(name) {
-    const key = String(name || "").toLowerCase();
-    const types = config.replyTreeCalloutTypes;
-    if (types[key]) return key;
-    return Object.keys(types).find((type) => types[type].aliases.includes(key)) || "";
-  }
-
-  // #086ddd → rgba(8, 109, 221, 0.1)：原站把类型色按 10% 不透明度铺在引用块背景上。
-  function replyCalloutBackground(hex) {
-    const digits = String(hex).replace(/^#/, "");
-    const expanded = digits.length === 3 ? digits.replace(/./g, (digit) => digit + digit) : digits;
-    const value = Number.parseInt(expanded, 16) || 0;
-    return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, 0.1)`;
-  }
-
-  function enhanceCallouts(root) {
-    const doc = root.ownerDocument;
-    root.querySelectorAll("blockquote:not([data-callout-type])").forEach((block) => {
-      const lead = block.firstElementChild;
-      if (!lead || lead.tagName !== "P") return;
-      const match = replyCalloutPattern.exec(lead.textContent);
-      const type = match && replyCalloutType(match[1]);
-      if (!type) return;
-      const meta = config.replyTreeCalloutTypes[type];
-      const lines = String(match[3]).split("\n");
-      const title = lines[0].trim() || type.charAt(0).toUpperCase() + type.slice(1);
-      const rest = lines.slice(1).join("\n").trim();
-      // 首行 p 被消费：整段都是标题时删掉，标题后还有内容时留下剩余文本。
-      if (rest) lead.textContent = rest; else lead.remove();
-      const collapsed = match[2] === "-";
-      const header = doc.createElement("div");
-      header.className = "callout-title";
-      header.style.color = meta.color;
-      header.setAttribute("role", "button");
-      header.setAttribute("tabindex", "0");
-      const icon = doc.createElement("span");
-      icon.className = "callout-icon";
-      icon.append(replyIconElement(doc, meta.icon, `fa d-icon d-icon-${meta.icon} svg-icon fa-width-auto svg-string`));
-      const inner = doc.createElement("span");
-      inner.className = "callout-title-inner";
-      inner.textContent = title;
-      const fold = doc.createElement("span");
-      fold.className = collapsed ? "callout-fold is-collapsed" : "callout-fold";
-      fold.append(replyIconElement(doc, "chevron-down", "fa d-icon d-icon-chevron-down svg-icon fa-width-auto svg-string"));
-      header.append(icon, inner, fold);
-      const content = doc.createElement("div");
-      content.className = "callout-content";
-      content.append(...block.childNodes);
-      block.className = collapsed ? "callout is-collapsible is-collapsed" : "callout is-collapsible";
-      block.setAttribute("dir", "auto");
-      block.setAttribute("data-callout-type", type);
-      block.style.backgroundColor = replyCalloutBackground(meta.color);
-      block.append(header, content);
-      const setCollapsed = (value) => {
-        block.classList.toggle("is-collapsed", value);
-        fold.classList.toggle("is-collapsed", value);
-      };
-      header.addEventListener("click", () => setCollapsed(!block.classList.contains("is-collapsed")));
-      header.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        setCollapsed(!block.classList.contains("is-collapsed"));
-      });
-    });
-  }
-
-  function replySpoilerSetState(node, revealed) {
-    node.classList.toggle("spoiler-blurred", !revealed);
-    node.setAttribute("data-spoiler-state", revealed ? "revealed" : "blurred");
-    node.setAttribute("aria-expanded", String(revealed));
-    node.setAttribute("aria-label", revealed ? config.replyTreeSpoilerLabels.revealed : config.replyTreeSpoilerLabels.blurred);
-    [...node.children].forEach((child) => {
-      if (revealed) child.removeAttribute("aria-hidden"); else child.setAttribute("aria-hidden", "true");
-    });
-  }
-
-  function enhanceSpoilers(root) {
-    root.querySelectorAll("div.spoiler:not([data-spoiler-state])").forEach((node) => {
-      // 原站也移除了 spoiler 类，模糊只由 .spoiler-blurred 提供。
-      node.classList.remove("spoiler");
-      node.classList.add("spoiled", "spoiler-blurred");
-      node.setAttribute("dir", "auto");
-      node.setAttribute("role", "button");
-      node.setAttribute("tabindex", "0");
-      node.setAttribute("aria-live", "polite");
-      replySpoilerSetState(node, false);
-      const toggle = () => replySpoilerSetState(node, node.getAttribute("data-spoiler-state") !== "revealed");
-      node.addEventListener("click", toggle);
-      node.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        toggle();
-      });
-    });
-  }
-
-  function enhanceHashtags(root) {
-    const doc = root.ownerDocument;
-    root.querySelectorAll("a.hashtag-cooked[data-icon]").forEach((link) => {
-      const placeholder = link.querySelector(".hashtag-icon-placeholder");
-      if (!placeholder) return;
-      const icon = String(link.getAttribute("data-icon") || "").trim();
-      const name = /^[a-z0-9-]+$/i.test(icon) ? icon : "tag";
-      placeholder.replaceWith(replyIconElement(doc, name, `fa d-icon d-icon-${name} svg-icon`));
-    });
-  }
-
-  // ---- 浮层工厂（代码全屏 / 图片灯箱共用）----
-
-  // 不再需要猜「哪一个 open dialog 在最上层」；遮罩交给 ::backdrop（仅 modal 生效）。
-
-  // owner 是浮层所属的宿主 dialog（回复树在页面里时为 null）：宿主关闭时一并收掉，不留悬空浮层。
-  const replyOverlays = new Set();
-
-  function closeReplyOverlaysOwnedBy(owner) {
-    [...replyOverlays].forEach((record) => {
-      if (record.owner === owner) {
-        record.close();
-      }
-    });
-  }
-
-  function openReplyOverlay(className, ariaLabel, build, owner = null) {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const overlay = document.createElement("dialog");
-    overlay.className = `betterld-reply-overlay ${className}`;
-    overlay.setAttribute("aria-label", ariaLabel);
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "betterld-reply-overlay__close";
-    close.setAttribute("aria-label", "关闭");
-    close.textContent = "✕";
-    const content = document.createElement("div");
-    content.className = "betterld-reply-overlay__content";
-    const modal = typeof overlay.showModal === "function";
-    let closed = false;
-    // modal dialog 的 Esc 由浏览器派发给最上层这一个（下面的抽屉收不到），只有非 modal 的老路径要自己接。
-    const onKeydown = (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeOverlay();
-    };
-    const finishClose = () => {
-      // 幂等：close 事件与同步收尾路径可能都走到这里，remove/focus 只跑一次。
-      if (closed) return;
-      closed = true;
-      replyOverlays.delete(record);
-      document.removeEventListener("keydown", onKeydown, true);
-      overlay.remove();
-      if (opener && opener.isConnected) {
-        opener.focus();
-      }
-    };
-    // 幂等：Esc、点遮罩、宿主一起关闭等路径重复触发时只收一次；close 事件（modal 的 Esc 也会走到）统一收尾。
-    const closeOverlay = () => {
-      if (closed) return;
-      if (modal && overlay.open) {
-        overlay.close();
-        return;
-      }
-      overlay.removeAttribute("open");
-      finishClose();
-    };
-    const record = { overlay, owner, close: closeOverlay };
-    replyOverlays.add(record);
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay || event.target === content) closeOverlay();
-    });
-    overlay.addEventListener("close", finishClose);
-    close.addEventListener("click", closeOverlay);
-    overlay.append(close, content);
-    document.body.append(overlay);
-    if (modal) {
-      overlay.showModal();
-    } else {
-      overlay.classList.add("betterld-reply-overlay--fallback");
-      overlay.setAttribute("open", "");
-      document.addEventListener("keydown", onKeydown, true);
-    }
-    build(content, closeOverlay, close);
-    close.focus();
-    return overlay;
-  }
-
-  // ---- 代码块按钮（照抄原站 DOM：wrapper + 复制 / 全屏）----
-  const replyCodeCopyLabel = "将代码复制到剪贴板";
-  const replyCodeFullscreenLabel = "全屏显示代码";
-  const replyCodeCopiedLabel = "已复制";
-  const replyCodeCopiedMs = 2000;
-
-  function replyCodeLanguage(code) {
-    const found = [...code.classList].find((name) => name.startsWith("lang-"));
-    return found ? found.slice(5) : "plaintext";
-  }
-
-  function replyCodeButton(doc, icon, className, label, onClick) {
-    const button = doc.createElement("button");
-    button.type = "button";
-    button.className = `btn nohighlight ${className} btn-flat`;
-    button.setAttribute("aria-label", label);
-    button.append(replyIconElement(doc, icon, `fa d-icon d-icon-${icon} svg-icon fa-width-auto svg-string`));
-    button.addEventListener("click", onClick);
-    return button;
-  }
-
-  async function copyReplyCode(code, button, label) {
-    try {
-      await navigator.clipboard.writeText(code.textContent);
-    } catch (error) {
-      console.warn("[betterLD] 复制代码失败", error);
-      return;
-    }
-    button.setAttribute("aria-label", replyCodeCopiedLabel);
-    button.setAttribute("title", replyCodeCopiedLabel);
-    window.setTimeout(() => {
-      button.setAttribute("aria-label", label);
-      button.removeAttribute("title");
-    }, replyCodeCopiedMs);
-  }
-
-  function openReplyCodeFullscreen(code) {
-    openReplyOverlay("betterld-reply-overlay--code", replyCodeFullscreenLabel, (content) => {
-      const pre = document.createElement("pre");
-      pre.className = "betterld-reply-code-fullscreen__code";
-      const clone = document.createElement("code");
-      clone.textContent = code.textContent;
-      pre.append(clone);
-      content.append(pre);
-    }, code.closest("dialog"));
-  }
-
-  // 高亮交给主世界桥接（页面全局没有 hljs）；pending 属性既是判重也是给桥接的选择器。
-  let replyHighlightTimer = 0;
-  let replyHighlightWarned = false;
-
-  function requestReplyHighlight() {
-    if (replyHighlightTimer) return;
-    replyHighlightTimer = window.setTimeout(() => {
-      replyHighlightTimer = 0;
-      flushReplyHighlight();
-    }, 100);
-  }
-
-  async function flushReplyHighlight() {
-    if (!document.querySelector("[data-betterld-highlight-pending]")) return;
-    try {
-      await loadPageRefreshBridge();
-    } catch (error) {
-      if (!replyHighlightWarned) {
-        replyHighlightWarned = true;
-        console.warn("[betterLD] 代码高亮桥接不可用", error);
-      }
-      return;
-    }
-    document.dispatchEvent(new CustomEvent("betterld:highlight-code", {
-      detail: JSON.stringify({ id: crypto.randomUUID() })
-    }));
-  }
-
-  function enhanceCodeBlocks(root) {
-    const doc = root.ownerDocument;
-    root.querySelectorAll("pre > code").forEach((code) => {
-      const pre = code.parentElement;
-      if (!pre || pre.classList.contains("codeblock-buttons")) return;
-      const language = replyCodeLanguage(code);
-      pre.classList.add("codeblock-buttons");
-      code.classList.add("hljs", `language-${language}`);
-      code.setAttribute("data-highlighted", "yes");
-      code.setAttribute("data-betterld-highlight-pending", "yes");
-      const wrapper = doc.createElement("div");
-      wrapper.className = "codeblock-button-wrapper";
-      wrapper.style.right = "0px";
-      const copyButton = replyCodeButton(doc, "copy", "copy-cmd", replyCodeCopyLabel, () => copyReplyCode(code, copyButton, replyCodeCopyLabel));
-      const fullscreenButton = replyCodeButton(doc, "discourse-expand", "fullscreen-cmd", replyCodeFullscreenLabel, () => openReplyCodeFullscreen(code));
-      wrapper.append(copyButton, fullscreenButton);
-      pre.prepend(wrapper);
-    });
-    requestReplyHighlight();
-  }
-
-  // ---- 图片灯箱（复用浮层工厂；原站 PhotoSwipe 绑在原站容器上，树里的点击不会触发）----
-  const replyLightboxClassName = "betterld-reply-overlay--image";
-  const replyLightboxLabel = "图片预览";
-  const replyLightboxErrorText = "图片加载失败";
-
-  function openReplyLightbox(anchor) {
-    const source = anchor.querySelector("img");
-    openReplyOverlay(replyLightboxClassName, replyLightboxLabel, (content, closeOverlay, closeButton) => {
-      const image = document.createElement("img");
-      image.className = "betterld-reply-lightbox__image";
-      image.src = anchor.href;
-      image.alt = (source && source.alt) || anchor.title || "";
-      image.addEventListener("error", () => {
-        // 不静默：加载失败时用一行文本替换内容，浮层仍可关闭（焦点交给关闭按钮）。
-        const failure = document.createElement("p");
-        failure.className = "betterld-reply-lightbox__error";
-        failure.setAttribute("role", "alert");
-        failure.textContent = replyLightboxErrorText;
-        content.replaceChildren(failure);
-        closeButton.focus();
-      });
-      content.replaceChildren(image);
-    }, anchor.closest("dialog"));
-  }
-
-  function enhanceLightboxes(root) {
-    root.querySelectorAll("a.lightbox").forEach((anchor) => {
-      if (anchor.hasAttribute("data-betterld-lightbox")) return;
-      const href = anchor.getAttribute("href");
-      if (!href) return;
-      anchor.setAttribute("data-betterld-lightbox", "1");
-      anchor.addEventListener("click", (event) => {
-        // 修饰键与非左键保持浏览器原生行为（新标签页、下载、菜单）。
-        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        openReplyLightbox(anchor);
-      });
-    });
-  }
-
-  // ---- 引用折叠 ----
-  // cooked 阶段元素游离于 DOMParser 文档（offsetHeight 恒为 0），只能在挂载后量高度，
-  // 所以这里登记待测 aside，由定时器在挂载后补测（不改挂载点代码，侵入最小）。
-  const replyQuotePending = new Set();
-  const replyQuoteMeasureWindowMs = 5000;
-  const replyQuoteMeasureIntervalMs = 200;
-  let replyQuoteMeasureTimer = 0;
-  let replyQuoteMeasureDeadline = 0;
-
-  function replyQuoteBlockquote(aside) {
-    return [...aside.children].find((child) => child.tagName === "BLOCKQUOTE") || null;
-  }
-
-  function replyQuoteToggle(aside, block) {
-    const doc = aside.ownerDocument;
-    if (!block.id) block.id = `betterld-quote-${crypto.randomUUID()}`;
-    const host = aside.querySelector(".title") || aside;
-    host.setAttribute("data-can-toggle-quote", "true");
-    host.setAttribute("data-has-quote-controls", "true");
-    let controls = host.querySelector(".quote-controls");
-    if (!controls) {
-      controls = doc.createElement("div");
-      controls.className = "quote-controls";
-      host.append(controls);
-    }
-    const button = doc.createElement("button");
-    button.type = "button";
-    button.className = "btn no-text btn-flat quote-toggle";
-    button.setAttribute("aria-controls", block.id);
-    button.append(replyIconElement(doc, "chevron-down", "fa d-icon d-icon-chevron-down svg-icon fa-width-auto svg-string"));
-    aside.setAttribute("role", "none");
-    // 按钮属性沿用原站 quote-toggle 的写法（展开态 aria-expanded=false + 标签「展开」），
-    // 真实的收放状态同时用 aside 上的 data-expanded 显式表达。
-    const setCollapsed = (collapsed) => {
-      if (collapsed) aside.setAttribute("data-betterld-quote-collapsed", "true");
-      else aside.removeAttribute("data-betterld-quote-collapsed");
-      aside.setAttribute("data-expanded", String(!collapsed));
-      button.setAttribute("aria-expanded", String(!collapsed));
-      const label = collapsed ? config.replyTreeQuoteToggleLabels.expand : config.replyTreeQuoteToggleLabels.collapse;
-      button.setAttribute("aria-label", label);
-      button.title = label;
-    };
-    button.addEventListener("click", (event) => {
-      // 原站主世界对 .quote-toggle 也有委托处理，这里拦住，避免它去动原站 DOM。
-      event.preventDefault();
-      event.stopPropagation();
-      setCollapsed(!aside.hasAttribute("data-betterld-quote-collapsed"));
-    });
-    setCollapsed(false);
-    controls.append(button);
-  }
-
-  function measureReplyQuoteCollapse() {
-    replyQuoteMeasureTimer = 0;
-    replyQuotePending.forEach((aside) => {
-      if (!aside.isConnected) return;
-      const block = replyQuoteBlockquote(aside);
-      replyQuotePending.delete(aside);
-      if (!block) return;
-      // 已带折叠态或已有原站按钮 → 跳过（幂等）。
-      if (aside.hasAttribute("data-betterld-quote-collapsed") || aside.querySelector(".quote-toggle")) return;
-      if (block.offsetHeight > config.replyTreeQuoteCollapseHeightPx) replyQuoteToggle(aside, block);
-    });
-    if (!replyQuotePending.size) {
-      replyQuoteMeasureDeadline = 0;
-      return;
-    }
-    scheduleReplyQuoteCollapseMeasure(replyQuoteMeasureIntervalMs);
-  }
-
-  function scheduleReplyQuoteCollapseMeasure(delay) {
-    if (replyQuoteMeasureTimer) return;
-    if (!replyQuoteMeasureDeadline) replyQuoteMeasureDeadline = Date.now() + replyQuoteMeasureWindowMs;
-    if (Date.now() >= replyQuoteMeasureDeadline) {
-      // 超过测量窗口（例如容器一直隐藏、高度恒为 0）就放弃，不挂按钮。
-      replyQuotePending.clear();
-      replyQuoteMeasureDeadline = 0;
-      return;
-    }
-    replyQuoteMeasureTimer = window.setTimeout(measureReplyQuoteCollapse, delay);
-  }
-
-  function trackReplyQuoteCollapse(root) {
-    root.querySelectorAll("aside.quote").forEach((aside) => {
-      if (aside.hasAttribute("data-betterld-quote-collapsed") || aside.querySelector(".quote-toggle")) return;
-      replyQuotePending.add(aside);
-    });
-    if (replyQuotePending.size) scheduleReplyQuoteCollapseMeasure(0);
-  }
-
-  // ---- 引用展开（复刻原站 quote-toggle 语义）----
-  // 原站给每个引用都配「展开」按钮（shouldDisplayToggleButton 只看被引用帖能否定位，与引用长度无关），
-  // 点开用被引用帖全文替换引用片段，再点恢复。所以这里不做任何高度阈值过滤。
-  const replyQuoteExpandFailPrefix = "引用展开失败";
-
-  function replyQuoteTreeStatus(aside) {
-    return aside.closest(".betterld-reply-tree")?.querySelector(".betterld-reply-tree__status") || null;
-  }
-
-  function replyQuoteIconClass(expanded) {
-    return `fa d-icon d-icon-chevron-${expanded ? "up" : "down"} svg-icon fa-width-auto svg-string`;
-  }
-
-  // 复用现有请求封装与冷却（CF 挑战 / 429 的停发逻辑都在里面），只在用户点击时才发。
-  async function fetchReplyQuotedPost(topicId, postNumber, isNeeded) {
-    if (!/^\d+$/.test(topicId) || !/^\d+$/.test(postNumber)) {
-      throw new Error("引用的被引用帖地址不完整");
-    }
-    const endpoint = new URL(`/posts/by_number/${topicId}/${postNumber}.json`, location.origin);
-    const data = await requestTopicResponse(endpoint.href, isNeeded);
-    const cooked = data?.cooked;
-    if (typeof cooked !== "string" || !cooked.trim()) throw new Error("被引用帖没有可显示的正文");
-    return cooked;
-  }
-
-  function enhanceQuotes(root) {
-    const doc = root.ownerDocument;
-    root.querySelectorAll("aside.quote[data-topic][data-post]").forEach((aside) => {
-      // 幂等：已挂过按钮（含旧的折叠按钮）就跳过，不重复挂。
-      if (aside.querySelector(".quote-toggle")) return;
-      const block = replyQuoteBlockquote(aside);
-      const title = aside.querySelector(".title");
-      if (!block || !title) return;
-      if (!block.id) block.id = `betterld-quote-${crypto.randomUUID()}`;
-      title.setAttribute("data-can-toggle-quote", "true");
-      title.setAttribute("data-has-quote-controls", "true");
-      let controls = title.querySelector(".quote-controls");
-      if (!controls) {
-        controls = doc.createElement("div");
-        controls.className = "quote-controls";
-        title.append(controls);
-      }
-      const button = doc.createElement("button");
-      button.type = "button";
-      button.className = "btn no-text btn-flat quote-toggle";
-      button.setAttribute("aria-controls", block.id);
-      button.append(replyIconElement(doc, "chevron-down", replyQuoteIconClass(false)));
-      controls.append(button);
-
-      let expanded = false;
-      let busy = false;
-      let snapshot = null;
-      let statusText = "";
-
-      const setState = (next) => {
-        expanded = next;
-        aside.setAttribute("data-expanded", String(next));
-        button.setAttribute("aria-expanded", String(next));
-        const label = next ? config.replyTreeQuoteExpandLabels.collapse : config.replyTreeQuoteExpandLabels.expand;
-        button.setAttribute("aria-label", label);
-        button.title = label;
-        const svg = button.querySelector("svg");
-        if (svg) svg.setAttribute("class", replyQuoteIconClass(next));
-        const use = button.querySelector("use");
-        if (use) use.setAttribute("href", `#${next ? "chevron-up" : "chevron-down"}`);
-      };
-
-      // 只在状态行还停在本功能写的那一句话时清理，避免盖掉树的加载提示。
-      const setStatus = (text) => {
-        const status = replyQuoteTreeStatus(aside);
-        if (!status) return;
-        if (!text && status.textContent !== statusText) return;
-        status.textContent = text;
-        statusText = text;
-      };
-
-      const toggle = async () => {
-        if (busy) return;
-        // 收起：还原展开前保存的原始内容（存的是节点本身，各增强器的事件监听一起留住）。
-        if (expanded) {
-          block.replaceChildren(...snapshot);
-          setState(false);
-          return;
-        }
-        busy = true;
-        button.disabled = true;
-        button.setAttribute("aria-busy", "true");
-        button.setAttribute("aria-label", config.replyTreeQuoteExpandLabels.busy);
-        button.title = config.replyTreeQuoteExpandLabels.busy;
-        const source = [...block.childNodes];
-        try {
-          const cooked = await fetchReplyQuotedPost(aside.dataset.topic, aside.dataset.post, () => aside.isConnected);
-          if (!aside.isConnected) return;
-          snapshot = source;
-          // 走完整 cooked 增强链：被引用帖里的图片 / 代码块 / 嵌套引用照样可用。
-          block.replaceChildren(...replyCooked(cooked).childNodes);
-          setState(true);
-          setStatus("");
-        } catch (error) {
-          // 不静默：按钮转成「重试」文案，状态行写清原因，内容保持原样、状态仍是收起。
-          console.warn("[betterLD] 展开引用失败", error);
-          if (!aside.isConnected) return;
-          button.setAttribute("aria-label", config.replyTreeQuoteExpandLabels.failed);
-          button.title = config.replyTreeQuoteExpandLabels.failed;
-          setStatus(`${replyQuoteExpandFailPrefix}：${error.message}`);
-        } finally {
-          busy = false;
-          button.disabled = false;
-          button.removeAttribute("aria-busy");
-        }
-      };
-      const activate = () => {
-        toggle().catch((error) => console.warn("[betterLD] 展开引用失败", error));
-      };
-
-      button.addEventListener("click", (event) => {
-        // 原站主世界对 .quote-toggle 也有委托处理，这里拦住，避免它去动原站 DOM。
-        event.preventDefault();
-        event.stopPropagation();
-        activate();
-      });
-      title.addEventListener("click", (event) => {
-        // 对齐原站 onClickTitle：点链接或 .quote-controls 内部不切换。
-        const target = event.target instanceof Element ? event.target : null;
-        if (!target || target.closest("a") || target.closest(".quote-controls")) return;
-        activate();
-      });
-      setState(false);
-    });
-  }
-
-  function enhanceReplyContent(root) {
-    if (!root) return root;
-    enhanceCallouts(root);
-    enhanceSpoilers(root);
-    enhanceHashtags(root);
-    enhanceCodeBlocks(root);
-    enhanceLightboxes(root);
-    // 展开按钮先挂（原站语义是每个引用都有）；旧的按高度折叠只补没有按钮的引用，自然让位给展开。
-    enhanceQuotes(root);
-    trackReplyQuoteCollapse(root);
-    return root;
   }
 
   function showNativeReply(tree) {
@@ -4680,7 +4097,10 @@
         }
       }
       const cooked = createElement("span", "discourse-boosts__cooked");
-      cooked.append(...replyCooked(boost.cooked).childNodes);
+      cooked.dataset.betterldCookedId = crypto.randomUUID();
+      cooked.betterldCookedPost = { ...post, cooked: boost.cooked, embeddedPost: true };
+      const parsed = new DOMParser().parseFromString(boost.cooked, "text/html");
+      cooked.append(...parsed.body.childNodes);
       bubble.append(cooked);
       list.append(bubble);
     }
@@ -4842,8 +4262,10 @@
       const previousBody = existing?.firstElementChild.querySelector(".betterld-reply-tree__body");
       let cooked = previousBody?.querySelector(":scope > .betterld-reply-tree__cooked");
       if (!cooked || previous.cooked !== post.cooked) {
-        cooked = createElement("div", "betterld-reply-tree__cooked cooked");
-        cooked.append(...replyCooked(post.cooked).childNodes);
+        cooked = createElement("div", "betterld-reply-tree__cooked");
+        cooked.dataset.betterldCookedId = crypto.randomUUID();
+        const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
+        cooked.append(...parsed.body.childNodes);
       }
       body.append(head);
       const actions = createElement("div", "betterld-reply-tree__actions");
@@ -5004,6 +4426,10 @@
     if (!list.parentElement) tree.content.append(list);
     tree.renderedPosts = renderedPosts;
     if (tree.bridgeReady) {
+      const bodies = [...tree.content.querySelectorAll("[data-betterld-cooked-id]")]
+        .filter((element) => !element.dataset.betterldCookedMounted)
+        .map((element) => ({ id: element.dataset.betterldCookedId, post: element.betterldCookedPost || byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
+      if (bodies.length) document.dispatchEvent(new CustomEvent("betterld:reply-cooked-mount", { detail: JSON.stringify({ topicId: tree.topicId, bodies }) }));
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
     if (anchor && !tree.contentContainer.hidden) {
@@ -5026,6 +4452,95 @@
         }
       }, config.replyTreeDeepLinkDelayMs);
     }
+  }
+
+  async function exportTopicSnapshot(topicId) {
+    await loadPageRefreshBridge();
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      const finish = (payload, error) => {
+        clearTimeout(timer);
+        document.removeEventListener("betterld:export-topic-result", onResult);
+        if (error) reject(new Error(error)); else resolve(payload);
+      };
+      const onResult = (event) => {
+        const result = JSON.parse(event.detail);
+        if (result.id === id) finish(result.payload, result.error);
+      };
+      const timer = setTimeout(() => finish(null, "原站导出数据读取超时"), config.topicExport.bridgeTimeoutMs);
+      document.addEventListener("betterld:export-topic-result", onResult);
+      document.dispatchEvent(new CustomEvent("betterld:export-topic-request", { detail: JSON.stringify({ id, topicId }) }));
+    });
+  }
+
+  async function readExportTopic({ scope, postNumbers, onProgress, isActive }) {
+    const topicId = topicIdFromPath();
+    const active = () => isActive() && topicIdFromPath() === topicId;
+    const assertActive = () => {
+      if (!active()) throw new DOMException("导出已取消或主题已切换", "AbortError");
+    };
+    assertActive();
+    const snapshot = await exportTopicSnapshot(topicId);
+    assertActive();
+    const posts = new Map(snapshot.post_stream.posts.map((post) => [post.post_number, post]));
+    const preloaded = preloadedReplyTopic(topicId);
+    for (const post of preloaded?.post_stream?.posts || []) if (!posts.has(post.post_number)) posts.set(post.post_number, post);
+    if (scope === "all") {
+      // summary/user 筛选的流不是全帖流，显式读取无筛选的主题快照。
+      const full = snapshot.filtered ? await requestTopicResponse(`/t/${topicId}.json`, active) : snapshot;
+      assertActive();
+      const ids = full.post_stream?.stream;
+      if (!Array.isArray(ids) || !ids.length) throw new Error("原站完整楼层列表不可用");
+      for (const post of full.post_stream.posts) posts.set(post.post_number, post);
+      const loadedIds = new Set([...posts.values()].map((post) => String(post.id)));
+      const missing = ids.filter((id) => !loadedIds.has(String(id)));
+      onProgress(`已读取 ${ids.length - missing.length}/${ids.length} 个帖子`);
+      for (let offset = 0; offset < missing.length; offset += config.replyTreePageSize) {
+        const batch = missing.slice(offset, offset + config.replyTreePageSize);
+        const params = new URLSearchParams();
+        batch.forEach((id) => params.append("post_ids[]", id));
+        const data = await requestTopicResponse(`/t/${topicId}/posts.json?${params}`, active);
+        assertActive();
+        if (!Array.isArray(data?.post_stream?.posts)) throw new Error("导出分页正文格式不正确");
+        const received = new Set(data.post_stream.posts.map((post) => String(post.id)));
+        if (batch.some((id) => !received.has(String(id)))) throw new Error("原站返回了不完整的导出分页，请重新导出");
+        data.post_stream.posts.forEach((post) => posts.set(post.post_number, post));
+        onProgress(`已读取 ${ids.length - missing.length + Math.min(offset + batch.length, missing.length)}/${ids.length} 个帖子`);
+      }
+      const wanted = new Set(ids.map(String));
+      for (const [number, post] of posts) if (!wanted.has(String(post.id))) posts.delete(number);
+      if (posts.size !== ids.length) throw new Error("完整帖子数量不一致，已停止导出");
+    } else {
+      if (!Array.isArray(postNumbers) || !postNumbers.length || postNumbers.some((number) => !Number.isSafeInteger(number) || number < 1)) {
+        throw new Error("请选择有效的导出楼层");
+      }
+      const numbers = scope === "main" ? [1] : [...new Set(postNumbers)];
+      for (const number of numbers) {
+        assertActive();
+        if (!posts.has(number)) {
+          const post = await requestTopicResponse(`/posts/by_number/${topicId}/${number}.json`, active);
+          assertActive();
+          if (post?.post_number !== number || Number(post.topic_id) !== Number(topicId)) throw new Error(`#${number} 楼正文不属于当前主题`);
+          posts.set(number, post);
+        }
+        onProgress(`正在整理 #${number} 楼`);
+      }
+      const wanted = new Set(numbers);
+      for (const number of posts.keys()) if (!wanted.has(number)) posts.delete(number);
+    }
+    assertActive();
+    const selected = [...posts.values()].sort((a, b) => a.post_number - b.post_number);
+    if (selected.some((post) => typeof post.cooked !== "string" || !post.cooked.trim())) throw new Error("所选楼层正文为空或不可读取，已停止导出");
+    return {
+      topic: { title: snapshot.title, posts: selected },
+      topicInfo: { id: topicId, origin: location.origin, originalUrl: new URL(`/t/topic/${topicId}`, location.origin).href },
+      exportMode: state.replyTree?.topicId === topicId && state.replyTreeNativeTopicId !== topicId ? "nest" : "flat"
+    };
+  }
+
+  function syncTopicExport() {
+    const title = document.querySelector("#topic-title h1")?.textContent;
+    globalThis.BETTERLD_EXPORT.sync({ topicId: title ? topicIdFromPath() : "", title: cleanText(title), readTopic: readExportTopic });
   }
 
   function preloadedReplyTopic(topicId) {

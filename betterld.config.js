@@ -57,6 +57,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestMinIntervalMs: 800,
   topicRequestWindowMs: 8000,
   topicRequestMaxPerWindow: 10,
+  topicExport: Object.freeze({ filenamePrefix: "linuxdo", filenameTitleMaxLength: 80, objectUrlRevokeMs: 3000, bridgeTimeoutMs: 1500, htmlMaxDepth: 8, maxRangePosts: 10000 }),
   replyTreePageSize: 20,
   replyTreeLoadAheadPx: 400,
   replyTreeTimeRefreshMs: 60000,
@@ -72,46 +73,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   replyTreeReactionHoverMs: 400,
   replyTreeReactionUsersPageSize: 30,
   replyTreeReactionSummaryLimit: 3,
-  // 树内长引用折叠：只有 blockquote 高度超过该值的 aside.quote 才补折叠按钮
-  // （原站折叠行为未能复刻，按自建方案收放，见内容脚本 syncReplyQuoteCollapse）。
-  replyTreeQuoteCollapseHeightPx: 420,
   replyTreeEmojiBaseUrl: "https://cdn.ldstatic.com/images/emoji/",
   replyTreeCustomEmojiUrls: Object.freeze({
     tieba_087: "https://cdn3.ldstatic.com/original/3X/2/e/2e09f3a3c7b27eacbabe9e9614b06b88d5b06343.png?v=15",
     bili_057: "https://cdn3.ldstatic.com/original/3X/1/a/1a9f6c30e88a7901b721fffc1aaeec040f54bdf3.png?v=15"
-  }),
-  // 原站的 callout / 剧透 / hashtag 由 Discourse 客户端 JS 增强，cooked 里没有这些结构。
-  // 树内按原站 DOM 复刻（类名、data 属性、图标 sprite 均照抄），结构一致后原站 CSS 自动生效。
-  replyTreeCalloutTypes: Object.freeze({
-    note: Object.freeze({ aliases: Object.freeze([]), icon: "far-pen-to-square", color: "#086ddd" }),
-    abstract: Object.freeze({ aliases: Object.freeze(["summary", "tldr"]), icon: "far-clipboard", color: "#00bfbc" }),
-    info: Object.freeze({ aliases: Object.freeze([]), icon: "far-lightbulb", color: "#027aff" }),
-    todo: Object.freeze({ aliases: Object.freeze([]), icon: "far-circle-check", color: "#027aff" }),
-    tip: Object.freeze({ aliases: Object.freeze(["hint", "important"]), icon: "fire-flame-curved", color: "#00bfbc" }),
-    success: Object.freeze({ aliases: Object.freeze(["check", "done"]), icon: "check", color: "#44cf6e" }),
-    question: Object.freeze({ aliases: Object.freeze(["help", "faq"]), icon: "far-circle-question", color: "#ec7500" }),
-    warning: Object.freeze({ aliases: Object.freeze(["caution", "attention"]), icon: "triangle-exclamation", color: "#ec7500" }),
-    failure: Object.freeze({ aliases: Object.freeze(["fail", "missing"]), icon: "xmark", color: "#e93147" }),
-    danger: Object.freeze({ aliases: Object.freeze(["error"]), icon: "bolt", color: "#e93147" }),
-    bug: Object.freeze({ aliases: Object.freeze([]), icon: "bug", color: "#e93147" }),
-    example: Object.freeze({ aliases: Object.freeze([]), icon: "list", color: "#7852ee" }),
-    quote: Object.freeze({ aliases: Object.freeze(["cite"]), icon: "quote-left", color: "#9e9e9e" })
-  }),
-  replyTreeSpoilerLabels: Object.freeze({
-    blurred: "显示隐藏内容",
-    revealed: "隐藏隐藏内容"
-  }),
-  replyTreeQuoteToggleLabels: Object.freeze({
-    expand: "展开",
-    collapse: "收起"
-  }),
-  // 引用展开（复刻原站 quote-toggle：点击加载被引用帖全文替换引用片段，再点恢复）。
-  // 与上面的「引用折叠」是两套互不影响的功能，文案独立。
-  replyTreeQuoteExpandLabels: Object.freeze({
-    expand: "展开",
-    collapse: "收起",
-    busy: "正在展开",
-    failed: "展开失败，点击重试"
   }),
   pageRefreshMinIntervalMs: 3000,
   pageRefreshTimeoutMs: 30000,

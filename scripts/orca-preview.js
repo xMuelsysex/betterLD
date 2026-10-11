@@ -583,6 +583,13 @@ function buildInjection(port) {
   };
   injectStyle(document, nonce);
 
+  runScript(await sourceText("src/external-search.js"));
+  runScript(await sourceText("src/topic-library.js"));
+  runScript(await sourceText("src/topic-export.js"));
+  const moduleStyle = document.createElement("style");
+  moduleStyle.nonce = nonce;
+  moduleStyle.textContent = await sourceText("src/topic-library.css") + "\\n" + await sourceText("src/topic-export.css");
+  document.head.append(moduleStyle);
   runScript(contentCode);
   if (!globalThis.__betterldContentScriptActive) {
     throw new Error("betterLD content script did not initialize");
