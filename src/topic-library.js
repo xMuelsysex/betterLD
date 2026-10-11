@@ -23,6 +23,7 @@
   function element(tag, className, text) {
     const node = document.createElement(tag);
     node.className = className;
+    node.dataset.betterldOwned = "true";
     if (text !== undefined) node.textContent = text;
     return node;
   }

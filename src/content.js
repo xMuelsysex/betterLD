@@ -37,7 +37,12 @@
     settingsResolved: false,
     activeStorageArea: "local",
     syncTimer: 0,
-    mutating: false,
+    routeTimer: 0,
+    dataTimer: 0,
+    positionTimer: 0,
+    pageSuspended: false,
+    metadataRoute: `${location.pathname}${location.search}`,
+    metadataGeneration: 0,
     wallpaperRequest: 0,
     wallpaperState: "default",
     wallpaperColorUrl: "",
@@ -592,8 +597,14 @@
     return inRange ? "dark" : "light";
   }
 
+  function setThemeProperty(name, value) {
+    const style = document.documentElement.style;
+    if (style.getPropertyValue(name) === value) return;
+    if (value) style.setProperty(name, value);
+    else style.removeProperty(name);
+  }
+
   function applyThemeTokens(settings) {
-    const root = document.documentElement;
     const fromWallpaper = settings.wallpaperThemeColor && state.wallpaperColor;
     const primary = fromWallpaper ? wallpaperPrimary() : settings.themeColor;
     root.dataset.betterldWallpaperColor = fromWallpaper ? "ready" : "manual";
@@ -601,19 +612,19 @@
     const primaryRgb = hexToRgb(primary);
     const backgroundRgb = hexToRgb(background);
     if (primaryRgb) {
-      root.style.setProperty("--betterld-primary", primary);
-      root.style.setProperty("--betterld-primary-rgb", primaryRgb.split(" ").join(", "));
-      root.style.setProperty("--betterld-on-primary", contrastColor(primary));
+      setThemeProperty("--betterld-primary", primary);
+      setThemeProperty("--betterld-primary-rgb", primaryRgb.split(" ").join(", "));
+      setThemeProperty("--betterld-on-primary", contrastColor(primary));
     }
-    if (root.dataset.betterldMode === "dark" && backgroundRgb) {
-      root.style.setProperty("--betterld-background-rgb", backgroundRgb);
+    if (document.documentElement.dataset.betterldMode === "dark" && backgroundRgb) {
+      setThemeProperty("--betterld-background-rgb", backgroundRgb);
     } else {
-      root.style.removeProperty("--betterld-background-rgb");
+      setThemeProperty("--betterld-background-rgb", "");
     }
     if (settings.useGradientThemeColorBackground && primary) {
-      root.style.setProperty("--betterld-default-wallpaper", `radial-gradient(circle at 18% 12%, color-mix(in srgb, ${primary} 42%, transparent), transparent 34%), radial-gradient(circle at 86% 84%, color-mix(in srgb, ${primary} 30%, transparent), transparent 38%), linear-gradient(135deg, color-mix(in srgb, ${primary} 26%, rgb(var(--betterld-background-rgb))), rgb(var(--betterld-background-rgb)))`);
+      setThemeProperty("--betterld-default-wallpaper", `radial-gradient(circle at 18% 12%, color-mix(in srgb, ${primary} 42%, transparent), transparent 34%), radial-gradient(circle at 86% 84%, color-mix(in srgb, ${primary} 30%, transparent), transparent 38%), linear-gradient(135deg, color-mix(in srgb, ${primary} 26%, rgb(var(--betterld-background-rgb))), rgb(var(--betterld-background-rgb)))`);
     } else {
-      root.style.removeProperty("--betterld-default-wallpaper");
+      setThemeProperty("--betterld-default-wallpaper", "");
     }
   }
 
@@ -644,7 +655,7 @@
         : configuredMode === "scheduled"
           ? scheduledMode(state.currentSettings)
           : detectedMode;
-    root.dataset.betterldMode = mode;
+    if (root.dataset.betterldMode !== mode) root.dataset.betterldMode = mode;
     applyThemeTokens(state.currentSettings);
   }
 
@@ -1046,8 +1057,9 @@
 
   function syncSearchLoadMoreButton(button) {
     const exhausted = searchResultsExhausted();
-    button.disabled = exhausted;
-    button.textContent = exhausted ? "没有更多结果" : "加载更多结果";
+    if (button.disabled !== exhausted) button.disabled = exhausted;
+    const text = exhausted ? "没有更多结果" : "加载更多结果";
+    if (button.textContent !== text) button.textContent = text;
   }
 
   function syncSearchLoadMore(settings, searchPage) {
@@ -1313,6 +1325,7 @@
   function createElement(tagName, className, text) {
     const element = document.createElement(tagName);
     element.className = className;
+    element.dataset.betterldOwned = "true";
     if (text !== undefined) {
       element.textContent = text;
     }
@@ -2411,23 +2424,30 @@
     }
     const consumers = [{ isNeeded }];
     const promise = scheduleMetadataRequest(async () => {
-      const response = await fetch(url, {
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: discourseAjaxHeaders
-      });
-      if (response.headers.get("cf-mitigated") === "challenge") {
-        holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
-        throw new Error("topic request blocked by the site challenge; cooling down");
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(new DOMException("主题请求超时，请重试", "TimeoutError")), config.topicRequestTimeoutMs);
+      try {
+        const response = await fetch(url, {
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: discourseAjaxHeaders,
+          signal: controller.signal
+        });
+        if (response.headers.get("cf-mitigated") === "challenge") {
+          holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
+          throw new Error("topic request blocked by the site challenge; cooling down");
+        }
+        if (response.status === 429) {
+          applyRateLimit(response.headers.get("Retry-After"));
+          throw new Error("topic request rate limited; cooling down");
+        }
+        if (!response.ok) {
+          throw new Error(`topic request failed with ${response.status}`);
+        }
+        return await response.json();
+      } finally {
+        clearTimeout(timer);
       }
-      if (response.status === 429) {
-        applyRateLimit(response.headers.get("Retry-After"));
-        throw new Error("topic request rate limited; cooling down");
-      }
-      if (!response.ok) {
-        throw new Error(`topic request failed with ${response.status}`);
-      }
-      return response.json();
     }, () => consumers.some((consumer) => consumer.isNeeded()))
       .finally(() => state.responseRequests.delete(url));
     state.responseRequests.set(url, { promise, consumers });
@@ -2609,21 +2629,26 @@
   // 站点自己已经为当前列表路由下载过主题数据（无限滚动 / 客户端路由切换），原站模型里就有，
   // 直接从那里读；读不到的字段保持缺失，不额外请求。
   async function syncTopicListMetadataFromSite() {
-    const routeHref = location.href;
+    const route = `${location.pathname}${location.search}`;
+    const generation = state.metadataGeneration;
     const payload = await requestSiteTopicListPayload();
-    if (!payload) {
+    if (!pageActive() || !payload) {
       return;
     }
     const entries = topicListEntries(payload);
-    if (!entries.length || location.href !== routeHref) {
+    if (!entries.length || `${location.pathname}${location.search}` !== route || state.metadataRoute !== route || state.metadataGeneration !== generation) {
       return;
+    }
+    const activeIds = new Set([...managedCards().map((card) => card.dataset.topicId), ...entries.map((entry) => entry.id)]);
+    for (const id of state.topicListMetadata.keys()) {
+      if (!activeIds.has(id)) state.topicListMetadata.delete(id);
     }
     entries.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
     applyTopicListMetadataToAll();
   }
 
   function syncTopicListMetadata() {
-    if (state.currentSettings.topicListAppearance !== "material") return;
+    if (!pageActive() || state.currentSettings.topicListAppearance !== "material") return;
     if (state.topicListSync) {
       state.topicListSyncAgain = true;
       return;
@@ -2636,7 +2661,7 @@
         applyTopicListMetadataToAll();
         await syncTopicListMetadataFromSite();
         // 缺失字段保持缺失；列表阅读不再补发逐主题请求。
-        uncoveredTopicCards().forEach((card) => setAuthor(card, "", "unavailable"));
+        if (pageActive()) uncoveredTopicCards().forEach((card) => setAuthor(card, "", "unavailable"));
       })
       .catch((error) => {
         console.warn("[betterLD] 主题列表元数据同步失败", error);
@@ -2857,11 +2882,11 @@
     } else {
       state.filterBin.delete(card);
     }
-    scheduleFilterBinRender();
+    if (hidden || state.filterBinHost) scheduleFilterBinRender();
   }
 
   function scheduleFilterBinRender() {
-    if (state.filterBinFrame) {
+    if (!pageActive() || state.filterBinFrame) {
       return;
     }
     state.filterBinFrame = window.requestAnimationFrame(() => {
@@ -2928,10 +2953,19 @@
     const host = ensureFilterBinHost();
     const count = String(state.filterBin.size);
     host.dataset.open = state.filterBinOpen ? "true" : "false";
-    host.querySelector(".betterld-filter-bin__count").textContent = count;
+    const countNode = host.querySelector(".betterld-filter-bin__count");
+    if (countNode.textContent !== count) countNode.textContent = count;
     host.querySelector(".betterld-filter-bin__trigger").setAttribute("aria-expanded", String(state.filterBinOpen));
-    host.querySelector(".betterld-filter-bin__title").textContent = `本页已过滤 ${count} 个主题`;
-    host.querySelector(".betterld-filter-bin__list").replaceChildren(...[...state.filterBin].map((card) => {
+    const title = host.querySelector(".betterld-filter-bin__title");
+    const text = `本页已过滤 ${count} 个主题`;
+    if (title.textContent !== text) title.textContent = text;
+    const list = host.querySelector(".betterld-filter-bin__list");
+    const cards = [...state.filterBin];
+    const previous = list.betterldCards;
+    if (previous?.length === cards.length && cards.every((card, index) =>
+      previous[index].card === card && previous[index].title === card.dataset.filterTitle)) return;
+    list.betterldCards = cards.map((card) => ({ card, title: card.dataset.filterTitle }));
+    list.replaceChildren(...cards.map((card) => {
       const item = createElement("li", "betterld-filter-bin__item");
       const text = createElement("span", "betterld-filter-bin__item-title", card.dataset.filterTitle || "未命名主题");
       const button = createElement("button", "betterld-filter-bin__action", "还原");
@@ -2945,7 +2979,7 @@
   function applyCardFilter(card) {
     const settings = topicFilterSettings();
     if (!settings.enabled) {
-      card.hidden = false;
+      if (card.hidden) card.hidden = false;
       card.dataset.filterState = "visible";
       applyChipHighlights(card, null);
       updateFilterBin(card, false, settings);
@@ -2971,7 +3005,7 @@
       visible = !verdict.match;
       filterState = visible ? "visible" : "hidden";
     }
-    card.hidden = !visible;
+    if (card.hidden === visible) card.hidden = !visible;
     card.dataset.filterState = filterState;
     applyChipHighlights(card, filterState === "highlight" ? settings : null);
     updateFilterBin(card, !visible, settings);
@@ -3313,7 +3347,9 @@
     const statusText = cleanText(row.querySelector(".topic-status-data")?.textContent);
     if (status.textContent !== statusText) status.textContent = statusText;
     status.hidden = !statusText;
-    main.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
+    const watched = main.querySelector('[data-betterld-badge="watched"]');
+    const unwatched = !state.visitedTopics.has(topic.id);
+    if (watched.hidden !== unwatched) watched.hidden = unwatched;
     applyTopicListMetadata(row);
     applyCardFilter(row);
     row.setAttribute("aria-busy", "false");
@@ -3342,19 +3378,15 @@
   }
 
   function syncNativeTopicLists() {
-    state.mutating = true;
-    try {
-      for (const [container, items] of topicContainers()) {
-        container.classList.add("betterld-topic-list");
-        items.forEach(enhanceTopicRow);
-      }
-    } finally {
-      state.mutating = false;
+    for (const [container, items] of topicContainers()) {
+      container.classList.add("betterld-topic-list");
+      items.forEach(enhanceTopicRow);
     }
     syncTopicListMetadata();
   }
 
   function syncHomepage() {
+    if (!pageActive()) return;
     syncTopicExport();
     syncExternalSearch();
     if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
@@ -3362,6 +3394,7 @@
     else if (isTopicListPage() || topicIdFromPath()) syncNativeTopicLists();
     globalThis.BETTERLD_LIBRARY.sync();
     applyListControlsScrollState();
+    scheduleFilterBinRender();
   }
 
   // 搜索标题、摘要和命中高亮继续由 Discourse 管理；只追加独立操作栏。
@@ -3414,7 +3447,9 @@
     }
     const metadata = state.topicListMetadata.get(topic.id);
     if (metadata) setTopicStats(row, metadata.stats);
-    main.querySelector('[data-betterld-badge="watched"]').hidden = !state.visitedTopics.has(topic.id);
+    const watched = main.querySelector('[data-betterld-badge="watched"]');
+    const unwatched = !state.visitedTopics.has(topic.id);
+    if (watched.hidden !== unwatched) watched.hidden = unwatched;
     applyCardFilter(row);
   }
 
@@ -3427,17 +3462,30 @@
     syncTopicListMetadata();
   }
 
+  function pageActive() {
+    return !document.hidden && !state.pageSuspended;
+  }
+
   function scheduleSync() {
-    if (state.syncTimer) {
-      clearTimeout(state.syncTimer);
-    }
+    if (!pageActive() || state.syncTimer) return;
     state.syncTimer = window.setTimeout(() => {
       state.syncTimer = 0;
+      if (!pageActive()) return;
+      checkRoute();
       syncHomepage();
+      syncSearchLoadMore(state.currentSettings, isSearchPage());
+      syncReplyTree();
     }, config.syncDebounceMs);
   }
 
   function updateRouteState() {
+    const route = `${location.pathname}${location.search}`;
+    if (state.metadataRoute !== route) {
+      state.metadataRoute = route;
+      state.metadataGeneration += 1;
+      state.topicListMetadata.clear();
+      state.topicListSyncAgain = Boolean(state.topicListSync);
+    }
     state.lastScrollY = pageScrollTop();
     state.listControlsCollapsed = false;
 
@@ -3484,6 +3532,7 @@
     tree.contentContainer.hidden = true;
     tree.toggle.hidden = false;
     tree.toggle.textContent = "返回树状回复";
+    syncReplyTreePosition();
   }
 
   function promptReplyTreeLogin(tree) {
@@ -3607,6 +3656,7 @@
   }
 
   function refreshReplyTreeTimes(tree) {
+    if (!pageActive()) return;
     const now = Date.now();
     tree.content.querySelectorAll("time[datetime]").forEach((date) => {
       const text = `${date.title} · ${replyTreeRelativeTime(Date.parse(date.dateTime), now)}`;
@@ -4067,6 +4117,12 @@
   }
 
   function renderReplyTree(tree) {
+    if (!pageActive()) {
+      tree.renderPending = true;
+      return;
+    }
+    tree.renderPending = false;
+    tree.positionedPost = null;
     const anchor = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].find((item) => {
       const bounds = item.querySelector('.betterld-reply-tree__card').getBoundingClientRect();
       return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
@@ -4379,6 +4435,7 @@
       tree.streamElement.dataset.betterldReplySource = "true";
       tree.topicContainer.dataset.betterldReplyTreeActive = "true";
     }
+    scheduleReplyPosition();
     tree.more.hidden = !tree.autoLoadPaused;
     if (!tree.targetLocated && byNumber.has(tree.targetPostNumber)) {
       tree.targetLocated = true;
@@ -4503,7 +4560,7 @@
   }
 
   async function loadReplyTree(tree, more = false) {
-    if (tree.busy) return;
+    if (!pageActive() || tree.busy) return;
     tree.busy = true;
     tree.more.disabled = true;
     tree.status.textContent = "正在读取回复…";
@@ -4559,7 +4616,7 @@
   }
 
   function maybeLoadMoreReplyTree(tree) {
-    if (state.replyTree !== tree || tree.busy || tree.autoLoadPaused || tree.contentContainer.hidden) return;
+    if (!pageActive() || state.replyTree !== tree || tree.busy || tree.autoLoadPaused || tree.contentContainer.hidden) return;
     if (!tree.stream.some((id) => !tree.loaded.has(id))) return;
     const boundary = tree.sentinel.getBoundingClientRect();
     if (boundary.top <= innerHeight + config.replyTreeLoadAheadPx && boundary.bottom >= 0) loadReplyTree(tree, true);
@@ -4569,15 +4626,21 @@
     if (tree.positionedPost && tree.positionedPost.scrollY === pageScrollTop()) return tree.positionedPost;
     tree.positionedPost = null;
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
-    const cards = [...tree.content.querySelectorAll('.betterld-reply-tree__card')];
-    const visible = cards.find((card) => card.getBoundingClientRect().bottom > headerHeight && card.getClientRects().length);
+    const cards = tree.content.querySelectorAll('.betterld-reply-tree__card');
+    let visible;
+    for (const card of cards) {
+      if (card.getClientRects().length && card.getBoundingClientRect().bottom > headerHeight) {
+        visible = card;
+        break;
+      }
+    }
     const postNumber = Number(visible?.parentElement.dataset.postNumber) || 1;
     const postId = [...tree.posts.values()].find((post) => post.post_number === postNumber)?.id;
     return { postNumber, postId };
   }
 
   async function syncReplyTreeData(tree) {
-    if (tree.busy || !tree.pendingData) return;
+    if (!pageActive() || tree.busy || !tree.pendingData) return;
     const data = tree.pendingData;
     tree.pendingData = null;
     if (data.error) {
@@ -4590,7 +4653,8 @@
     }
     if (!data.stream.length) return;
     const streamChanged = JSON.stringify(tree.stream) !== JSON.stringify(data.stream);
-    const added = data.stream.filter((id) => !tree.stream.includes(id));
+    const previousIds = new Set(tree.stream);
+    const added = data.stream.filter((id) => !previousIds.has(id));
     tree.stream = data.stream;
     const streamIds = new Set(tree.stream);
     const badgesChanged = mergeReplyUserBadges(tree, data.user_badges);
@@ -4700,7 +4764,14 @@
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
     if (!tree || data.topicId !== tree.topicId) return;
-    tree.pendingData = data;
+    if (data.error) {
+      tree.status.textContent = `回复实时同步失败：${data.error}`;
+      return;
+    }
+    // 忙碌/隐藏期间多个增量批次合并，后到的批次只覆盖同一楼，不能丢掉之前的其他楼。
+    const posts = new Map((tree.pendingData?.posts || []).map((post) => [post.id, post]));
+    for (const post of data.posts) posts.set(post.id, post);
+    tree.pendingData = { ...data, posts: [...posts.values()] };
     syncReplyTreeData(tree);
   });
   document.addEventListener("betterld:reply-author-status", (event) => {
@@ -4729,6 +4800,7 @@
   }
 
   function syncReplyTree() {
+    if (!pageActive()) return;
     const topicId = topicIdFromPath();
     document.body.dataset.betterldTopicDetail = String(Boolean(topicId));
     const stream = topicId && document.querySelector(".container.posts .post-stream");
@@ -4755,6 +4827,7 @@
     if (!topicId || !stream) return;
     if (state.replyTree) {
       const tree = state.replyTree;
+      if (tree.renderPending && !tree.busy) renderReplyTree(tree);
       if (tree.pendingJump && !tree.busy) {
         const { postNumber, postId, requestId } = tree.pendingJump;
         tree.pendingJump = null;
@@ -4762,13 +4835,11 @@
       }
       if (tree.liveIds.size && !tree.pendingData) tree.pendingData = { stream: tree.stream, posts: [] };
       syncReplyTreeData(tree);
-      // 续载由路由轮询驱动：交叉观察器只在可见性变化时回调一次，标签页隐藏、窗口遮挡或回调落在忙碌期间都会让续载链停住，
-      // 而新回复同步是定时驱动的，会继续追加末尾楼层，于是树里只剩首屏窗口加上最新楼层、中间楼层一直读不出来。
+      // 可见性恢复与低频数据核对仍补查续载，避免交叉观察器在忙碌时漏掉一次回调。
       maybeLoadMoreReplyTree(tree);
-      if (state.pageRefreshBridge && tree.bridgeReady) {
-        document.dispatchEvent(new CustomEvent('betterld:reply-sync', {
-          detail: JSON.stringify({ topicId, ...replyTreeCurrentPost(tree), active: !tree.contentContainer.hidden, timeoutMs: config.pageRefreshTimeoutMs })
-        }));
+      if (tree.bridgeReady) {
+        document.dispatchEvent(new CustomEvent("betterld:reply-sync", { detail: JSON.stringify({ topicId }) }));
+        syncReplyTreePosition();
       }
       return;
     }
@@ -4808,6 +4879,7 @@
     loadPageRefreshBridge().then(() => {
       if (state.replyTree !== tree) return;
       tree.bridgeReady = true;
+      scheduleSync();
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }).catch((error) => {
       console.error('[betterLD] reply bridge failed', error);
@@ -4848,22 +4920,79 @@
     }
   }
 
-  // 必须在 href 变化判断之前：设置窗口关闭后 URL 没变，但排序要立刻落下去
+  function syncReplyTreePosition() {
+    const tree = state.replyTree;
+    if (!pageActive() || !tree?.bridgeReady) return;
+    const active = !tree.contentContainer.hidden;
+    document.dispatchEvent(new CustomEvent("betterld:reply-position", {
+      detail: JSON.stringify({ topicId: tree.topicId, ...(active ? replyTreeCurrentPost(tree) : {}), active, timeoutMs: config.pageRefreshTimeoutMs })
+    }));
+  }
+
+  function scheduleReplyPosition() {
+    if (!pageActive() || !state.replyTree) return;
+    state.replyTree.positionedPost = null;
+    if (state.positionTimer) return;
+    state.positionTimer = window.setTimeout(() => {
+      state.positionTimer = 0;
+      syncReplyTreePosition();
+      if (state.replyTree) maybeLoadMoreReplyTree(state.replyTree);
+    }, config.syncDebounceMs);
+  }
+
+  // URL 探测保持轻量；列表/正文投影由相关 DOM 变化和独立慢核对驱动。
   function checkRoute() {
-    checkDailyWallpaper();
-    recordVisitedTopic();
-    syncReplyTree();
-    globalThis.BETTERLD_LIBRARY.sync();
-    syncExternalSearch();
+    if (!pageActive()) return;
     applyTopicSort();
     enforceRefreshScrollTop();
-    // 站点结果异步渲染，触点与结果列表出现得比注入晚，因此每次轮询重试一次状态同步
-    syncSearchLoadMore(state.currentSettings, isSearchPage());
-    if (location.href === state.currentHref) {
-      return;
-    }
+    if (location.href === state.currentHref) return;
     state.currentHref = location.href;
+    recordVisitedTopic();
     updateRouteState();
+    scheduleSync();
+  }
+
+  function syncPageData() {
+    if (!pageActive()) return;
+    checkRoute();
+    checkDailyWallpaper();
+    if (state.currentSettings.themeMode === "scheduled") applyColorMode();
+    syncReplyTree();
+    syncTopicListMetadata();
+    syncExternalSearch();
+    syncSearchLoadMore(state.currentSettings, isSearchPage());
+    if (state.pageRefreshBridge) document.dispatchEvent(new CustomEvent("betterld:host-cleanup"));
+  }
+
+  function pausePageWork() {
+    for (const key of ["routeTimer", "dataTimer"]) {
+      clearInterval(state[key]);
+      state[key] = 0;
+    }
+    clearTimeout(state.syncTimer);
+    clearTimeout(state.positionTimer);
+    state.syncTimer = 0;
+    state.positionTimer = 0;
+    cancelAnimationFrame(state.filterBinFrame);
+    state.filterBinFrame = 0;
+    if (state.replyTree) {
+      clearInterval(state.replyTree.relativeTimeTimer);
+      state.replyTree.relativeTimeTimer = 0;
+    }
+  }
+
+  function resumePageWork() {
+    if (!pageActive()) return;
+    if (!state.routeTimer) state.routeTimer = window.setInterval(checkRoute, config.routePollMs);
+    if (!state.dataTimer) state.dataTimer = window.setInterval(syncPageData, config.pageDataSyncMs);
+    checkRoute();
+    recordVisitedTopic();
+    scheduleSync();
+    if (state.replyTree) {
+      const tree = state.replyTree;
+      refreshReplyTreeTimes(tree);
+      if (!tree.relativeTimeTimer) tree.relativeTimeTimer = setInterval(() => refreshReplyTreeTimes(tree), config.replyTreeTimeRefreshMs);
+    }
   }
 
   document.addEventListener("click", (event) => {
@@ -4982,13 +5111,50 @@
     }
   });
 
+  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
+  function ownedNode(node) {
+    const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return Boolean(element?.closest("[data-betterld-owned], .betterld-topic-row__info, .betterld-topic-empty"));
+  }
+
+  function sourceMutation(record) {
+    if (ownedNode(record.target)) return false;
+    const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+    if (record.type === "attributes") {
+      const value = element.getAttribute(record.attributeName);
+      if (record.oldValue === value) return false;
+      if (record.attributeName === "class") {
+        const nativeClasses = (text) => (text || "").split(/\s+/).filter((name) => name && !name.startsWith("betterld-")).sort().join(" ");
+        if (nativeClasses(record.oldValue) === nativeClasses(value)) return false;
+      }
+      // 筛选显隐是插件输出；标题/分类/摘要及原站行状态继续被观察。
+      if (record.attributeName === "hidden" && element.matches(".betterld-topic-row, .betterld-search-result")) return false;
+      return Boolean(element.closest(sourceSelector));
+    }
+    if (record.type === "characterData") return Boolean(element?.closest(sourceSelector));
+    const nodes = [...record.addedNodes, ...record.removedNodes].filter((node) => !ownedNode(node));
+    if (!nodes.length) return false;
+    return Boolean(element?.closest(sourceSelector)) || nodes.some((node) =>
+      node instanceof Element && (node.matches(sourceSelector) || node.querySelector(sourceSelector)));
+  }
+
   const domObserver = new MutationObserver((records) => {
-    // 新主题在同一轮 DOM 提交中增强，保持原站新行与增强行的表格布局一致。
+    if (!pageActive()) return;
+    const sources = records.filter(sourceMutation).filter((record) => {
+      const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+      if (element?.closest(".topic-timeline")) {
+        scheduleReplyPosition();
+        return false;
+      }
+      return true;
+    });
+    if (!sources.length) return;
+    // 原站新行当轮增强；插件自己的节点插入和移除不驱动源列表同步。
     if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || topicIdFromPath())) {
       const rows = new Set();
-      for (const record of records) {
+      for (const record of sources) {
         for (const node of record.addedNodes) {
-          if (!(node instanceof Element)) continue;
+          if (!(node instanceof Element) || ownedNode(node)) continue;
           if (node.matches(".topic-list-item")) rows.add(node);
           const parentRow = node.closest(".topic-list-item:not(.betterld-topic-row)");
           if (parentRow) rows.add(parentRow);
@@ -5002,20 +5168,14 @@
       });
       if (rows.size) globalThis.BETTERLD_LIBRARY.sync();
     }
-    // 只镜像原站变化；卡片内部的作者、预览与筛选结果不能再次驱动源列表同步。
-    if (records.some(({ target }) => {
-      const element = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
-      return !element?.closest(".betterld-topic-row__info, .betterld-topic-empty")
-        && !element?.matches(".betterld-topic-row, .betterld-search-result");
-    })) {
-      scheduleSync();
-    }
+    scheduleSync();
   });
   domObserver.observe(document.documentElement, {
     childList: true,
     subtree: true,
     characterData: true,
     attributes: true,
+    attributeOldValue: true,
     attributeFilter: ["class", "style", "href", "src", "srcset", "data-topic-id", "data-user-card", "title", "hidden"]
   });
 
@@ -5031,12 +5191,27 @@
 
   window.addEventListener("scroll", () => {
     updateListControlsScrollState();
-
+    scheduleReplyPosition();
   }, { passive: true });
-  window.addEventListener("resize", resizeTopicDrawer);
+  window.addEventListener("resize", () => {
+    resizeTopicDrawer();
+    scheduleReplyPosition();
+  });
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
   state.currentHref = location.href;
   updateRouteState();
-  window.setInterval(checkRoute, config.routePollMs);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pausePageWork();
+    else resumePageWork();
+  });
+  window.addEventListener("pagehide", () => {
+    state.pageSuspended = true;
+    pausePageWork();
+  });
+  window.addEventListener("pageshow", () => {
+    state.pageSuspended = false;
+    resumePageWork();
+  });
+  resumePageWork();
 })();

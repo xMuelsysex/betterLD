@@ -7,6 +7,7 @@
   let pendingHref = "";
   let replyTopicId = "";
   let replySignature = "";
+  const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
   const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
@@ -28,11 +29,13 @@
   }
 
   function renderFloorTimeline(timeline, floor) {
-    timeline.input.value = String(floor);
+    const value = String(floor);
+    if (timeline.input.value !== value) timeline.input.value = value;
     const label = `${floor} / ${timeline.lastFloor}`;
-    timeline.label.textContent = label;
-    timeline.input.setAttribute("aria-valuetext", label);
-    timeline.element.style.setProperty("--betterld-floor-progress", timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0);
+    if (timeline.label.textContent !== label) timeline.label.textContent = label;
+    if (timeline.input.getAttribute("aria-valuetext") !== label) timeline.input.setAttribute("aria-valuetext", label);
+    const progress = String(timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0);
+    if (timeline.element.style.getPropertyValue("--betterld-floor-progress") !== progress) timeline.element.style.setProperty("--betterld-floor-progress", progress);
   }
 
   function finishFloorJump(timeline, floor, error = "") {
@@ -55,6 +58,7 @@
       resetFloorTimeline();
       const element = document.createElement("div");
       element.className = "betterld-floor-timeline";
+      element.dataset.betterldOwned = "true";
       const input = document.createElement("input");
       input.type = "range";
       input.min = "1";
@@ -114,12 +118,12 @@
     timeline.lastFloor = lastFloor;
     timeline.active = active;
     timeline.timeoutMs = timeoutMs;
-    timeline.input.max = String(lastFloor);
-    timeline.element.style.height = source.style.height;
+    if (timeline.input.max !== String(lastFloor)) timeline.input.max = String(lastFloor);
+    if (timeline.element.style.height !== source.style.height) timeline.element.style.height = source.style.height;
     if (Number.isInteger(floor) && floor > 0 && floor <= lastFloor) timeline.floor = floor;
     if (!active && timeline.pending?.target === timeline.floor) finishFloorJump(timeline, timeline.floor);
     if (!timeline.editing && !timeline.pending) {
-      timeline.input.disabled = lastFloor === 1;
+      if (timeline.input.disabled !== (lastFloor === 1)) timeline.input.disabled = lastFloor === 1;
       renderFloorTimeline(timeline, timeline.floor);
     }
   }
@@ -164,7 +168,10 @@
       replyAuthors.delete(id);
     }
     // 只有换树/离开话题才清同步签名；原位更新单楼不制造额外回流。
-    if (!postIds) replySignature = "";
+    if (!postIds) {
+      replySignature = "";
+      replyPostSnapshots.clear();
+    }
   }
 
   document.addEventListener("betterld:reply-author-reset", (event) => {
@@ -390,31 +397,70 @@
   // 必须在 Ember runloop 内挂载；树节点移除后同时销毁宿主与装饰器。
   const cookedHosts = new Map();
   const postMenuHosts = new Map();
+  function releaseHostResources(entry, menu) {
+    const errors = [];
+    window.require("@ember/runloop").join(() => {
+      const resources = entry.host ? [["host", () => entry.host.destroy()]] : [];
+      if (menu && entry.behavior) resources.push(["behavior", () => window.require("@ember/destroyable").destroy(entry.behavior)]);
+      if (entry.ownsPost) resources.push(["post", () => entry.post.destroy()]);
+      for (const [key, release] of resources) {
+        if (entry.released?.has(key)) continue;
+        try {
+          release();
+          (entry.released ||= new Set()).add(key);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    });
+    if (errors.length) throw new AggregateError(errors, "原站组件资源释放失败");
+  }
+
   function releasePostMenu(entry) {
-    window.require("@ember/runloop").join(() => {
-      entry.host.destroy();
-      window.require("@ember/destroyable").destroy(entry.behavior);
-      if (entry.ownsPost) entry.post.destroy();
-    });
+    releaseHostResources(entry, true);
   }
+
   function releaseCookedHost(entry) {
-    window.require("@ember/runloop").join(() => {
-      entry.host.destroy();
-      if (entry.ownsPost) entry.post.destroy();
-    });
+    releaseHostResources(entry, false);
   }
-  const cookedObserver = new MutationObserver(() => {
-    for (const [id, entry] of postMenuHosts) {
-      if (!entry.element.isConnected) {
-        releasePostMenu(entry);
-        postMenuHosts.delete(id);
+
+  function releaseDetachedHost(element, attribute, hosts, release) {
+    const id = element.getAttribute(attribute);
+    const entry = hosts.get(id);
+    if (!entry || entry.element !== element || element.isConnected) return;
+    try {
+      release(entry);
+      hosts.delete(id);
+    } catch (error) {
+      entry.releaseError = error;
+      console.error(`[betterLD] ${attribute} ${id} cleanup failed`, error);
+    }
+  }
+
+  document.addEventListener("betterld:host-cleanup", () => {
+    if (document.hidden) return;
+    for (const entry of postMenuHosts.values()) {
+      if (entry.releaseError) releaseDetachedHost(entry.element, "data-betterld-menu-id", postMenuHosts, releasePostMenu);
+    }
+    for (const entry of cookedHosts.values()) {
+      if (entry.releaseError) releaseDetachedHost(entry.element, "data-betterld-cooked-id", cookedHosts, releaseCookedHost);
+    }
+  });
+
+  const cookedObserver = new MutationObserver((records) => {
+    // 只处理真正移除的正文/菜单节点；正文装饰或无关页面变化无需扫描全部宿主。
+    const selector = "[data-betterld-cooked-id], [data-betterld-menu-id]";
+    const removed = new Set();
+    for (const record of records) {
+      for (const node of record.removedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches(selector)) removed.add(node);
+        node.querySelectorAll(selector).forEach((element) => removed.add(element));
       }
     }
-    for (const [id, entry] of cookedHosts) {
-      if (!entry.element.isConnected) {
-        releaseCookedHost(entry);
-        cookedHosts.delete(id);
-      }
+    for (const element of removed) {
+      if (element.hasAttribute("data-betterld-menu-id")) releaseDetachedHost(element, "data-betterld-menu-id", postMenuHosts, releasePostMenu);
+      if (element.hasAttribute("data-betterld-cooked-id")) releaseDetachedHost(element, "data-betterld-cooked-id", cookedHosts, releaseCookedHost);
     }
   });
   cookedObserver.observe(document.documentElement, { childList: true, subtree: true });
@@ -433,14 +479,19 @@
       if (!element) continue;
       const existing = cookedHosts.get(body.id);
       if (existing?.element === element) continue;
-      if (existing) {
-        releaseCookedHost(existing);
-        cookedHosts.delete(body.id);
-      }
       let host;
       let post;
       let ownsPost = false;
       try {
+        if (existing) {
+          try {
+            releaseCookedHost(existing);
+            cookedHosts.delete(body.id);
+          } catch (error) {
+            existing.releaseError = error;
+            throw error;
+          }
+        }
         const loaded = topic.postStream.posts.find((post) => String(post.id) === String(body.post.id));
         ownsPost = body.post.embeddedPost || !loaded || loaded.cooked !== body.post.cooked;
         post = ownsPost ? owner.factoryFor("model:post").create({ ...body.post, topic_id: topic.id, topic }) : loaded;
@@ -460,10 +511,13 @@
         cookedHosts.set(body.id, { element, host, post, ownsPost });
         element.dataset.betterldCookedMounted = "true";
       } catch (error) {
-        join(() => {
-          if (host) host.destroy();
-          if (ownsPost && post) post.destroy();
-        });
+        if (host || (ownsPost && post)) {
+          try {
+            releaseHostResources({ host, post, ownsPost }, false);
+          } catch (cleanupError) {
+            console.error("[betterLD] failed cooked mount cleanup", cleanupError);
+          }
+        }
         element.dataset.betterldCookedMounted = "error";
         const notice = document.createElement("p");
         notice.className = "notice error";
@@ -539,11 +593,11 @@
       element.dataset.betterldMenuMounted = "true";
       document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id }) }));
     } catch (error) {
-      join(() => {
-        if (host) host.destroy();
-        if (behavior) window.require("@ember/destroyable").destroy(behavior);
-        if (ownsPost && post) post.destroy();
-      });
+      try {
+        releaseHostResources({ host, behavior, post, ownsPost }, true);
+      } catch (cleanupError) {
+        console.error("[betterLD] failed post menu mount cleanup", cleanupError);
+      }
       console.error("[betterLD] native post menu mount failed", error);
       document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id, error: error.message }) }));
     }
@@ -572,58 +626,96 @@
     }
   });
 
+  function postSyncStatus(post) {
+    return replyAuthors.has(post.id) ? replyAuthors.get(post.id).user.status ?? null
+      : post.user?.status === undefined ? post.user_status ?? null : post.user.status;
+  }
+
+  function snapshotPost(post) {
+    const valueSnapshot = (value) => value && typeof value === "object" ? JSON.stringify(value) : value;
+    const fields = postFields.map((key) => valueSnapshot(post[key]));
+    fields.push(valueSnapshot(postSyncStatus(post)));
+    fields.push(JSON.stringify(post.boosts?.map((boost) => [
+      ...boostFields.map((key) => boost[key]), ...boostUserFields.map((key) => boost.user?.[key])
+    ])));
+    return fields;
+  }
+
+  function postSyncValues(post) {
+    return {
+      ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
+      user_status: postSyncStatus(post),
+      boosts: post.boosts?.map((boost) => ({
+        ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
+        user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))
+      }))
+    };
+  }
+
   document.addEventListener("betterld:reply-sync", (event) => {
-    const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
+    if (document.hidden) return;
+    const { topicId } = JSON.parse(event.detail);
     try {
-      const { getOwnerWithFallback } = window.require("discourse/lib/get-owner");
-      const owner = getOwnerWithFallback();
-      const controller = owner.lookup("controller:topic");
-      const topic = controller.model;
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const topic = owner.lookup("controller:topic").model;
       if (!topicId || String(topic?.id) !== topicId) {
         replyTopicId = "";
         replySignature = "";
+        replyPostSnapshots.clear();
         resetFloorTimeline();
         return;
       }
-      if (replyTopicId !== topicId) replySignature = "";
+      if (replyTopicId !== topicId) {
+        replySignature = "";
+        replyPostSnapshots.clear();
+      }
       replyTopicId = topicId;
       const stream = topic.postStream;
-      // 筛选刷新期间 filter 已切换而 stream 仍属旧视图，完成后再投影同一份数据。
       if (stream.loadingFilter) return;
       const posts = new Map(stream.posts.map((post) => [String(post.id), post]));
       const streamIds = new Set(stream.stream.map(String));
-      // 未挂载到原帖的分页楼层，其书签/编辑状态仍由这份原站模型投影回树。
       for (const entry of postMenuHosts.values()) {
         if (entry.ownsPost && String(entry.post.topic_id) === topicId && streamIds.has(String(entry.post.id)) && !posts.has(String(entry.post.id))) {
           posts.set(String(entry.post.id), entry.post);
         }
       }
-      const data = {
-        topicId,
-        stream: [...stream.stream],
-        topReplies: stream.filter === "summary",
-        user_badges: topic.user_badges,
-        posts: [...posts.values()].map((post) => ({
-          ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
-          // 原站通过 User 模型接收状态变更；null 也要投影，以移除树里已取消的状态。
-          user_status: replyAuthors.has(post.id) ? replyAuthors.get(post.id).user.status ?? null
-            : post.user?.status === undefined ? post.user_status ?? null : post.user.status,
-          boosts: post.boosts?.map((boost) => ({
-            ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
-            user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))
-          }))
-        }))
-      };
-      const signature = JSON.stringify(data);
-      if (signature !== replySignature) {
-        replySignature = signature;
-        document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: signature }));
+      const changedPosts = [];
+      const snapshots = new Map();
+      for (const [id, post] of posts) {
+        // 原始字符串直接比较；嵌套字段核对完整内容，保留中间楼原位编辑/回应。
+        // 完整对象投影只在变化楼层执行，未变 cooked 不做转义和跨世界序列化。
+        const snapshot = snapshotPost(post);
+        snapshots.set(id, snapshot);
+        const previous = replyPostSnapshots.get(id);
+        if (!previous || snapshot.some((value, index) => value !== previous[index])) changedPosts.push(postSyncValues(post));
       }
-      syncFloorTimeline(topic, Number(active ? postNumber : controller.currentPostNumber), active, timeoutMs);
+      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", user_badges: topic.user_badges };
+      const signature = JSON.stringify(data);
+      if (signature !== replySignature || changedPosts.length) {
+        document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ ...data, posts: changedPosts }) }));
+        replySignature = signature;
+      }
+      replyPostSnapshots.clear();
+      for (const [id, snapshot] of snapshots) replyPostSnapshots.set(id, snapshot);
     } catch (error) {
       document.dispatchEvent(new CustomEvent("betterld:reply-data", {
         detail: JSON.stringify({ topicId, error: error.message || "原站回复同步失败" })
       }));
+    }
+  });
+
+  document.addEventListener("betterld:reply-position", (event) => {
+    if (document.hidden) return;
+    const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      const topic = controller.model;
+      if (String(topic?.id) !== topicId) return;
+      syncFloorTimeline(topic, Number(active ? postNumber : controller.currentPostNumber), active, timeoutMs);
+    } catch (error) {
+      console.error("[betterLD] floor timeline sync failed", error);
+      document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ topicId, error: error.message }) }));
     }
   });
   document.addEventListener("click", (event) => {
