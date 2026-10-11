@@ -1852,6 +1852,14 @@ html[data-betterld-topic-preview="true"] body.betterld-shell .posts-wrapper {
   width: 100%;
   max-width: 100%;
 }
+/* 原站宽屏和收起预览的编辑器仍预留侧栏；仅移除预览内横向偏移，保留原宽度上限。 */
+html[data-betterld-topic-preview="true"] body.betterld-shell #reply-control:not(.fullscreen) {
+  left: 0 !important;
+  right: 0 !important;
+  margin-inline: auto !important;
+  width: 100% !important;
+  transform: none !important;
+}
 @media (max-width: 767px) {
   html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet {
     width: 100% !important;
