@@ -65,6 +65,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     objectUrlRevokeMs: 3000,
     bridgeTimeoutMs: 1500,
     htmlMaxDepth: 8,
+    htmlResourceMode: "offline",
     maxRangePosts: 10000,
     // 完全离线 HTML 导出：头像按原站模板的 {size} 取值，资源由后台串行下载后内嵌为 data URL。
     // 单个资源上限是二进制字节；后台一次消息返回 base64（约 4/3），须低于浏览器消息序列化上限。

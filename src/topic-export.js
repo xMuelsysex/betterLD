@@ -50,6 +50,10 @@
     Object.freeze({ value: "html", label: "HTML" }),
     Object.freeze({ value: "markdown", label: "Markdown" })
   ]);
+  const HTML_RESOURCE_OPTIONS = Object.freeze([
+    Object.freeze({ value: "offline", label: "完全离线内嵌" }),
+    Object.freeze({ value: "remote", label: "远程引用" })
+  ]);
   const RANGE_OPTIONS = Object.freeze([
     Object.freeze({ value: "all", label: "全部回复" }),
     Object.freeze({ value: "post", label: "只导出主帖" }),
@@ -61,6 +65,7 @@
   const EMPTY_RANGE_HINT = "自定义楼层不能为空，例如：1,3-8";
   const MARKDOWN_ASSET_NOTE = "Markdown 保留原站远程地址，打开文档需要联网；需要登录才能访问的资源可能无法显示。";
   const OFFLINE_ASSET_NOTE = "HTML 导出为完全离线的单文件：正文图片、媒体、附件与作者头像会内嵌，打开不再需要联网；归档需要这些资源域名的访问权限。";
+  const REMOTE_ASSET_NOTE = "HTML 只保留资源的远程地址：作者头像、正文图片和媒体需联网加载，不下载资源或申请归档权限；原帖删除或资源失效后，远程内容可能无法显示。外部播放器仍不支持导出，文件不执行脚本。";
   const OFFLINE_LINK_NOTE = "离线归档已内嵌全部正文资源与作者头像，导出文件不执行任何脚本；页面里的出处与导航链接点击后仍需联网。";
   const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
   const CSS_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//g;
@@ -69,6 +74,7 @@
   const NAVIGATION_PROTOCOLS = Object.freeze(["http:", "https:", "mailto:"]);
   // 只允许内嵌 data: 与内联样式，阻止导出文件发出任何意外请求或执行脚本。
   const OFFLINE_CSP = "default-src 'none'; img-src data:; media-src data:; style-src 'unsafe-inline'; font-src data:";
+  const REMOTE_CSP = "default-src 'none'; img-src https: data:; media-src https: data:; style-src 'unsafe-inline'; font-src https: data:";
   const FONT_EXTENSIONS = /^.*\.(?:woff2?|ttf|otf|eot)$/i;
   const RESOURCE_KIND_LABELS = Object.freeze({
     image: "图片",
@@ -169,6 +175,10 @@
     const subject = element("p", "betterld-export-subject", state.title);
 
     const formatSelect = selectControl(FORMAT_OPTIONS);
+    const htmlResourceSelect = selectControl(HTML_RESOURCE_OPTIONS);
+    htmlResourceSelect.value = config.topicExport.htmlResourceMode;
+    htmlResourceSelect.setAttribute("aria-label", "HTML 资源保存方式");
+    const htmlResourceField = fieldControl("HTML 资源保存方式", htmlResourceSelect);
     const rangeSelect = selectControl(RANGE_OPTIONS);
     const customInput = element("input", "betterld-export-input");
     customInput.type = "text";
@@ -197,7 +207,7 @@
     confirmButton.type = "submit";
     actions.append(permissionButton, closeButton, confirmButton);
 
-    form.append(title, subject, fieldControl("导出格式", formatSelect), fieldControl("导出范围", rangeSelect),
+    form.append(title, subject, fieldControl("导出格式", formatSelect), htmlResourceField, fieldControl("导出范围", rangeSelect),
       customField, note, progress, error, actions);
     dialog.append(form);
 
@@ -205,6 +215,8 @@
       dialog,
       form,
       formatSelect,
+      htmlResourceSelect,
+      htmlResourceField,
       rangeSelect,
       customInput,
       customField,
@@ -219,7 +231,14 @@
   }
 
   function syncFormatNote(refs) {
-    refs.note.textContent = refs.formatSelect.value === "html" ? OFFLINE_ASSET_NOTE : MARKDOWN_ASSET_NOTE;
+    const isHtml = refs.formatSelect.value === "html";
+    refs.htmlResourceField.hidden = !isHtml;
+    refs.note.textContent = isHtml
+      ? (refs.htmlResourceSelect.value === "offline" ? OFFLINE_ASSET_NOTE : REMOTE_ASSET_NOTE)
+      : MARKDOWN_ASSET_NOTE;
+    refs.error.textContent = "";
+    refs.progress.textContent = "";
+    refs.permissionButton.hidden = true;
   }
 
   function syncCustomField(refs) {
@@ -232,6 +251,7 @@
   function setBusy(refs, busy) {
     refs.confirmButton.disabled = busy;
     refs.formatSelect.disabled = busy;
+    refs.htmlResourceSelect.disabled = busy;
     refs.rangeSelect.disabled = busy;
     refs.customInput.disabled = busy;
     refs.dialog.setAttribute("aria-busy", String(busy));
@@ -257,6 +277,8 @@
     });
     refs.rangeSelect.addEventListener("change", () => syncCustomField(refs));
     refs.formatSelect.addEventListener("change", () => syncFormatNote(refs));
+    refs.htmlResourceSelect.addEventListener("change", () => syncFormatNote(refs));
+    syncFormatNote(refs);
     refs.customInput.addEventListener("input", () => { refs.error.textContent = ""; });
     refs.closeButton.addEventListener("click", closeDialog);
     refs.permissionButton.addEventListener("click", () => openOfflinePermissionSettings(refs));
@@ -285,7 +307,8 @@
       rangeToken: parsed.kind === "range"
         ? `range-${parsed.label.replace(/[^0-9A-Za-z]+/g, "-").replace(/^-+|-+$/g, "")}`
         : parsed.kind,
-      format: refs.formatSelect.value
+      format: refs.formatSelect.value,
+      htmlResourceMode: refs.htmlResourceSelect.value
     };
   }
 
@@ -411,11 +434,44 @@
       };
     }
 
-    const offline = await buildOfflineHtml({ topic, topicInfo, posts, exportMode, rangeLabel: selection.rangeLabel }, context);
+    const options = { topic, topicInfo, posts, exportMode, rangeLabel: selection.rangeLabel };
+    if (selection.htmlResourceMode === "remote") {
+      context.assertActive();
+      context.onProgress("正在生成远程引用 HTML…");
+      return { filename, content: buildRemoteHtml(options), summary: "HTML 远程引用导出完成，头像与正文媒体需要联网加载。" };
+    }
+    if (selection.htmlResourceMode !== "offline") throw new Error("HTML 资源保存方式无法识别");
+    const offline = await buildOfflineHtml(options, context);
     return { filename, content: offline.content, summary: offline.summary };
   }
 
-  // ---- 完全离线 HTML：资源归档 ----
+  function buildRemoteHtml({ topic, topicInfo, posts, exportMode, rangeLabel }) {
+    const base = topicInfo.originalUrl;
+    const items = posts.map((post) => {
+      try {
+        const item = prepareHtmlPost(post, base);
+        if (!item.body) throw new Error("转换后没有可导出的正文");
+        return item;
+      } catch (error) {
+        throw new Error(`第 ${post.post_number} 楼：${error.message}`);
+      }
+    });
+    const removedScripts = items.reduce((total, item) => total + item.removedScripts, 0);
+    const doc = new DOMParser().parseFromString(buildHtml({
+      topic, topicInfo, posts: items, exportMode, rangeLabel, resourceMode: "remote", removedScripts
+    }), "text/html");
+    importSvgSymbols(doc);
+    assertArchivable(doc.documentElement);
+    normalizeMedia(doc.documentElement, base);
+    eachResource(doc.documentElement, base, ({ url, apply }) => {
+      if (new URL(url).protocol !== "https:") throw new Error(`远程资源不是 https 地址：${url}`);
+      apply(url);
+    });
+    absolutizeNavigationLinks(doc.documentElement, base);
+    return `<!doctype html>\n${doc.documentElement.outerHTML}\n`;
+  }
+
+  // ---- HTML 资源转换与离线归档 ----
 
   function resourceLocation(floor) {
     return floor ? `#${floor}` : SHELL_FLOOR_LABEL;
@@ -637,7 +693,7 @@
     });
   }
 
-  function prepareOfflinePost(post, base) {
+  function prepareHtmlPost(post, base) {
     const doc = new DOMParser().parseFromString(`<div>${post.cooked || ""}</div>`, "text/html");
     const root = doc.body.firstElementChild;
     const removedScripts = stripScripts(root);
@@ -701,7 +757,7 @@
     const base = topicInfo.originalUrl;
     const items = posts.map((post) => {
       try {
-        return prepareOfflinePost(post, base);
+        return prepareHtmlPost(post, base);
       } catch (error) {
         throw new Error(`第 ${post.post_number} 楼：${error.message}`);
       }
@@ -721,7 +777,7 @@
 
     assertActive();
     onProgress("正在生成离线 HTML…");
-    const html = buildHtml({ topic, topicInfo, posts: items, exportMode, rangeLabel, offline: { removedScripts } });
+    const html = buildHtml({ topic, topicInfo, posts: items, exportMode, rangeLabel, resourceMode: "offline", removedScripts });
     const doc = new DOMParser().parseFromString(html, "text/html");
     importSvgSymbols(doc);
     // 图标定义与 template 内容同样要过一遍被动依赖检查，不让 CSP 掩盖漏存。
@@ -957,20 +1013,21 @@
     return normalizeMarkdown(lines.join("\n"));
   }
 
-  function buildHtml({ topic, topicInfo, posts, exportMode, rangeLabel, offline }) {
+  function buildHtml({ topic, topicInfo, posts, exportMode, rangeLabel, resourceMode, removedScripts }) {
+    const isOffline = resourceMode === "offline";
     const content = exportMode === "nest"
       ? renderNestedPostsHtml(posts)
       : renderFlatPostsHtml(posts);
     const meta = [
       `<div><strong>原始链接:</strong> <a href="${escapeHtmlAttribute(topicInfo.originalUrl)}">${escapeHtml(topicInfo.originalUrl)}</a></div>`,
       `<div><strong>导出模式:</strong> ${escapeHtml(exportMode)}</div>`,
-      "<div><strong>导出格式:</strong> HTML（完全离线单文件）</div>",
+      `<div><strong>导出格式:</strong> HTML（${isOffline ? "完全离线内嵌" : "远程引用"}）</div>`,
       `<div><strong>导出时间:</strong> ${escapeHtml(new Date().toLocaleString())}</div>`,
       `<div><strong>楼层范围:</strong> ${escapeHtml(rangeLabel)}</div>`,
-      '<div id="offline-summary"></div>',
+      isOffline ? '<div id="offline-summary"></div>' : "<div><strong>资源保存:</strong> 远程地址，未下载内嵌</div>",
     ];
-    if (offline.removedScripts) {
-      meta.push(`<div><strong>已移除脚本:</strong> ${offline.removedScripts} 个，导出文件不执行任何脚本</div>`);
+    if (removedScripts) {
+      meta.push(`<div><strong>已移除脚本:</strong> ${removedScripts} 个，导出文件不执行任何脚本</div>`);
     }
 
     return [
@@ -979,7 +1036,7 @@
       "<head>",
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      `<meta http-equiv="Content-Security-Policy" content="${OFFLINE_CSP}">`,
+      `<meta http-equiv="Content-Security-Policy" content="${isOffline ? OFFLINE_CSP : REMOTE_CSP}">`,
       `<title>${escapeHtml(topic.title)}</title>`,
       `<style>${htmlExportCss()}</style>`,
       "</head>",
@@ -988,7 +1045,7 @@
       `<h1>${escapeHtml(topic.title)}</h1>`,
       '<section class="topic-meta">',
       ...meta,
-      `<p class="export-note">${escapeHtml(OFFLINE_LINK_NOTE)}</p>`,
+      `<p class="export-note">${escapeHtml(isOffline ? OFFLINE_LINK_NOTE : REMOTE_ASSET_NOTE)}</p>`,
       "</section>",
       '<section class="posts">',
       content,
