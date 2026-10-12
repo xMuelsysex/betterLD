@@ -86,6 +86,27 @@
                     </div>
                   </section>
 
+                  <section class="settings-panel" data-panel="pages" data-subpanel="history" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="history"></div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">浏览历史位置</p>
+                      <p class="settings-group-card__desc">访问过的主题会记录在右下角收藏库的「浏览历史」标签里，可搜索标题、跳转最近阅读楼层、单条移除或清空。</p>
+                    </div>
+                  </section>
+
+                  <section class="settings-panel" data-panel="pages" data-subpanel="userMarks" hidden>
+                    <div class="settings-group-card">
+                      <div class="settings-group-card__surface" data-fields="userMarks"></div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">已保存的用户标记</p>
+                      <p class="settings-group-card__desc">标签与备注只保存在本机扩展存储；标签显示在作者名旁，备注只在用户卡片与这里可见。</p>
+                      <div class="settings-group-card__surface" data-user-marks-manager></div>
+                    </div>
+                  </section>
+
                   <section class="settings-panel" data-panel="pages" data-subpanel="filter" hidden>
                     <div class="settings-group-card">
                       <div class="settings-group-card__surface" data-fields="filter"></div>
@@ -258,6 +279,17 @@
                         </div>
                       </div>
                     </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">WebDAV 收藏备份</p>
+                      <p class="settings-group-card__desc">使用上面的账号与密码，把收藏库（稍后再看、收藏与分组）单独写入「收藏备份 WebDAV 地址」；该地址不能与规则备份地址相同，避免互相覆盖。</p>
+                      <p class="settings-inline-note">WebDAV 单次上传上限：<span id="library-webdav-limit"></span>。超出时上传会失败并保留远端文件。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="library-webdav-upload" class="settings-button settings-button--tonal" type="button">上传收藏库</button>
+                          <button id="library-webdav-download" class="settings-button settings-button--tonal" type="button">下载并追加收藏</button>
+                        </div>
+                      </div>
+                    </div>
                   </section>
 
                   <section class="settings-panel" data-panel="advanced" data-subpanel="data" hidden>
@@ -273,12 +305,36 @@
                       </div>
                     </div>
                     <div class="settings-group-card">
+                      <p class="settings-group-card__title">HTML 导出离线归档授权</p>
+                      <p class="settings-group-card__desc">完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。</p>
+                      <div class="settings-group-card__surface">
+                        <ul id="topic-export-origin-list" class="settings-origin-list"></ul>
+                        <p id="topic-export-origin-empty" class="settings-inline-note">暂无待授权域名；导出失败时缺失的域名会出现在这里。</p>
+                        <div class="settings-actions">
+                          <button id="topic-export-grant" class="settings-button settings-button--tonal" type="button">授权所选域名</button>
+                          <button id="topic-export-refresh" class="settings-button settings-button--tonal" type="button">刷新域名列表</button>
+                        </div>
+                      </div>
+                      <p id="topic-export-origin-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                    </div>
+                    <div class="settings-group-card">
                       <p class="settings-group-card__title">筛选规则文件</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="export-rules" class="settings-button settings-button--tonal" type="button">导出规则</button>
                           <button id="import-rules" class="settings-button settings-button--tonal" type="button">导入规则</button>
                           <input id="rules-import-file" type="file" accept="application/json,.json" hidden>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">收藏库文件</p>
+                      <p class="settings-group-card__desc">导出稍后再看、收藏与分组；不包含 WebDAV 凭据、收藏入口位置、设置或浏览历史。导入先校验并预览摘要，确认后追加去重，重复条目保留本地分组。</p>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="export-library" class="settings-button settings-button--tonal" type="button">导出收藏库</button>
+                          <button id="import-library" class="settings-button settings-button--tonal" type="button">导入收藏库</button>
+                          <input id="library-import-file" type="file" accept="application/json,.json" hidden>
                         </div>
                       </div>
                     </div>
@@ -346,6 +402,9 @@
 
     <script src="../betterld.config.js"></script>
     <script src="settings.js"></script>
+    <script src="library-entry.js"></script>
+    <script src="library-store.js"></script>
+    <script src="user-marks.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

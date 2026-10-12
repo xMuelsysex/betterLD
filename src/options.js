@@ -17,6 +17,7 @@
     : pageDocument;
   const config = globalThis.BETTERLD_CONFIG;
   const settingsApi = globalThis.BETTERLD_SETTINGS;
+  const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
   const ruleGroupKeys = (config?.topicRuleGroups || []).map((group) => group.key);
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
@@ -29,6 +30,9 @@
 
   if (!config || !settingsApi || typeof normalizeSettings !== "function" || !api || !modes) {
     throw new Error("betterLD settings could not initialize: extension API is unavailable");
+  }
+  if (!libraryStore?.read || !config.libraryStorageKey) {
+    throw new Error("betterLD settings could not initialize: library store is unavailable");
   }
 
   const settingsRailList = document.querySelector("#settings-rail-list");
@@ -62,7 +66,11 @@
   let externalSearchPermissionButton;
   let externalSearchPermissionStatus;
   let externalSearchPermissionBusy = false;
+  let topicExportOrigins = [];
+  let topicExportGrantBusy = false;
   const canRequestExternalSearchPermission = !isEmbedded && typeof api.permissions?.request === "function";
+  const canRequestWebdavPermission = !isEmbedded && typeof api.permissions?.request === "function";
+  const canRequestTopicExportPermission = !isEmbedded && typeof api.permissions?.request === "function";
 
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
@@ -471,6 +479,9 @@
     if (!settingsApi.webdavUrlAllowed(advanced.webdavUrl)) {
       throw new Error("WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址");
     }
+    if (!settingsApi.webdavUrlAllowed(advanced.libraryWebdavUrl)) {
+      throw new Error("收藏备份 WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址");
+    }
     let wallpaperUrl = "";
     let legacyWallpaper = "";
     let wallpaperId = "";
@@ -817,18 +828,25 @@
 
   const englishFieldLabels = {
     externalSearchEngine: "External search (when site search is empty)",
+    readingPanelBackgroundOpacity: "Reading panel background opacity",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     topicListAppearance: "Topic list appearance", topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
-    topicFilterEnabled: "Enable topic filter", topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
-    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync"
+    topicFilterEnabled: "Enable topic filter",topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", libraryWebdavUrl: "Library backup WebDAV URL", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
+    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync", userMarksEnabled: "Enable user marks", visitedHistoryEnabled: "Record browsing history", replyTreeNameMode: "Reply author name"
   };
 
   const staticTranslations = {
+    "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。": "Background strength of reply trees, author-filtered replies and standalone reading controls: 0% transparent, 100% solid. Does not change ordinary original posts, text or buttons.",
     "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 主题。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When site search is empty, search with site:linux.do and keep LinuxDo topics only. Enabling requires access to the chosen engine; search terms are sent to it.",
     "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。": "Choose Bing or DuckDuckGo and allow access in the browser permission dialog. If access was revoked, request it again below.",
     "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。": "In-page settings cannot show the browser permission dialog. Open the extension settings below, then choose Bing or DuckDuckGo and allow access.",
     "重新申请访问权限": "Request access again",
     "打开扩展授权页": "Open extension permission settings",
+    "HTML 导出离线归档授权": "Offline HTML export permission",
+    "完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。": "A fully offline HTML export embeds post images, media, attachments, and author avatars, so it needs access to the domains hosting them. Only the exact domains listed below are requested; no all-sites permission is used.",
+    "暂无待授权域名；导出失败时缺失的域名会出现在这里。": "No domains are waiting for permission. Domains missing during an export appear here.",
+    "授权所选域名": "Grant selected domains",
+    "刷新域名列表": "Refresh domain list",
     "首页视觉设置": "Home visual settings",
     "调整 LinuxDo 首页卡片、导航和页面外观。所有修改在点击“保存设置”后生效。": "Adjust LinuxDo cards, navigation, and page visuals. Changes apply after saving.",
     "搜索设置": "Search settings",
@@ -867,6 +885,14 @@
     "导入设置": "Import settings",
     "导出筛选规则": "Export filter rules",
     "导入筛选规则": "Import filter rules",
+    "浏览历史位置": "Browsing history location",
+    "访问过的主题会记录在右下角收藏库的「浏览历史」标签里，可搜索标题、跳转最近阅读楼层、单条移除或清空。": "Visited topics are listed in the Browsing history tab of the library panel; you can search titles, jump to the last read floor, remove a single entry, or clear all.",
+    "收藏库文件": "Library file",
+    "导出收藏库": "Export library",
+    "导入收藏库": "Import library",
+    "WebDAV 收藏备份": "WebDAV library backup",
+    "上传收藏库": "Upload library",
+    "下载并追加收藏": "Download and append favorites",
     "清空搜索历史": "Clear search history",
     "检查更新": "Check for updates",
     "比对 GitHub Releases 的最新标签与本地版本号，只做提示，不自动更新；不点击不会发起任何请求。": "Compares the latest GitHub Releases tag with the local version. It only reports, never auto-updates, and sends no request unless you click.",
@@ -1010,6 +1036,7 @@
     { key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
     { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "开启时侧栏容器用壁纸高斯模糊封面（半透明 + 背景模糊）；关闭后改用不透明表面。" },
     { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、用户资料卡、菜单、导航和 Header 的独立模糊强度；需开启「启用毛玻璃」。" },
+    { key: "readingPanelBackgroundOpacity", type: "range", label: "阅读面板背景不透明度", unit: "%", help: "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。" },
     { key: "userCardCoverMaskEnabled", type: "toggle", label: "用户卡片封面遮罩", help: "仅作用于带背景图片的用户卡片，关闭后完整显示封面。" },
     { key: "userCardCoverMaskOpacity", type: "range", label: "用户卡片封面遮罩强度", unit: "%", help: "0% 完全透明，100% 完全遮盖；降低后文字可能与封面混色。", dependsOn: ["userCardCoverMaskEnabled", true] },
     { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
@@ -1041,6 +1068,10 @@
     { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
     { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看记录只保存在本机浏览记录里，不写服务端已读状态。" },
     { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "只影响主题页树状回复；默认与原站一样同时显示昵称和用户名。" },
+    { key: "userMarksEnabled", type: "toggle", label: "启用用户标记", help: "在作者名旁显示本机私人短标签，并在原站用户卡片里提供标签与备注编辑。" },
+    { key: "visitedHistoryEnabled", type: "toggle", label: "记录浏览历史", help: "记录实际访问过的主题、标题、最近阅读楼层与时间，并标记已看；关闭后停止记录新的历史与已看标记，已有数据保留，可在收藏库的「浏览历史」里删除。" },
+    { key: "mediaBlockAutoplay", type: "toggle", label: "阻止视频自动播放", help: "对原帖、树状回复、Boost 与插件预览里的原生视频去掉挂载时的自动播放，已经跑起来的就地暂停；手动点击播放不受影响。已取证的 YouTube / B 站嵌入会去掉 autoplay 参数，未知站点的播放器保持原样，跨域播放器内部状态无法控制。" },
+    { key: "staticAvatarsEnabled", type: "toggle", label: "头像动图静态化", help: "把作者头像里的动图换成同尺寸静态头像，复用原站已有的静态模板与 CDN 解析，不猜文件名；没有静态资源或身份无法确认的头像保持原图，鼠标悬停会说明原因。" },
     { key: "topicSortMode", type: "select", label: "话题排序方式", help: "最新回复按 LinuxDo 默认的最后活动时间倒序；发布时间按主题创建时间倒序（Discourse 的 created）。切换后会重新加载当前列表，热门与最高保留各自排序。" },
     { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "调整原生主题列表与搜索卡的标题字号。" },
     { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "调整原生主题列表与搜索卡的作者字号。" },
@@ -1100,7 +1131,8 @@
     { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" },
     { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "指向规则备份文件的完整地址；只接受 https://，本机地址可用 http://。", wide: true },
     { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "留空则不发送认证头。" },
-    { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" }
+    { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" },
+    { key: "libraryWebdavUrl", type: "url", label: "收藏备份 WebDAV 地址", help: "收藏库备份文件的完整地址，复用上面的账号与密码；必须与规则备份地址不同，否则上传会覆盖规则备份。只接受 https://，本机地址可用 http://。", wide: true }
   ];
 
   const labelMap = {
@@ -1118,6 +1150,12 @@
   const aboutStorage = document.querySelector("#about-storage");
   const settingsImportFile = document.querySelector("#settings-import-file");
   const rulesImportFile = document.querySelector("#rules-import-file");
+  const libraryImportFile = document.querySelector("#library-import-file");
+  const topicExportOriginList = document.querySelector("#topic-export-origin-list");
+  const topicExportOriginEmpty = document.querySelector("#topic-export-origin-empty");
+  const topicExportGrantButton = document.querySelector("#topic-export-grant");
+  const topicExportRefreshButton = document.querySelector("#topic-export-refresh");
+  const topicExportOriginStatus = document.querySelector("#topic-export-origin-status");
 
   function fieldOptions(definition) {
     if (definition.options) {
@@ -1313,6 +1351,132 @@
       });
     });
     return map;
+  }
+
+  // 用户标记管理：读、写都走同一份核心校验，写入统一交给后台串行队列。
+  let userMarksStore = { version: 1, marks: {} };
+  let userMarksError = "";
+  let userMarksQuery = "";
+
+  function userMarksApi() {
+    return globalThis.BETTERLD_USER_MARKS;
+  }
+
+  async function readUserMarksStore() {
+    if (!globalThis.BETTERLD_USER_MARKS) return;
+    const stored = await api.storage.local.get(userMarksApi().storageKey);
+    try {
+      userMarksStore = userMarksApi().normalize(stored[userMarksApi().storageKey]);
+      userMarksError = "";
+    } catch (error) {
+      userMarksStore = { version: 1, marks: {} };
+      userMarksError = error.message;
+      console.error("[betterLD] user marks storage invalid", error);
+    }
+    renderUserMarksList();
+  }
+
+  function renderUserMarksManager() {
+    const container = document.querySelector("[data-user-marks-manager]");
+    if (!container || container.dataset.ready === "true") return;
+    container.dataset.ready = "true";
+    if (!globalThis.BETTERLD_USER_MARKS) {
+      container.textContent = "用户标记模块未加载，请重新打开扩展设置页。";
+      return;
+    }
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "settings-text-input";
+    search.placeholder = "搜索用户名、标签或备注";
+    search.setAttribute("aria-label", "搜索用户标记");
+    search.addEventListener("input", () => {
+      userMarksQuery = search.value;
+      renderUserMarksList();
+    });
+    const list = document.createElement("div");
+    list.className = "settings-stack-editor__list";
+    list.dataset.userMarksList = "true";
+    container.append(search, list);
+  }
+
+  function renderUserMarksList() {
+    renderUserMarksManager();
+    const list = document.querySelector("[data-user-marks-list]");
+    if (!list) return;
+    if (userMarksError) {
+      const error = document.createElement("small");
+      error.className = "settings-stack-editor__empty";
+      error.textContent = `用户标记存储异常：${userMarksError}`;
+      list.replaceChildren(error);
+      return;
+    }
+    const query = userMarksQuery.trim().toLowerCase();
+    const marks = userMarksApi().list(userMarksStore).filter((mark) => !query
+      || mark.username.toLowerCase().includes(query)
+      || mark.tag.toLowerCase().includes(query)
+      || mark.note.toLowerCase().includes(query));
+    if (!marks.length) {
+      const empty = document.createElement("small");
+      empty.className = "settings-stack-editor__empty";
+      empty.textContent = query ? "没有匹配的用户标记" : "暂无用户标记；在原站用户卡片里添加";
+      list.replaceChildren(empty);
+      return;
+    }
+    list.replaceChildren(...marks.map(createUserMarkRow));
+  }
+
+  function createUserMarkRow(mark) {
+    const row = document.createElement("div");
+    row.className = "settings-stack-row";
+    const label = document.createElement("a");
+    label.className = "settings-stack-row__label";
+    label.textContent = mark.username;
+    label.href = `/u/${encodeURIComponent(mark.username)}`;
+    label.target = "_blank";
+    label.rel = "noopener";
+    const tag = document.createElement("input");
+    tag.type = "text";
+    tag.className = "settings-text-input";
+    tag.maxLength = userMarksApi().tagMaxLength;
+    tag.value = mark.tag;
+    tag.placeholder = "短标签";
+    tag.setAttribute("aria-label", `${mark.username} 的私人标签`);
+    const note = document.createElement("input");
+    note.type = "text";
+    note.className = "settings-text-input";
+    note.maxLength = userMarksApi().noteMaxLength;
+    note.value = mark.note;
+    note.placeholder = "备注";
+    note.setAttribute("aria-label", `${mark.username} 的私人备注`);
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "settings-button settings-button--tonal";
+    save.textContent = "保存";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "settings-button settings-button--text";
+    remove.textContent = "删除";
+    const status = document.createElement("small");
+    status.className = "settings-inline-status";
+    status.setAttribute("role", "status");
+    save.addEventListener("click", () => writeUserMark({ mark: { userId: mark.userId, username: mark.username, tag: tag.value, note: note.value } }, status));
+    remove.addEventListener("click", () => writeUserMark({ remove: true, userId: mark.userId }, status));
+    row.append(label, tag, note, save, remove, status);
+    return row;
+  }
+
+  async function writeUserMark(message, status) {
+    status.textContent = "";
+    try {
+      const response = await sendRuntimeMessage({ type: "user-marks-write", ...message });
+      if (!response?.ok) {
+        throw new Error(response?.error || "用户标记写入失败");
+      }
+      userMarksStore = userMarksApi().normalize(response.marks);
+      renderUserMarksList();
+    } catch (error) {
+      status.textContent = error.message;
+    }
   }
 
   function renderFieldDefinitions() {
@@ -1574,6 +1738,7 @@
       });
     }
     renderShortcutEditor();
+    readUserMarksStore().catch((error) => console.error("[betterLD] user marks read failed", error));
   }
 
   function writeOrderedEditor(settings, key) {
@@ -1817,6 +1982,91 @@
     syncSegmentIndicators();
   }
 
+  function topicExportOrigin(value) {
+    const origin = String(value);
+    const url = new URL(origin);
+    if (url.protocol !== "https:" || url.origin !== origin) {
+      throw new Error(`离线导出授权域名无效：${origin}`);
+    }
+    return origin;
+  }
+
+  async function loadTopicExportOrigins() {
+    const key = config.topicExport.offlinePermissionStorageKey;
+    const stored = await storageGet(key);
+    const value = stored[key];
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error("离线导出授权域名存储格式异常");
+    }
+    // 存储值同样按精确 https origin 校验，避免被改写的存储绕过请求范围。
+    topicExportOrigins = (value || []).map(topicExportOrigin);
+    renderTopicExportOrigins();
+  }
+
+  function renderTopicExportOrigins() {
+    topicExportOriginList.replaceChildren(...topicExportOrigins.map((origin) => {
+      const item = document.createElement("li");
+      item.className = "settings-origin-list__item";
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.value = origin;
+      checkbox.dataset.topicExportOrigin = origin;
+      const text = document.createElement("span");
+      text.textContent = origin;
+      label.append(checkbox, text);
+      item.append(label);
+      return item;
+    }));
+    topicExportOriginEmpty.hidden = topicExportOrigins.length > 0;
+    // 网页内设置不能弹权限窗口，此时按钮用于打开完整扩展设置页，列表为空也可点。
+    topicExportGrantButton.disabled = topicExportGrantBusy
+      || (canRequestTopicExportPermission && !topicExportOrigins.length);
+  }
+
+  async function openTopicExportSettings() {
+    try {
+      const response = await sendRuntimeMessage({ type: "open-topic-export-settings" });
+      if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
+      setStatusMessage(topicExportOriginStatus, "已打开扩展授权页：高级 → 导入与导出。", "success");
+    } catch (error) {
+      setStatusMessage(topicExportOriginStatus, `打开授权页失败：${error.message}`, "error");
+      console.error("[betterLD] topic export settings page failed", error);
+    }
+  }
+
+  async function grantTopicExportOrigins() {
+    if (topicExportGrantBusy) return;
+    const requested = [...topicExportOriginList.querySelectorAll("input[data-topic-export-origin]")]
+      .filter((input) => input.checked)
+      .map((input) => topicExportOrigin(input.value));
+    if (!requested.length) {
+      setStatusMessage(topicExportOriginStatus, "请先勾选需要授权的域名。", "error");
+      return;
+    }
+    topicExportGrantBusy = true;
+    renderTopicExportOrigins();
+    try {
+      // 必须在点击的同步调用链里申请精确 origins，不申请全部网站权限。
+      const granted = await api.permissions.request({ origins: requested.map((origin) => `${origin}/*`) });
+      if (!granted) throw new Error("浏览器没有授予所选域名的访问权限");
+      const remaining = [];
+      for (const origin of topicExportOrigins) {
+        if (!await api.permissions.contains({ origins: [`${origin}/*`] })) remaining.push(origin);
+      }
+      await storageSet({ [config.topicExport.offlinePermissionStorageKey]: remaining });
+      topicExportOrigins = remaining;
+      setStatusMessage(topicExportOriginStatus, "已授权所选域名，可以回到主题页重新导出。", "success");
+    } catch (error) {
+      setStatusMessage(topicExportOriginStatus, `授权失败：${error.message}`, "error");
+      console.error("[betterLD] topic export permission request failed", error);
+    } finally {
+      topicExportGrantBusy = false;
+      renderTopicExportOrigins();
+    }
+  }
+
   async function openExternalSearchSettings() {
     if (externalSearchPermissionBusy) return;
     externalSearchPermissionBusy = true;
@@ -1920,6 +2170,166 @@
       setStatusMessage(maintenanceStatus, `已从 WebDAV 追加规则（${counts}）。`, "success");
     } catch (error) {
       setStatusMessage(maintenanceStatus, `WebDAV 下载失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
+  }
+
+  function timestampSuffix() {
+    return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "-");
+  }
+
+  async function readLibraryForBackup() {
+    const stored = await storageGet([config.libraryStorageKey]);
+    return libraryStore.read(stored[config.libraryStorageKey]);
+  }
+
+  async function exportLibrary() {
+    try {
+      const library = await readLibraryForBackup();
+      const size = downloadJson(`betterld-library-${timestampSuffix()}.json`, libraryStore.exportPayload(library));
+      setStatusMessage(maintenanceStatus, `收藏库已导出（${size} 字节：稍后再看 ${library.later.length} 条，收藏 ${library.favorites.length} 条，分组 ${library.folders.length} 个）。`, "success");
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库导出失败，未生成文件。 ${error instanceof Error ? error.message : "读取失败"}`, "error");
+    }
+  }
+
+  function librarySummaryText(summary) {
+    const parts = [
+      `新增稍后再看 ${summary.added.later} 条、收藏 ${summary.added.favorites} 条`,
+      `重复跳过 ${summary.duplicates.later + summary.duplicates.favorites} 条`,
+      `新建分组 ${summary.foldersAdded} 个`
+    ];
+    if (summary.folderConflicts.length) {
+      parts.push(`分组冲突 ${summary.folderConflicts.map((conflict) => `本地「${conflict.localName}」保留，导入的「${conflict.name}」另建新分组`).join("；")}`);
+    }
+    return parts.join("；");
+  }
+
+  // 导入先按后台当前数据预览摘要，确认后再由同一队列追加去重。
+  async function importLibraryPayload(payload) {
+    const preview = await sendRuntimeMessage({ type: "library-import", payload, dryRun: true });
+    if (!preview?.ok) {
+      throw new Error(preview?.error || "收藏库导入校验失败");
+    }
+    const previewText = librarySummaryText(preview.summary);
+    if (!globalThis.confirm(`校验通过：${previewText}。\n\n确认把这些内容追加到当前收藏库？`)) {
+      setStatusMessage(maintenanceStatus, `已取消导入。预览：${previewText}。`, "error");
+      return;
+    }
+    const result = await sendRuntimeMessage({ type: "library-import", payload, dryRun: false });
+    if (!result?.ok) {
+      throw new Error(result?.error || "收藏库导入失败");
+    }
+    setStatusMessage(maintenanceStatus, `收藏库已导入：${librarySummaryText(result.summary)}。`, "success");
+  }
+
+  async function importLibraryFile(file) {
+    const parsed = JSON.parse(await file.text());
+    await importLibraryPayload(parsed);
+  }
+
+  // 嵌入设置没有 permissions API：按外部搜索的方式开扩展设置页并定位到收藏备份地址。
+  async function openLibraryWebdavSettings(action) {
+    try {
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "libraryWebdavUrl" });
+      if (!response?.ok) throw new Error(response?.error || "扩展设置页未能打开");
+      setStatusMessage(maintenanceStatus, `已打开扩展设置页的「收藏备份 WebDAV 地址」。请在扩展页面完成${action}，访问权限会在那里的点击中申请。`, "success");
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `打开扩展设置页失败：${error instanceof Error ? error.message : "未知错误"}。可点击浏览器工具栏的 betterLD 图标，进入「高级 → 同步与缓存」。`, "error");
+    }
+  }
+
+  // 收藏备份权限：必须在点击的同步调用链里先调用 request，再等待结果。
+  function requestLibraryWebdavPermission(url) {
+    const origin = `${new URL(url).origin}/*`;
+    return api.permissions.request({ origins: [origin] }).then((granted) => {
+      if (!granted) throw new Error("未授予该地址的访问权限");
+    });
+  }
+
+  // 地址来自当前表单（含刚输入的值），与规则备份地址相同时拒绝，避免互相覆盖。
+  function libraryWebdavFormValues() {
+    const values = readForm();
+    if (!values.libraryWebdavUrl) {
+      throw new Error("请先填写收藏备份 WebDAV 地址");
+    }
+    if (values.libraryWebdavUrl === values.webdavUrl) {
+      throw new Error("收藏备份地址不能与规则备份地址相同，否则会互相覆盖");
+    }
+    return values;
+  }
+
+  async function libraryWebdavUpload() {
+    if (!canRequestWebdavPermission) {
+      await openLibraryWebdavSettings("上传收藏库");
+      return;
+    }
+    let values;
+    try {
+      values = libraryWebdavFormValues();
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库上传失败：${error.message}`, "error");
+      return;
+    }
+    if (!globalThis.confirm("上传会用本地收藏库覆盖远端收藏备份文件，是否继续？")) {
+      return;
+    }
+    try {
+      const permission = requestLibraryWebdavPermission(values.libraryWebdavUrl);
+      await permission;
+      await save(values);
+      const library = await readLibraryForBackup();
+      const body = JSON.stringify(libraryStore.exportPayload(library), null, 2);
+      const response = await sendRuntimeMessage({
+        type: "webdav",
+        method: "PUT",
+        url: values.libraryWebdavUrl,
+        username: values.webdavUsername,
+        password: values.webdavPassword,
+        body
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "WebDAV 上传失败");
+      }
+      const bytes = new TextEncoder().encode(body).length;
+      setStatusMessage(maintenanceStatus, `收藏库已覆盖上传到 ${new URL(values.libraryWebdavUrl).host}（${bytes} 字节）。`, "success");
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库上传失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
+  }
+
+  async function libraryWebdavDownload() {
+    if (!canRequestWebdavPermission) {
+      await openLibraryWebdavSettings("下载收藏库");
+      return;
+    }
+    let values;
+    try {
+      values = libraryWebdavFormValues();
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库下载失败：${error.message}`, "error");
+      return;
+    }
+    try {
+      const permission = requestLibraryWebdavPermission(values.libraryWebdavUrl);
+      await permission;
+      await save(values);
+      const response = await sendRuntimeMessage({
+        type: "webdav",
+        method: "GET",
+        url: values.libraryWebdavUrl,
+        username: values.webdavUsername,
+        password: values.webdavPassword
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "WebDAV 下载失败");
+      }
+      const text = String(response.text ?? "");
+      if (!text.trim()) {
+        throw new Error("收藏备份文件内容为空，未导入任何数据");
+      }
+      await importLibraryPayload(JSON.parse(text));
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库下载失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
     }
   }
 
@@ -2194,19 +2604,42 @@
     }
   }
 
+  const settingsHashField = { "#externalSearchEngine": "externalSearchEngine", "#libraryWebdavUrl": "libraryWebdavUrl" }[location.hash];
   renderFieldDefinitions();
   addRangeLimits();
   renderStructuredEditors();
   initializeDnsGuide();
   renderRail();
   showCategory(config.settingsCategories[0].id);
-  if (!isEmbedded && location.hash === "#externalSearchEngine") {
-    const field = controlMap.get("externalSearchEngine").closest(".settings-field");
+  if (!isEmbedded && settingsHashField) {
+    const field = controlMap.get(settingsHashField).closest(".settings-field");
     revealSearchEntry({ field });
+  }
+  topicExportGrantButton.textContent = canRequestTopicExportPermission ? "授权所选域名" : "打开扩展授权页";
+  topicExportGrantButton.addEventListener("click", () => {
+    if (canRequestTopicExportPermission) grantTopicExportOrigins();
+    else openTopicExportSettings();
+  });
+  topicExportRefreshButton.addEventListener("click", () => {
+    loadTopicExportOrigins().catch((error) => {
+      setStatusMessage(topicExportOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    });
+  });
+  loadTopicExportOrigins().catch((error) => {
+    setStatusMessage(topicExportOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    console.error("[betterLD] topic export origins load failed", error);
+  });
+  if (!isEmbedded && location.hash === "#topicExportOffline") {
+    showCategory("advanced", "data");
+    topicExportOriginList.closest(".settings-group-card").scrollIntoView({ block: "start" });
   }
 
   settingsPageBody.addEventListener("change", (event) => {
     if (!(event.target instanceof HTMLElement) || !event.target.matches("input, textarea, select")) {
+      return;
+    }
+    // 离线导出授权区是独立权限入口，勾选不写入设置参数。
+    if (event.target.closest("#topic-export-origin-list")) {
       return;
     }
     if (event.target.type === "file") {
@@ -2317,6 +2750,23 @@
   });
   document.querySelector("#webdav-upload").addEventListener("click", webdavUpload);
   document.querySelector("#webdav-download").addEventListener("click", webdavDownload);
+  document.querySelector("#library-webdav-limit").textContent = `${config.webdavMaxBodyLength} 字节（${config.webdavMaxBodyLength / 1024 / 1024}MB）`;
+  document.querySelector("#library-webdav-upload").addEventListener("click", libraryWebdavUpload);
+  document.querySelector("#library-webdav-download").addEventListener("click", libraryWebdavDownload);
+  document.querySelector("#export-library").addEventListener("click", exportLibrary);
+  document.querySelector("#import-library").addEventListener("click", () => libraryImportFile.click());
+  libraryImportFile.addEventListener("change", async () => {
+    const file = libraryImportFile.files?.[0];
+    libraryImportFile.value = "";
+    if (!file) {
+      return;
+    }
+    try {
+      await importLibraryFile(file);
+    } catch (error) {
+      setStatusMessage(maintenanceStatus, `收藏库导入失败，当前收藏未改变。 ${error instanceof Error ? error.message : "文件格式无效"}`, "error");
+    }
+  });
   document.querySelector("#about-version").textContent = `版本 ${api.runtime?.getManifest?.().version || "未知"} · Manifest V3`;
 
   wallpaperSources.replaceChildren(...sourceOptions.map(createSourceOption));
@@ -2401,6 +2851,9 @@
   });
 
   api.storage.onChanged?.addListener((changes, areaName) => {
+    if (areaName === "local" && changes[userMarksApi().storageKey]) {
+      readUserMarksStore().catch((error) => console.error("[betterLD] user marks reload failed", error));
+    }
     if (areaName === "local" && changes[config.storageKey] && !state.settings.syncEnabled) {
       state.activeStorageArea = "local";
       populate(changes[config.storageKey].newValue);
@@ -2434,8 +2887,10 @@
         : null;
       state.syncMetadata = syncMetadata(stored[config.syncMetadataKey]);
       populate(stored[config.storageKey]);
-      if (!isEmbedded && location.hash === "#externalSearchEngine") {
-        controlMap.get("externalSearchEngine").parentElement.querySelector('.settings-segmented__item[aria-checked="true"]').focus();
+      if (!isEmbedded && settingsHashField) {
+        const control = controlMap.get(settingsHashField);
+        const segment = control.parentElement.querySelector('.settings-segmented__item[aria-checked="true"]');
+        (segment || control).focus();
       }
       if (state.settings.syncEnabled) {
         await reconcileSyncSettings(state.settings, stored[config.syncMetadataKey]);

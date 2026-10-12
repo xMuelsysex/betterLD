@@ -585,8 +585,14 @@ function buildInjection(port) {
 
   runScript(await sourceText("src/external-search.js"));
   runScript(await sourceText("src/library-entry.js"));
+  runScript(await sourceText("src/user-marks.js"));
+  runScript(await sourceText("src/library-store.js"));
+  runScript(await sourceText("src/history-store.js"));
+  runScript(await sourceText("src/offline-assets.js"));
+  runScript(await sourceText("src/share-image.js"));
   runScript(await sourceText("src/topic-library.js"));
   runScript(await sourceText("src/topic-export.js"));
+  runScript(await sourceText("src/media.js"));
   const moduleStyle = document.createElement("style");
   moduleStyle.nonce = nonce;
   moduleStyle.textContent = await sourceText("src/topic-library.css") + "\\n" + await sourceText("src/topic-export.css");

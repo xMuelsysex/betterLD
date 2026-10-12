@@ -33,6 +33,16 @@
   font-size: 14px;
 }
 
+.betterld-export-dialog:has(.betterld-export-image-preview:not([hidden])) {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.betterld-export-image-preview[hidden] { display: none; }
+.betterld-export-image-preview { display: grid; gap: 20px; }
+.betterld-export-image-page { display: grid; gap: 12px; margin: 0; }
+.betterld-export-image { display: block; width: 100%; height: auto; border-radius: 12px; }
+.betterld-export-image-page a { text-align: center; text-decoration: none; }
+
 .betterld-export-dialog::backdrop {
   background: rgb(10 8 16 / 0.46);
   -webkit-backdrop-filter: blur(3px);

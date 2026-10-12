@@ -59,7 +59,40 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   topicRequestTimeoutMs: 30000,
   topicRequestWindowMs: 8000,
   topicRequestMaxPerWindow: 10,
-  topicExport: Object.freeze({ filenamePrefix: "linuxdo", filenameTitleMaxLength: 80, objectUrlRevokeMs: 3000, bridgeTimeoutMs: 1500, htmlMaxDepth: 8, maxRangePosts: 10000 }),
+  topicExport: Object.freeze({
+    filenamePrefix: "linuxdo",
+    filenameTitleMaxLength: 80,
+    objectUrlRevokeMs: 3000,
+    bridgeTimeoutMs: 1500,
+    htmlMaxDepth: 8,
+    htmlResourceMode: "offline",
+    maxRangePosts: 10000,
+    // 完全离线 HTML 导出：头像按原站模板的 {size} 取值，资源由后台串行下载后内嵌为 data URL。
+    // 单个资源上限是二进制字节；后台一次消息返回 base64（约 4/3），须低于浏览器消息序列化上限。
+    avatarSize: 96,
+    offlineFetchTimeoutMs: 20000,
+    offlineMaxAssetBytes: 32 * 1024 * 1024,
+    // 内嵌资源总量上限：按 base64 后长度乘以引用次数累计，即最终文件里的资源写入量。
+    offlineMaxTotalBytes: 256 * 1024 * 1024,
+    offlinePermissionStorageKey: "betterld.topic-export-origins",
+    // 分享图排版参数逐项传给 share-image.js，缺项直接报错，模块内不设隐式默认值。
+    imageShare: Object.freeze({
+      width: 1080,
+      maxHeight: 12000,
+      padding: 64,
+      fontSize: 28,
+      lineHeight: 42,
+      titleFontSize: 44,
+      headingFontSize: 34,
+      avatarSize: 56,
+      imageMaxHeight: 1600,
+      gap: 24,
+      bg: "#f8f6ff",
+      text: "#24202e",
+      primary: "#6750a4",
+      muted: "#625b71"
+    })
+  }),
   replyTreePageSize: 20,
   replyTreeLoadAheadPx: 400,
   replyTreeTimeRefreshMs: 60000,
@@ -88,12 +121,19 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   headerBlurFadePx: 32,
   sidebarTopGapPx: 24,
   libraryStorageKey: "betterld.library",
+  librarySchemaVersion: 1,
+  libraryFoldersMax: 64,
+  libraryFolderNameMaxLength: 40,
+  topicReadingViewStorageKey: "betterld.topic-reading-view",
+  userMarksStorageKey: "betterld.user-marks",
+  userMarksLimits: Object.freeze({ tagMaxLength: 16, noteMaxLength: 200, maxEntries: 500 }),
   libraryPositionStorageKey: "betterld.library-position",
   libraryDragThresholdPx: 6,
   libraryMoveStepPx: 16,
   libraryViewportInsetPx: 12,
   libraryPanelGapPx: 12,
   libraryTitleMaxLength: 500,
+  webdavMaxBodyLength: 1024 * 1024,
   externalSearch: Object.freeze({
     nativeStateTimeoutMs: 1500,
     timeoutMs: 15000,
@@ -106,6 +146,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   listRefreshScrollTopWindowMs: 10000,
   visitedTopicStorageKey: "betterld.visited-topics",
   visitedTopicMaxEntries: 500,
+  visitedHistoryTitleMaxLength: 200,
   versionCheckUrl: "https://api.github.com/repos/xMuelsysex/betterLD/releases/latest",
   topicCardMotion: Object.freeze({
     durationMs: 200,
@@ -300,6 +341,23 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "主题列表匹配创建者；搜索结果匹配搜索命中帖的作者，直接使用搜索结果，不额外请求。" },
     { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "命中白名单的主题永远不参与过滤。" }
   ]),
+  // 媒体降噪只处理已取证的平台与节点：未知播放器不猜参数，跨域播放器内部状态无法控制。
+  media: Object.freeze({
+    observerDebounceMs: 120,
+    manualActivationWindowMs: 4000,
+    missingRetryMs: 60000,
+    animatedAvatarPattern: "\\.gif(?:[?#]|$)",
+    embedAutoplayParam: "autoplay",    embedAutoplayHosts: Object.freeze([
+      "www.youtube.com",
+      "youtube.com",
+      "m.youtube.com",
+      "www.youtube-nocookie.com",
+      "youtube-nocookie.com",
+      "player.bilibili.com"
+    ]),
+    avatarUnmappedTitle: "betterLD 静态头像：暂无该用户的静态头像资源，继续使用原图",
+    embedBoundaryTitle: "betterLD：该嵌入播放器在开关启用前已加载，跨域地址无法在不重载的前提下修改，仍由站点控制"
+  }),
   settingsCategories: Object.freeze([
     {
       id: "general",
@@ -326,7 +384,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "surface",
           title: "表面与毛玻璃",
           description: "betterLD 自有卡片、菜单和面板的表面效果。",
-          keys: ["frostedGlassEnabled", "surfaceBlurPx", "sidebarCoverBlurEnabled", "userCardCoverMaskEnabled", "userCardCoverMaskOpacity", "shadowMode", "shadowHeight"]
+          keys: ["frostedGlassEnabled", "surfaceBlurPx", "readingPanelBackgroundOpacity", "sidebarCoverBlurEnabled", "userCardCoverMaskEnabled", "userCardCoverMaskOpacity", "shadowMode", "shadowHeight"]
         },
         {
           id: "font",
@@ -378,10 +436,28 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           keys: ["replyTreeNameMode"]
         },
         {
+          id: "history",
+          title: "阅读历史",
+          description: "记录实际访问过的主题、标题、最近阅读楼层与时间；关闭后停止记录新的已看标记与历史，已有数据保留。",
+          keys: ["visitedHistoryEnabled"]
+        },
+        {
+          id: "userMarks",
+          title: "用户标记",
+          description: "给用户加本机私人标签与备注；标签显示在作者名旁，备注只在用户卡片与这里可见。",
+          keys: ["userMarksEnabled"]
+        },
+        {
           id: "filter",
           title: "筛选",
           description: "筛选原生主题行与搜索结果，不改变 LinuxDo 原始查询与分页。",
           keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode", "topicFilterMaxAgeDays", "topicFilterHideLv1", "topicFilterHideLv2", "topicFilterHideLv3", "topicFilterBinEnabled"]
+        },
+        {
+          id: "media",
+          title: "阅读与媒体",
+          description: "阻止原帖、树状回复、Boost 与插件预览里的视频自动播放，并把原站头像动图换成同尺寸静态头像。",
+          keys: ["mediaBlockAutoplay", "staticAvatarsEnabled"]
         },
         {
           id: "search",
@@ -513,7 +589,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           id: "maintenance",
           title: "同步与缓存",
           description: "浏览器同步只投影设置，不包含本地壁纸正文、搜索历史与 WebDAV 凭据。",
-          keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword"]
+          keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword", "libraryWebdavUrl"]
         },
         {
           id: "data",
@@ -563,6 +639,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     userCardCoverMaskEnabled: true,
     userCardCoverMaskOpacity: 0.78,
     surfaceBlurPx: 16,
+    readingPanelBackgroundOpacity: 0.72,
     shadowMode: "default",
     shadowHeight: 1,
     shadowCurve: [
@@ -592,6 +669,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicWatchedState: true,
     topicListAppearance: "material",
     replyTreeNameMode: "both",
+    userMarksEnabled: true,
+    mediaBlockAutoplay: false,
+    staticAvatarsEnabled: false,
+    visitedHistoryEnabled: true,
     topicSortMode: "activity",
     topicCardContextMenuConfig: [
       { key: "openCurrentTab", visible: true, order: 0 },
@@ -670,13 +751,15 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     syncEnabled: false,
     webdavUrl: "",
     webdavUsername: "",
-    webdavPassword: ""
+    webdavPassword: "",
+    libraryWebdavUrl: ""
   }),
   settingsLimits: Object.freeze({
     maskOpacity: Object.freeze({ min: 0, max: 0.8, step: 0.01 }),
     blurPx: Object.freeze({ min: 0, max: 32, step: 1 }),
     cardOpacity: Object.freeze({ min: 0.55, max: 0.95, step: 0.01 }),
     surfaceBlurPx: Object.freeze({ min: 0, max: 32, step: 1 }),
+    readingPanelBackgroundOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
     userCardCoverMaskOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
     shadowHeight: Object.freeze({ min: 0, max: 2, step: 0.1 }),
     shadowCurveOpacity: Object.freeze({ min: 0, max: 1, step: 0.01 }),
@@ -689,6 +772,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     webdavUsername: Object.freeze({ maxLength: 200 }),
     webdavPassword: Object.freeze({ maxLength: 200 }),
     webdavUrl: Object.freeze({ maxLength: 2048 }),
+    libraryWebdavUrl: Object.freeze({ maxLength: 2048 }),
     shortcut: Object.freeze({ maxLength: 24 }),
     searchHistory: Object.freeze({ maxItems: 50, maxLength: 200 })
   })

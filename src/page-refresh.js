@@ -612,6 +612,125 @@
     }
   });
 
+  // 用户卡片身份只在卡片已加载模型时读取：view-registry 按元素 id 持有卡片实例，不新增任何用户请求。
+  document.addEventListener("betterld:user-card-request", (event) => {
+    const { id } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const element = document.querySelector("#user-card");
+      const card = element && owner.lookup("-view-registry:main")[element.id];
+      const user = card?.user;
+      // 卡片先渲染 loading 骨架，user 稍后赋值：未载入时返回 pending，由卡片 DOM 变化重试。
+      if (!user) {
+        document.dispatchEvent(new CustomEvent("betterld:user-card", {
+          detail: JSON.stringify({ id, pending: true })
+        }));
+        return;
+      }
+      document.dispatchEvent(new CustomEvent("betterld:user-card", {
+        detail: JSON.stringify({ id, payload: { userId: user.id, username: user.username, avatarTemplate: user.avatar_template || "" } })
+      }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:user-card", {
+        detail: JSON.stringify({ id, error: error.message })
+      }));
+    }
+  });
+
+  // 静态头像身份只读原站已加载的模型，不发任何用户请求；CDN 解析交给原站 getURLWithCDN。
+  function rememberAvatarTemplate(map, ids, user) {
+    const username = typeof user?.username === "string" ? user.username.trim() : "";
+    const template = typeof user?.avatar_template === "string" ? user.avatar_template.trim() : "";
+    if (Number.isSafeInteger(user?.id) && username) {
+      ids.set(user.id, username);
+    }
+    if (username && template && !map.has(username)) {
+      map.set(username, template);
+    }
+  }
+
+  function readModelAvatarTemplates(owner, map, ids) {
+    const topic = owner.lookup("controller:topic")?.model;
+    if (topic) {
+      rememberAvatarTemplate(map, ids, topic.details?.created_by);
+      (topic.details?.participants || []).forEach((user) => rememberAvatarTemplate(map, ids, user));
+      (topic.postStream?.posts || []).forEach((post) => {
+        rememberAvatarTemplate(map, ids, post);
+        rememberAvatarTemplate(map, ids, post.user);
+        (post.boosts || []).forEach((boost) => rememberAvatarTemplate(map, ids, boost.user));
+      });
+      (topic.postStream?.users || []).forEach((user) => rememberAvatarTemplate(map, ids, user));
+    }
+    rememberAvatarTemplate(map, ids, owner.lookup("service:current-user"));
+    const element = document.querySelector("#user-card");
+    const card = element && owner.lookup("-view-registry:main")[element.id];
+    rememberAvatarTemplate(map, ids, card?.user);
+  }
+
+  document.addEventListener("betterld:media-data-request", (event) => {
+    const { id, pairs, templates } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const getURLWithCDN = window.require("discourse/lib/get-url").getURLWithCDN;
+      const map = new Map(Object.entries(templates || {}));
+      const ids = new Map();
+      readModelAvatarTemplates(owner, map, ids);
+      const urls = {};
+      const missing = [];
+      (pairs || []).forEach((pair) => {
+        const username = pair.username || ids.get(Number(pair.userId)) || "";
+        const template = map.get(username);
+        if (!template) {
+          missing.push(pair.key);
+          return;
+        }
+        urls[`${pair.key}|${pair.size}`] = getURLWithCDN(String(template).replace("{size}", String(pair.size)));
+      });
+      document.dispatchEvent(new CustomEvent("betterld:media-data", {
+        detail: JSON.stringify({ id, payload: { urls, missing } })
+      }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent("betterld:media-data", {
+        detail: JSON.stringify({ id, error: error.message })
+      }));
+    }
+  });
+
+  document.addEventListener("betterld:reading-filter-request", async (event) => {
+    const { id, topicId, username } = JSON.parse(event.detail);
+    let stream;
+    let previous;
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const controller = owner.lookup("controller:topic");
+      if (String(controller.model?.id) !== topicId) throw new Error("当前主题已切换");
+      stream = controller.model.postStream;
+      if (stream.loadingFilter) throw new Error("原站正在切换筛选，请稍后重试");
+      previous = { userFilters: [...stream.userFilters], filter: stream.filter,
+        filterRepliesToPostNumber: stream.filterRepliesToPostNumber, filterUpwardsPostID: stream.filterUpwardsPostID };
+      if (username) await stream.filterParticipant(username);
+      else await stream.refresh({ cancelFilter: true });
+      const pathTopicId = location.pathname.match(/^\/t\/(?:(\d+)|[^/]+\/(\d+))(?:\/|$)/);
+      if (String(controller.model?.id) !== topicId || (pathTopicId?.[1] || pathTopicId?.[2]) !== topicId) throw new Error("当前主题已切换");
+      controller.updateQueryParams();
+      // 本次筛选需要完整快照，不能沿用前一种筛选的增量签名。
+      replySignature = "";
+      replyPostSnapshots.clear();
+      document.dispatchEvent(new CustomEvent("betterld:reading-filter-result", {
+        detail: JSON.stringify({ id, topicId, userFilters: [...stream.userFilters], topReplies: stream.filter === "summary" })
+      }));
+      // 即使内容脚本等待已超时，迟到的原站成功也必须重新同步，而不是留下旧视图。
+      queueMicrotask(() => document.dispatchEvent(new CustomEvent("betterld:reply-sync", { detail: JSON.stringify({ topicId }) })));
+    } catch (error) {
+      if (stream && previous) {
+        stream.setProperties({ ...previous, loadingFilter: false });
+      }
+      document.dispatchEvent(new CustomEvent("betterld:reading-filter-result", {
+        detail: JSON.stringify({ id, topicId, error: error.message || "原站筛选失败" })
+      }));
+    }
+  });
+
   document.addEventListener("betterld:export-topic-request", (event) => {
     const { id, topicId } = JSON.parse(event.detail);
     try {
@@ -623,7 +742,8 @@
       document.dispatchEvent(new CustomEvent("betterld:export-topic-result", {
         detail: JSON.stringify({ id, payload: {
           id: topic.id, title: topic.title, posts_count: topic.posts_count,
-          filtered: Boolean(stream.filter),
+          // 作者筛选与摘要筛选都只给出命中楼，导出全部回复时不能把这套流当成完整流。
+          filtered: Boolean(stream.filter) || stream.userFilters.length > 0,
           post_stream: { stream: [...stream.stream], posts: stream.posts.map((post) =>
             Object.fromEntries(postFields.map((key) => [key, post[key]]))) }
         } })
@@ -698,7 +818,7 @@
         const previous = replyPostSnapshots.get(id);
         if (!previous || snapshot.some((value, index) => value !== previous[index])) changedPosts.push(postSyncValues(post));
       }
-      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", user_badges: topic.user_badges };
+      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges };
       const signature = JSON.stringify(data);
       if (signature !== replySignature || changedPosts.length) {
         document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ ...data, posts: changedPosts }) }));
@@ -826,6 +946,14 @@
     const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
     const name = owner.lookup("service:router")?.currentRouteName;
     const model = name ? owner.lookup(`route:${name}`)?.currentModel : null;
+    const currentTopic = name?.startsWith("topic.") ? owner.lookup("controller:topic")?.model : null;
+    const category = currentTopic?.category;
+    const currentMetadata = currentTopic ? {
+      id: String(currentTopic.id),
+      ...(category?.id && category.name ? { category: { id: String(category.id), name: category.name } }
+        : currentTopic.category_id === null ? { category: null } : {}),
+      ...(Array.isArray(currentTopic.tags) ? { tags: currentTopic.tags.map((tag) => typeof tag === "string" ? tag : tag.name).filter((tag) => typeof tag === "string" && tag.trim()) } : {})
+    } : null;
     let list = model?.list ?? model;
     if (name === "full-page-search") list = owner.lookup("controller:full-page-search")?.model;
     if (name?.startsWith("topic.")) {
@@ -834,12 +962,14 @@
     }
     const topics = Array.isArray(list?.topics) ? list.topics
       : Array.isArray(list?.topic_list?.topics) ? list.topic_list.topics : null;
-    if (!topics?.length) return null;
+    if (!topics?.length && !currentMetadata) return null;
+    const entries = topics || [];
     const users = [
       ...arrayOrEmpty(list?.users ?? model?.users),
-      ...topics.flatMap((topic) => arrayOrEmpty(topic.posters).map((poster) => poster.user).filter(Boolean))
+      ...entries.flatMap((topic) => arrayOrEmpty(topic.posters).map((poster) => poster.user).filter(Boolean))
     ];
     return {
+      current_topic: currentMetadata,
       // 头像保留模板（含 {size} 占位），消费端按原站 CDN 配置解析资产地址。
       users: users.map((user) => ({
         id: user.id,
@@ -847,9 +977,11 @@
         avatar_template: stringOrEmpty(user.avatar_template ?? user.avatarTemplate)
       })),
       topic_list: {
-        topics: topics.map((topic) => ({
+        topics: entries.map((topic) => ({
           id: String(topic.id),
           creator: topic.creator?.username || "",
+          // 列表与详情推荐模型都带创建者身份；没有 id 时留 null，消费端再退回 posters[0]。
+          creator_id: numberOrNull(topic.creator_id ?? topic.creator?.id),
           creator_avatar_template: stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate),
           excerpt: stringOrEmpty(topic.excerpt),
           posters: arrayOrEmpty(topic.posters).map((poster) => ({
@@ -896,8 +1028,10 @@
         && Array.isArray(model.posts) && !controller.searching && !controller.loading
         && !controller.error && !controller.invalidSearch && controller.searchActive
         && controller.usingDefaultSearchType && !controller.context && !controller.isPrivateMessage && !controller.isPMOnly);
+      // 搜索命中帖的作者以原站搜索模型的 user_id 为准，不从用户名字符串反推。
+      const authors = ready ? Object.fromEntries(model.posts.map((post) => [String(post.topic_id), post.user_id])) : {};
       document.dispatchEvent(new CustomEvent("betterld:search-state", {
-        detail: JSON.stringify({ id, ready, query: ready ? term : "", empty: ready && controller.resultCount === 0 })
+        detail: JSON.stringify({ id, ready, query: ready ? term : "", empty: ready && controller.resultCount === 0, authors })
       }));
     } catch (error) {
       document.dispatchEvent(new CustomEvent("betterld:search-state", { detail: JSON.stringify({ id, error: error.message }) }));
