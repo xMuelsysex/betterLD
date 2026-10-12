@@ -4,16 +4,22 @@
     if (!globalThis.BETTERLD_CONFIG) importScripts(api.runtime.getURL("betterld.config.js"));
     if (!globalThis.BETTERLD_OFFLINE_ASSETS) importScripts("offline-assets.js");
     if (!globalThis.BETTERLD_LIBRARY_ENTRY) importScripts("library-entry.js");
+    if (!globalThis.BETTERLD_LIBRARY_STORE) importScripts("library-store.js");
+    if (!globalThis.BETTERLD_USER_MARKS) importScripts("user-marks.js");
+    if (!globalThis.BETTERLD_HISTORY_STORE) importScripts("history-store.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
     // 只借 searchUrl 构造引擎请求地址；后台没有 DOMParser，HTML 解析留在内容脚本
     if (!globalThis.BETTERLD_EXTERNAL_SEARCH) importScripts("external-search.js");
   }
 
   const config = globalThis.BETTERLD_CONFIG;
-  const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
-  const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
   const offlineAssets = globalThis.BETTERLD_OFFLINE_ASSETS;
-  const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch);
+  const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
+  const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
+  const userMarks = globalThis.BETTERLD_USER_MARKS;
+  const historyStore = globalThis.BETTERLD_HISTORY_STORE;
+  const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
+  const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch, config.webdavMaxBodyLength);
   if (!api?.runtime?.onMessage || !api.tabs?.create) {
     return;
   }
@@ -112,6 +118,16 @@
   async function handleOpenExternalSearchSettings(sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
     return createTab({ url: api.runtime.getURL("src/options.html#externalSearchEngine"), active: true });
+  }
+
+  // 设置页深链只接受已知字段，避免任意 hash 被当成定位目标
+  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl"]);
+
+  async function handleOpenSettingsAt(message, sender) {
+    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
+    const hash = String(message.hash || "");
+    if (!settingsHashTargets.has(hash)) return { ok: false, error: "未知的设置定位目标" };
+    return createTab({ url: api.runtime.getURL(`src/options.html#${hash}`), active: true });
   }
 
   // 外部搜索引擎兜底：只发 GET，不做解析、不自动申请权限、失败不换引擎
@@ -297,6 +313,28 @@
   }
 
   let libraryQueue = Promise.resolve();
+  let userMarksQueue = Promise.resolve();
+  let historyQueue = Promise.resolve();
+
+  async function readStoredLibrary() {
+    const stored = await api.storage.local.get(config.libraryStorageKey);
+    return libraryStore.read(stored[config.libraryStorageKey]);
+  }
+
+  async function writeStoredLibrary(library) {
+    await api.storage.local.set({ [config.libraryStorageKey]: library });
+    return library;
+  }
+
+  // 私人标记的增删跨标签串行：先读当前存储，校验后写回完整对象。
+  async function writeUserMark(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const stored = await api.storage.local.get(config.userMarksStorageKey);
+    const marks = userMarks.normalize(stored[config.userMarksStorageKey]);
+    const next = message.remove ? userMarks.remove(marks, message.userId) : userMarks.upsert(marks, message.mark);
+    await api.storage.local.set({ [config.userMarksStorageKey]: next });
+    return { ok: true, marks: next };
+  }
 
   async function toggleLibrary(message, sender) {
     if (!isTrustedSender(sender)) throw new Error("请求来源无效");
@@ -305,19 +343,157 @@
     const topic = message.topic;
     entry.validate(topic);
     if (message.group === "later" && topic.postNumber !== undefined) throw new Error("稍后再看只保存主题");
-    const stored = await api.storage.local.get(config.libraryStorageKey);
-    const library = stored[config.libraryStorageKey] ?? { later: [], favorites: [] };
-    if (!Array.isArray(library.later) || !Array.isArray(library.favorites)) throw new Error("收藏存储格式异常，原数据保持不变");
+    const library = await readStoredLibrary();
     const items = library[message.group];
     const existing = items.findIndex((item) => entry.key(item) === entry.key(topic));
     if (message.remove) {
       if (existing >= 0) items.splice(existing, 1);
     } else if (existing < 0) {
-      items.unshift({ id: String(topic.id), ...(topic.postNumber === undefined ? {} : { postNumber: topic.postNumber }), title: topic.title.trim().slice(0, config.libraryTitleMaxLength), href: entry.href(topic), savedAt: Date.now() });
+      items.unshift(libraryStore.record(topic));
     }
-    await api.storage.local.set({ [config.libraryStorageKey]: library });
-    return { ok: true, library };
+    return { ok: true, library: await writeStoredLibrary(library) };
   }
+
+  async function createFolder(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const name = libraryStore.folderName(message.name);
+    const library = await readStoredLibrary();
+    if (library.folders.length >= config.libraryFoldersMax) throw new Error(`收藏分组数量已达上限 ${config.libraryFoldersMax}`);
+    library.folders.push({ id: libraryStore.uniqueFolderId(library), name });
+    return { ok: true, library: await writeStoredLibrary(library) };
+  }
+
+  async function renameFolder(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const name = libraryStore.folderName(message.name);
+    const library = await readStoredLibrary();
+    const folder = library.folders.find((item) => item.id === message.id);
+    if (!folder) throw new Error("收藏分组不存在");
+    folder.name = name;
+    return { ok: true, library: await writeStoredLibrary(library) };
+  }
+
+  // 删除分组只移除分组本身，收藏回到未分类，收藏条目与原站书签都不动。
+  async function deleteFolder(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const library = await readStoredLibrary();
+    const index = library.folders.findIndex((item) => item.id === message.id);
+    if (index < 0) throw new Error("收藏分组不存在");
+    library.folders.splice(index, 1);
+    library.favorites.forEach((item) => {
+      if (item.folderId === message.id) delete item.folderId;
+    });
+    return { ok: true, library: await writeStoredLibrary(library) };
+  }
+
+  async function moveLibraryItem(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (message.folderId !== null && typeof message.folderId !== "string") throw new Error("收藏目标分组无效");
+    const topic = message.topic;
+    entry.validate(topic);
+    const library = await readStoredLibrary();
+    const item = library.favorites.find((entryItem) => entry.key(entryItem) === entry.key(topic));
+    if (!item) throw new Error("收藏条目不存在");
+    if (message.folderId === null) {
+      delete item.folderId;
+    } else {
+      if (!library.folders.some((folder) => folder.id === message.folderId)) throw new Error("收藏分组不存在");
+      item.folderId = message.folderId;
+    }
+    return { ok: true, library: await writeStoredLibrary(library) };
+  }
+
+  // 导入按当前最新数据追加去重；dryRun 只预览摘要，不写存储。
+  async function importLibrary(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const incoming = libraryStore.readImport(message.payload);
+    const current = await readStoredLibrary();
+    const { library, summary } = libraryStore.merge(current, incoming);
+    if (message.dryRun === true) {
+      return { ok: true, summary };
+    }
+    return { ok: true, summary, library: await writeStoredLibrary(library) };
+  }
+
+  // 浏览历史的所有读写都在同一条串行队列上：先读当前存储再写回完整对象，多标签页同时访问不会互相覆盖。
+  async function readStoredHistory() {
+    const stored = await api.storage.local.get(config.visitedTopicStorageKey);
+    return historyStore.read(stored[config.visitedTopicStorageKey]);
+  }
+
+  async function writeStoredHistory(history) {
+    await api.storage.local.set({ [config.visitedTopicStorageKey]: history });
+    return history;
+  }
+
+  // 是否记录只认最新设置：内容脚本的本地状态可能落后于另一个标签页里的开关。
+  async function historyRecordingEnabled() {
+    const stored = await api.storage.local.get(config.storageKey);
+    const value = stored[config.storageKey]?.visitedHistoryEnabled;
+    return typeof value === "boolean" ? value : config.settingsDefaults.visitedHistoryEnabled;
+  }
+
+  // 实际访问由内容脚本在路由变化或页面恢复可见时触发；时间戳只在后台取，初次与重访都更新。
+  async function recordHistoryVisit(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (!(await historyRecordingEnabled())) {
+      return { ok: true, skipped: "浏览历史已关闭" };
+    }
+    const history = await readStoredHistory();
+    const records = historyStore.visit(history.records, {
+      id: message.id,
+      title: message.title,
+      category: message.category,
+      tags: message.tags,
+      postNumber: message.postNumber,
+      visitedAt: Date.now()
+    });
+    return { ok: true, history: await writeStoredHistory({ records }) };
+  }
+
+  // 楼层与标题的后续补足不改访问时间；只命中同一次实际访问，记录已删除或被新访问覆盖时不写入。
+  async function updateHistoryRecord(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (!(await historyRecordingEnabled())) {
+      return { ok: true, skipped: "浏览历史已关闭" };
+    }
+    const history = await readStoredHistory();
+    const records = historyStore.update(history.records, { id: message.id, title: message.title, category: message.category, tags: message.tags, postNumber: message.postNumber, visitedAt: message.visitedAt });
+    if (records) return { ok: true, history: await writeStoredHistory({ records }) };
+    // 同值补写已经满足目标；只有访问身份过期才要求内容脚本重试，避免每次模型同步重复发送。
+    const current = history.records.find((record) => record.id === String(message.id));
+    if (current?.visitedAt === message.visitedAt) return { ok: true, history };
+    return { ok: true, skipped: "这次访问已被覆盖或已删除，记录未写入" };
+  }
+
+  // 删除与清空是用户主动动作，与记录开关无关。
+  async function removeHistoryRecord(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const history = await readStoredHistory();
+    const records = historyStore.remove(history.records, message.id);
+    return { ok: true, history: await writeStoredHistory({ records }) };
+  }
+
+  async function clearHistory(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    return { ok: true, history: await writeStoredHistory(historyStore.clear()) };
+  }
+
+  const historyHandlers = {
+    "history-visit": recordHistoryVisit,
+    "history-update": updateHistoryRecord,
+    "history-remove": removeHistoryRecord,
+    "history-clear": clearHistory
+  };
+
+  const libraryHandlers = {
+    "library-toggle": toggleLibrary,
+    "library-folder-create": createFolder,
+    "library-folder-rename": renameFolder,
+    "library-folder-delete": deleteFolder,
+    "library-item-move": moveLibraryItem,
+    "library-import": importLibrary
+  };
 
   async function handleOpenDnsSettings(sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
@@ -327,22 +503,18 @@
   }
 
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message?.type === "library-toggle") {
-      const request = libraryQueue.then(() => toggleLibrary(message, sender));
+    const libraryHandler = libraryHandlers[message?.type];
+    if (libraryHandler) {
+      const request = libraryQueue.then(() => libraryHandler(message, sender));
       libraryQueue = request.then(() => undefined, () => undefined);
       request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
     }
-    if (message?.type === "open-dns-settings") {
-      handleOpenDnsSettings(sender)
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
-    if (message?.type === "open-external-search-settings") {
-      handleOpenExternalSearchSettings(sender)
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, error: error.message }));
+    const historyHandler = historyHandlers[message?.type];
+    if (historyHandler) {
+      const request = historyQueue.then(() => historyHandler(message, sender));
+      historyQueue = request.then(() => undefined, () => undefined);
+      request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
     }
     if (message?.type === "open-topic-export-settings") {
@@ -361,6 +533,30 @@
       handleTopicExportAsset(message, sender)
         .then(sendResponse)
         .catch((error) => sendResponse({ ok: false, error: error instanceof Error ? error.message : "资源归档失败" }));
+      return true;
+    }
+    if (message?.type === "open-settings-at") {
+      handleOpenSettingsAt(message, sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "user-marks-write") {
+      const request = userMarksQueue.then(() => writeUserMark(message, sender));
+      userMarksQueue = request.then(() => undefined, () => undefined);
+      request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "open-dns-settings") {
+      handleOpenDnsSettings(sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    if (message?.type === "open-external-search-settings") {
+      handleOpenExternalSearchSettings(sender)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
     }
     if (message?.type === "external-search") {

@@ -1750,12 +1750,12 @@ body.betterld-shell #main-outlet :is(.user-card, .group-card, .category-card):em
 }
 
 /* 正文跨过侧栏轨道，以整个视口为中线；两侧对称预留侧栏与时间轴空间。 */
-body.betterld-shell #main-outlet-wrapper:has(.container.posts[data-betterld-reply-tree-active="true"]),
+body.betterld-shell #main-outlet-wrapper:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])),
 body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet-wrapper:has(.betterld-topic-list, .betterld-search-results) {
   padding-inline: 0;
 }
 
-html.desktop-view body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
+html.desktop-view body.betterld-shell #main-outlet:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
   grid-column: 1 / -1 !important;
   width: min(var(--betterld-topic-detail-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
   margin-inline: auto !important;
@@ -1764,7 +1764,7 @@ html.desktop-view body.betterld-shell #main-outlet:has(.container.posts[data-bet
   left: calc((100vw - 100%) / 2);
 }
 
-body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
+body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row {
   grid-column: 1 / -1;
   grid-row: 1;
   min-width: 0;
@@ -1772,7 +1772,7 @@ body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .
   max-width: 100%;
 }
 
-body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-navigation {
   grid-column: 2;
   grid-row: 1;
   align-self: start;
@@ -1780,7 +1780,7 @@ body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .
   z-index: 1;
 }
 
-html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+html.desktop-view body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-navigation {
   position: sticky;
   top: calc(var(--header-offset, 52px) + 16px);
   grid-column: 1 / -1;
@@ -1790,26 +1790,34 @@ html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-
   max-width: calc(var(--betterld-topic-timeline-space) - 32px);
 }
 
-html.desktop-view body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation :is(.d-toc-wrapper, .d-toc-main, .timeline-container) {
+html.desktop-view body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-navigation :is(.d-toc-wrapper, .d-toc-main, .timeline-container) {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
 }
 
+/* 原站移动布局即使窗口拉宽也不预留独立时间轴列。 */
+html.mobile-view body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row { grid-row: 2; }
+html.mobile-view body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-navigation { grid-column: 1 / -1; grid-row: 1; position: relative; inset: auto; justify-self: end; transform: none; width: auto; max-width: 100%; }
+
 /* 侧栏收起的窄窗口让时间轴独占一行，正文仍占满同宽轨道。 */
 @media (max-width: 767px) {
-  html:is(.desktop-view, .mobile-view) body.betterld-shell #main-outlet:has(.container.posts[data-betterld-reply-tree-active="true"]) {
-    grid-column: 1 / -1 !important;
+  body.betterld-shell #main-outlet-wrapper:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+  html:is(.desktop-view, .mobile-view) body.betterld-shell #main-outlet:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
+    grid-area: auto / 1 / auto / -1 !important;
     width: calc(100% - 48px) !important;
     margin-inline: auto !important;
     left: calc((100vw - 100%) / 2);
   }
 
-  body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .row {
+  body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row {
     grid-row: 2;
   }
 
-  html:is(.desktop-view, .mobile-view) body.betterld-shell .container.posts[data-betterld-reply-tree-active="true"] > .topic-navigation {
+  html:is(.desktop-view, .mobile-view) body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-navigation {
     grid-column: 1 / -1;
     grid-row: 1;
     position: relative;
@@ -3881,7 +3889,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   padding: 16px;
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.3);
   border-radius: var(--betterld-radius-lg);
-  background: rgb(var(--betterld-surface-rgb) / 0.72);
+  background: rgb(var(--betterld-surface-rgb) / var(--betterld-reading-panel-alpha));
   color: var(--betterld-on-surface);
 }
 
@@ -3928,6 +3936,136 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   color: var(--betterld-on-surface-variant);
 }
 
+/* 阅读筛选复用原站 username_filters 语义，只切换服务端筛选结果，不隐藏已加载楼层。 */
+.betterld-reply-tree__filters {
+  display: inline-flex;
+  gap: 2px;
+  margin-inline-start: 8px;
+  padding: 2px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.4);
+  border-radius: 999px;
+  background: rgb(var(--betterld-surface-container-rgb) / 0.8);
+  vertical-align: middle;
+}
+
+.betterld-reply-tree__filter {
+  padding: 6px 14px;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  font-weight: 600;
+}
+
+.betterld-reply-tree__filter--active {
+  background: rgb(var(--betterld-primary-rgb) / 0.18) !important;
+  color: var(--betterld-primary);
+}
+
+.betterld-reply-tree__range {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--betterld-on-surface-variant);
+}
+
+.betterld-reply-tree__filter-status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--betterld-error);
+}
+
+.betterld-reply-tree__filter-status[hidden] {
+  display: none;
+}
+
+.betterld-reply-tree__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--betterld-on-surface-variant);
+}
+
+.betterld-reply-tree__notice[hidden] {
+  display: none;
+}
+
+.betterld-reply-tree__notice-action {
+  padding: 4px 10px;
+  border: 1px solid rgb(var(--betterld-primary-rgb) / 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.betterld-reply-tree__context-toggle {
+  align-self: flex-start;
+  margin-bottom: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.betterld-reply-tree__item[data-betterld-context="true"] > .betterld-reply-tree__card {
+  border-color: rgb(var(--betterld-outline-rgb) / 0.22);
+}
+
+.betterld-reply-tree__mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--betterld-on-surface-variant);
+}
+
+.betterld-reply-tree__mine-item {
+  padding: 4px 10px;
+  border-radius: 999px !important;
+  font-size: 12px;
+}
+
+.betterld-reply-tree__context {
+  color: var(--betterld-primary);
+}
+
+/* 私人标签复用圆角与材质 Token，与原站头衔、OP/ME 独立。 */
+.betterld-user-mark {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 3px 8px;
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-primary-rgb) / .14);
+  color: var(--betterld-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.betterld-user-marks { margin-top: 8px; }
+#user-card .betterld-user-marks { flex: 1 1 100%; min-width: 0; width: 100%; list-style: none; }
+.betterld-user-marks__panel { margin-top: 8px; padding: 12px; border: 1px solid rgb(var(--betterld-outline-rgb) / .24); border-radius: var(--betterld-radius-md); background: rgb(var(--betterld-surface-rgb) / .56); }
+.betterld-user-marks__panel[hidden] { display: none; }
+.betterld-user-marks__input { display: block; width: 100%; margin-bottom: 6px; min-height: 40px; box-sizing: border-box; padding: 10px 12px; border: 1px solid rgb(var(--betterld-outline-rgb) / .35); border-radius: var(--betterld-radius-sm); background: rgb(var(--betterld-surface-container-rgb) / .78); color: var(--betterld-on-surface); font: inherit; font-size: 14px; caret-color: var(--betterld-primary); }
+.betterld-user-marks__input:focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 2px; }
+textarea.betterld-user-marks__input { min-height: 60px; resize: vertical; }
+.betterld-user-marks__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__toggle, .betterld-user-marks__save, .betterld-user-marks__clear) { min-height: 40px; padding: 8px 16px; border-radius: var(--betterld-radius-sm) !important; font: inherit; font-size: 14px; }
+.betterld-user-marks__status { margin: 6px 0 0; font-size: 12px; color: var(--betterld-on-surface-variant); }
+
 .betterld-reply-tree__content {
   min-width: 0;
   overflow-x: auto;
@@ -3953,6 +4091,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   min-width: 0;
 }
 
+/* 徽章复用 topic-avatar 的原站尺寸、偏移与圆形/图片规则。 */
 .topic-avatar.betterld-reply-tree__avatar-wrap {
   position: relative;
   display: block;
@@ -3964,8 +4103,6 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   height: 36px;
   flex: 0 0 36px;
 }
-
-/* 徽章复用 topic-avatar 的原站尺寸、偏移与圆形/图片规则。 */
 
 .betterld-reply-tree__avatar-link {
   display: block;
@@ -4077,6 +4214,11 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 .betterld-reply-tree__author-mark--me {
   color: var(--betterld-success);
+}
+
+/* 作者筛选下补入的父楼只是上下文，用中性色与命中楼区分。 */
+.betterld-reply-tree__author-mark--context {
+  color: var(--betterld-on-surface-variant);
 }
 
 .betterld-reply-tree__number {
@@ -4466,18 +4608,16 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   padding-left: 24px;
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children) > .betterld-reply-tree__card::after {
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden])) > .betterld-reply-tree__card::after {
   content: "";
   position: absolute;
   top: 36px;
-  bottom: -18px;
+  bottom: -28px;
   left: 17px;
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden])) > .betterld-reply-tree__card::after {
-  bottom: -28px;
-}
+.betterld-reply-tree__children[hidden] { display: none; }
 
 .betterld-reply-tree__children > .betterld-reply-tree__item::after {
   content: "";
@@ -4923,3 +5063,26 @@ html:is([data-betterld-frosted-glass="false"], [data-betterld-material="fallback
   border: 0;
 }
 .betterld-reply-tree__cooked .video-container video { width: 100%; height: auto; }
+
+/* 作者筛选的控制栏和原帖流共用一块板；节点仍由原站管理，时间轴与普通原帖不套外板。 */
+body.betterld-shell :has(> .betterld-topic-reading) { --betterld-reading-panel-padding: 16px; }
+body.betterld-shell .betterld-topic-reading { padding: var(--betterld-reading-panel-padding); }
+body.betterld-shell .betterld-reading-panel { position: relative; isolation: isolate; }
+body.betterld-shell .betterld-reading-panel::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: var(--betterld-radius-lg); background: rgb(var(--betterld-surface-rgb) / var(--betterld-reading-panel-alpha)); border: 1px solid rgb(var(--betterld-outline-rgb) / .24); box-shadow: var(--betterld-shadow-level-1); }
+body.betterld-shell .betterld-reading-panel > .betterld-topic-reading { border-color: transparent; background: transparent; box-shadow: none; }
+body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) :is(.topic-area, .posts-wrapper, .post-stream) { box-sizing: border-box; min-width: 0; width: 100%; max-width: none; }
+body.betterld-shell .betterld-reading-panel > .post-stream { padding-inline: calc(var(--betterld-reading-panel-padding) + 1px); padding-block-end: calc(var(--betterld-reading-panel-padding) + 1px); }
+body.betterld-shell .container.posts[data-betterld-reading-active="true"] .post__row > .topic-body { flex: 1; min-width: 0; width: auto; max-width: none; }
+.betterld-topic-reading__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; max-width: 100%; padding-bottom: 12px; border-bottom: 1px solid rgb(var(--betterld-outline-rgb) / .24); margin-bottom: 12px; }
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__filters, button) { min-width: 0; max-width: 100%; }
+.betterld-topic-reading__toolbar button, .betterld-topic-reading > :is(.betterld-reply-tree__range, .betterld-reply-tree__filter-status, .betterld-reply-tree__notice) { white-space: normal; overflow-wrap: anywhere; }
+.betterld-topic-reading__toolbar .betterld-reply-tree__filters { margin-inline-start: 0; }
+.betterld-topic-reading__toolbar .betterld-reply-tree__toggle { margin: 0; min-height: 40px; }
+.betterld-topic-reading__toolbar .betterld-reply-tree__return-all { position: static; box-shadow: none; }
+.betterld-topic-reading__toolbar button:disabled { cursor: wait; opacity: .6; }
+.betterld-reply-tree__filter { min-height: 40px; font: inherit; font-size: 14px; color: var(--betterld-on-surface-variant); cursor: pointer; }
+.betterld-reply-tree__filter:hover { background: rgb(var(--betterld-primary-rgb) / .08) !important; }
+.betterld-reply-tree__filter[aria-pressed="true"] { background: rgb(var(--betterld-primary-rgb) / .18) !important; color: var(--betterld-primary); }
+.betterld-reply-tree__filter:focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 2px; }
+
+@media (max-width: 560px) { body.betterld-shell :has(> .betterld-topic-reading) { --betterld-reading-panel-padding: 12px; } .betterld-reply-tree__filters { display: flex; flex-wrap: wrap; margin-inline-start: 0; max-width: 100%; } .betterld-reply-tree__filter { flex: 1; padding-inline: 8px; } }

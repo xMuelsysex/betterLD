@@ -86,6 +86,10 @@
     "frostedGlassEnabled",
     "sidebarCoverBlurEnabled",
     "userCardCoverMaskEnabled",
+    "userMarksEnabled",
+    "mediaBlockAutoplay",
+    "staticAvatarsEnabled",
+    "visitedHistoryEnabled",
     "removeChinesePunctuationIndent",
     "customCssEnabled",
     "showTopicAvatar",
@@ -137,6 +141,7 @@
     "maskOpacity",
     "blurPx",
     "cardOpacity",
+    "readingPanelBackgroundOpacity",
     "surfaceBlurPx",
     "userCardCoverMaskOpacity",
     "shadowHeight",
@@ -438,6 +443,7 @@
     result.searchPageWallpaperId = text(source.searchPageWallpaperId, defaults.searchPageWallpaperId, 120);
     result.searchPageWallpaperUrl = safeHttpsUrl(source.searchPageWallpaperUrl);
     result.webdavUrl = safeWebdavUrl(source.webdavUrl);
+    result.libraryWebdavUrl = safeWebdavUrl(source.libraryWebdavUrl);
     result.searchHistory = normalizeSearchHistory(source.searchHistory);
 
     return result;
@@ -550,9 +556,17 @@
     }
     const settings = normalizeSettings({ ...normalizeSettings(current), ...value });
     const validation = validateSettings(settings);
-    const webdavErrors = text(value.webdavUrl) && !webdavUrlAllowed(value.webdavUrl)
-      ? ["WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址"]
-      : [];
+    const webdavErrors = [
+      text(value.webdavUrl) && !webdavUrlAllowed(value.webdavUrl)
+        ? "WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址"
+        : "",
+      text(value.libraryWebdavUrl) && !webdavUrlAllowed(value.libraryWebdavUrl)
+        ? "收藏备份 WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址"
+        : "",
+      text(value.libraryWebdavUrl) && safeWebdavUrl(value.libraryWebdavUrl) === safeWebdavUrl(value.webdavUrl)
+        ? "收藏备份地址不能与规则备份地址相同，否则会互相覆盖"
+        : ""
+    ].filter(Boolean);
     const ruleErrors = validateRuleArrays(value);
     const errors = [...webdavErrors, ...ruleErrors, ...validation.errors];
     const rejectedKeys = [];

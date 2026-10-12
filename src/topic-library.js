@@ -5,13 +5,28 @@
   const api = globalThis.browser || globalThis.chrome;
   const config = globalThis.BETTERLD_CONFIG;
   const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
-  const groups = { later: "稍后再看", favorites: "收藏" };
-  let library = { later: [], favorites: [] };
+  const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
+  const historyApi = globalThis.BETTERLD_HISTORY_STORE;
+  const groups = { later: "稍后再看", favorites: "收藏", history: "浏览历史" };
+  const tabOrder = ["later", "favorites", "history"];
+  let library = libraryStore.empty();
+  let history = historyApi.empty();
   let ready = false;
   let errorMessage = "";
+  let historyError = "";
   let activeGroup = "later";
+  let query = "";
+  let folderFilter = "*";
+  let folderSignature = "";
+  let folderPending = false;
   let fab;
   let panel;
+  let toolbar;
+  let searchInput;
+  let folderFilterSelect;
+  let clearHistory;
+  let folderManager;
+  let items;
   let list;
   let status;
   let tabs;
@@ -19,6 +34,7 @@
   let fabPosition = null;
   let drag = null;
   let suppressClick = false;
+  let historyPending = false;
   const pending = new Set();
   const failedBookmarks = new Map();
 
@@ -40,21 +56,10 @@
     return svg;
   }
 
-  function validateLibrary(value) {
-    if (!value || !Array.isArray(value.later) || !Array.isArray(value.favorites)) throw new Error("收藏存储格式异常，原数据保持不变");
-    for (const items of [value.later, value.favorites]) {
-      for (const item of items) {
-        entry.validate(item);
-        if (!Number.isFinite(item.savedAt)) throw new Error("收藏保存时间异常，原数据保持不变");
-      }
-    }
-    return value;
-  }
-
   async function readLibrary() {
     try {
       const stored = await api.storage.local.get(config.libraryStorageKey);
-      library = validateLibrary(stored[config.libraryStorageKey] ?? { later: [], favorites: [] });
+      library = libraryStore.read(stored[config.libraryStorageKey]);
       ready = true;
       errorMessage = "";
     } catch (error) {
@@ -63,6 +68,20 @@
       console.error("[betterLD] library read failed", error);
     }
     sync();
+    render();
+  }
+
+  // 浏览历史与收藏库共用一个面板但数据互相独立；这里只读取，写入交给后台串行队列。
+  async function readHistory() {
+    try {
+      const stored = await api.storage.local.get(config.visitedTopicStorageKey);
+      history = historyApi.read(stored[config.visitedTopicStorageKey]);
+      historyError = "";
+    } catch (error) {
+      history = historyApi.empty();
+      historyError = `浏览历史读取失败：${error.message}`;
+      console.error("[betterLD] history read failed", error);
+    }
     render();
   }
 
@@ -108,8 +127,9 @@
     if (node.textContent !== text) node.textContent = text;
   }
 
+  // 只同步条目按钮；分组管理与重试按钮没有 data-library-group，不属于收藏条目。
   function syncButtons() {
-    document.querySelectorAll(".betterld-library-save").forEach((button) => {
+    document.querySelectorAll(".betterld-library-save[data-library-group]").forEach((button) => {
       const group = button.dataset.libraryGroup;
       const id = button.dataset.libraryId;
       const selected = saved(group, { id });
@@ -157,7 +177,7 @@
     const old = document.querySelector(".betterld-library-topic-action");
     if (!match) { old?.remove(); return; }
     // 原站到页底时会卸载正文标题，并把同一主题标题放进顶栏。
-    const title = document.querySelector(`#topic-title h1, .d-header .header-title .topic-link[data-topic-id="${match[1]}"]`)?.textContent.trim();
+    const title = document.querySelector(`#topic-title h1[data-topic-id="${match[1]}"] .fancy-title, .d-header .header-title .topic-link[data-topic-id="${match[1]}"]`)?.textContent.trim();
     const host = document.querySelector("#topic-footer-buttons .topic-footer-main-buttons__actions");
     if (!host) { old?.remove(); return; }
     if (old && (old.parentElement !== host || old.dataset.libraryId !== match[1])) old.remove();
@@ -327,40 +347,287 @@
     tabs.querySelector(`[data-group="${activeGroup}"]`).focus();
   }
 
+  function emptyMessage() {
+    if (activeGroup === "history") {
+      return history.records.length ? "没有匹配的浏览记录，试试清空搜索词。" : "实际访问过的主题会记录在这里。";
+    }
+    if (!library[activeGroup].length) {
+      return activeGroup === "later"
+        ? "在首页点击「稍后再看」，主题就会保存在这里。"
+        : "在帖子底部点击「收藏」，或在树状回复中添加书签，可保存主题或对应楼层。";
+    }
+    return "没有匹配的收藏，试试清空搜索词或切换分组。";
+  }
+
+  function visibleItems() {
+    const keyword = query.trim().toLowerCase();
+    return library[activeGroup].filter((item) => {
+      if (activeGroup === "favorites" && folderFilter !== "*" && (item.folderId ?? "") !== folderFilter) {
+        return false;
+      }
+      return !keyword || item.title.toLowerCase().includes(keyword);
+    });
+  }
+
+  function historyLabel(record) {
+    return record.title || `主题 #${record.id}`;
+  }
+
+  function visibleHistory() {
+    const keyword = query.trim().toLowerCase();
+    return historyApi.sortRecords(history.records).filter((record) => !keyword
+      || [historyLabel(record), record.category?.name || "", ...(record.tags || [])].join(" ").toLowerCase().includes(keyword));
+  }
+
+  function folderSignatureOf() {
+    return library.folders.map((folder) => `${folder.id}:${folder.name}`).join("|");
+  }
+
+  function renderToolbar() {
+    // 读取失败时保留工具条：清空入口是非法数据唯一的恢复路径，不能随错误一起隐藏。
+    if (activeGroup !== "history" && !ready) {
+      toolbar.hidden = true;
+      return;
+    }
+    toolbar.hidden = false;
+    if (searchInput.value !== query) searchInput.value = query;
+    searchInput.placeholder = activeGroup === "history" ? "搜索标题、分类或标签" : "搜索标题";
+    folderFilterSelect.hidden = activeGroup !== "favorites";
+    clearHistory.hidden = activeGroup !== "history";
+    clearHistory.disabled = historyPending || (!history.records.length && !historyError);
+    const signature = folderSignatureOf();
+    if (folderFilterSelect.dataset.signature !== signature) {
+      folderFilterSelect.dataset.signature = signature;
+      const options = [["*", "全部分组"], ["", "未分类"], ...library.folders.map((folder) => [folder.id, folder.name])];
+      folderFilterSelect.replaceChildren(...options.map(([value, label]) => {
+        const option = element("option", "", label);
+        option.value = value;
+        return option;
+      }));
+    }
+    if (folderFilter !== "*" && folderFilter !== "" && !library.folders.some((folder) => folder.id === folderFilter)) {
+      folderFilter = "*";
+    }
+    if (folderFilterSelect.value !== folderFilter) folderFilterSelect.value = folderFilter;
+  }
+
+  function syncFolderBusy() {
+    folderManager.querySelectorAll("button, input").forEach((node) => {
+      node.disabled = folderPending;
+    });
+    items.querySelectorAll(".betterld-library-move").forEach((node) => {
+      node.disabled = folderPending;
+    });
+  }
+
+  function setFolderBusy(busy) {
+    folderPending = busy;
+    syncFolderBusy();
+  }
+
+  function folderRow(folder) {
+    const row = element("div", "betterld-library-folder-row");
+    const name = element("input", "betterld-library-folder-name");
+    name.type = "text";
+    name.value = folder.name;
+    name.maxLength = config.libraryFolderNameMaxLength;
+    name.setAttribute("aria-label", `分组名称：${folder.name}`);
+    const save = element("button", "betterld-library-save", "保存");
+    save.type = "button";
+    save.addEventListener("click", () => folderCommand({ type: "library-folder-rename", id: folder.id, name: name.value }, "重命名分组失败"));
+    const remove = element("button", "betterld-library-remove", "删除");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `删除分组：${folder.name}`);
+    remove.addEventListener("click", () => {
+      if (!globalThis.confirm(`删除分组「${folder.name}」？分组内的收藏会移到未分类，收藏本身保留。`)) return;
+      folderCommand({ type: "library-folder-delete", id: folder.id }, "删除分组失败");
+    });
+    row.append(name, save, remove);
+    return row;
+  }
+
+  function renderFolders() {
+    folderManager.hidden = !ready || activeGroup !== "favorites";
+    if (folderManager.hidden) return;
+    const signature = folderSignatureOf();
+    if (folderSignature === signature) {
+      syncFolderBusy();
+      return;
+    }
+    folderSignature = signature;
+    const create = element("div", "betterld-library-folder-create");
+    const name = element("input", "betterld-library-folder-name");
+    name.type = "text";
+    name.placeholder = "新分组名称";
+    name.maxLength = config.libraryFolderNameMaxLength;
+    name.setAttribute("aria-label", "新分组名称");
+    const add = element("button", "betterld-library-save", "新建分组");
+    add.type = "button";
+    add.addEventListener("click", async () => {
+      if (await folderCommand({ type: "library-folder-create", name: name.value }, "新建分组失败")) name.value = "";
+    });
+    create.append(name, add);
+    folderManager.replaceChildren(
+      element("p", "betterld-library-folders-title", `分组（${library.folders.length}/${config.libraryFoldersMax}）`),
+      create,
+      ...library.folders.map(folderRow)
+    );
+    syncFolderBusy();
+  }
+
+  async function folderCommand(message, errorLabel) {
+    if (folderPending) return false;
+    setFolderBusy(true);
+    try {
+      const response = await send(message);
+      if (!response?.ok) throw new Error(response?.error || "收藏分组操作失败");
+      await readLibrary();
+      return true;
+    } catch (error) {
+      errorMessage = `${errorLabel}：${error.message}`;
+      console.error("[betterLD] library folder command failed", error);
+      render();
+      return false;
+    } finally {
+      setFolderBusy(false);
+    }
+  }
+
+  async function moveItem(topic, folderId) {
+    if (folderPending) return;
+    setFolderBusy(true);
+    try {
+      const response = await send({ type: "library-item-move", topic, folderId });
+      if (!response?.ok) throw new Error(response?.error || "收藏移动失败");
+      await readLibrary();
+    } catch (error) {
+      errorMessage = `移动收藏失败：${error.message}`;
+      console.error("[betterLD] library item move failed", error);
+      render();
+    } finally {
+      setFolderBusy(false);
+    }
+  }
+
+  async function historyCommand(message, errorLabel) {
+    if (historyPending) return false;
+    historyPending = true;
+    render();
+    try {
+      const response = await send(message);
+      if (!response?.ok) throw new Error(response?.error || "浏览历史操作失败");
+      await readHistory();
+      return true;
+    } catch (error) {
+      historyError = `${errorLabel}：${error.message}`;
+      console.error("[betterLD] history command failed", error);
+      render();
+      return false;
+    } finally {
+      historyPending = false;
+      render();
+    }
+  }
+
+  function topicFloorHref(record) {
+    return `${location.origin}/t/topic/${record.id}${record.postNumber === undefined ? "" : `/${record.postNumber}`}`;
+  }
+
+  // 标题与最近阅读楼层都用整页跳转打开深链：原站路由会拦截站内点击，完整加载才能可靠定位楼层。
+  function deepLink(element, record) {
+    element.href = topicFloorHref(record);
+    element.addEventListener("click", (event) => {
+      if (record.postNumber === undefined || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      location.assign(topicFloorHref(record));
+    });
+  }
+
+  function historyRow(record) {
+    const label = historyLabel(record);
+    const row = element("div", "betterld-library-item");
+    const link = element("a", "betterld-library-link", label);
+    deepLink(link, record);
+    const meta = element("p", "betterld-library-meta");
+    meta.append(element("span", "", record.visitedAt === undefined ? "日期未知" : new Date(record.visitedAt).toLocaleString()));
+    if (record.postNumber !== undefined) {
+      const floor = element("a", "betterld-library-floor", `最近阅读 #${record.postNumber} 楼`);
+      deepLink(floor, record);
+      meta.append(" · ", floor);
+    }
+    const taxonomy = element("div", "betterld-library-history-taxonomy");
+    taxonomy.append(element("span", "betterld-library-history-category", record.category?.name || (record.category === null ? "未分类" : "分类未知")));
+    for (const tag of record.tags || []) taxonomy.append(element("span", "betterld-library-history-tag", `#${tag}`));
+    if (record.tags === undefined) taxonomy.append(element("span", "betterld-library-history-unknown", "标签未知"));
+    const controls = element("div", "betterld-library-item__controls");
+    const remove = element("button", "betterld-library-remove", "移除");
+    remove.type = "button";
+    remove.disabled = historyPending;
+    remove.setAttribute("aria-label", `从浏览历史移除：${label}`);
+    remove.addEventListener("click", () => historyCommand({ type: "history-remove", id: record.id }, "移除浏览记录失败"));
+    controls.append(remove);
+    row.append(link, taxonomy, meta, controls);
+    return row;
+  }
+
   function render() {
     if (!panel) return;
-    status.textContent = errorMessage || "本机保存 · 树内书签同步到收藏，移除本地收藏不影响原站书签";
-    status.dataset.error = String(Boolean(errorMessage));
+    status.textContent = [errorMessage, historyError].filter(Boolean).join(" · ")
+      || "本机保存 · 树内书签同步到收藏，移除本地收藏不影响原站书签";
+    status.dataset.error = String(Boolean(errorMessage || historyError));
     for (const tab of tabs.children) {
       const active = tab.dataset.group === activeGroup;
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
-      setText(tab, `${groups[tab.dataset.group]} ${library[tab.dataset.group].length}`);
+      const count = tab.dataset.group === "history" ? history.records.length : library[tab.dataset.group].length;
+      setText(tab, `${groups[tab.dataset.group]} ${count}`);
     }
     list.setAttribute("aria-labelledby", `betterld-library-tab-${activeGroup}`);
-    list.replaceChildren();
-    if (failedBookmarks.size) {
+    renderToolbar();
+    renderFolders();
+    items.replaceChildren();
+    if (activeGroup !== "history" && failedBookmarks.size) {
       const retry = element("button", "betterld-library-save", "重试同步楼层书签");
       retry.type = "button";
       retry.addEventListener("click", () => {
         for (const data of failedBookmarks.values()) queueBookmark(data);
       });
-      list.append(retry);
+      items.append(retry);
     }
-    if (!ready) {
-      const retry = element("button", "betterld-library-save", "重试读取收藏库");
+    if (activeGroup === "history" ? Boolean(historyError) : !ready) {
+      const retry = element("button", "betterld-library-save", activeGroup === "history" ? "重试读取浏览历史" : "重试读取收藏库");
       retry.type = "button";
-      retry.addEventListener("click", readLibrary);
-      list.append(retry);
+      retry.addEventListener("click", activeGroup === "history" ? readHistory : readLibrary);
+      items.append(retry);
       positionPanel();
       return;
     }
-    if (!library[activeGroup].length) {
-      list.append(element("p", "betterld-library-empty", activeGroup === "later" ? "在首页点击「稍后再看」，主题就会保存在这里。" : "在帖子底部点击「收藏」，或在树状回复中添加书签，可保存主题或对应楼层。"));
+    if (activeGroup === "history") {
+      const records = visibleHistory();
+      if (!records.length) items.append(element("p", "betterld-library-empty", emptyMessage()));
+      else {
+        let previousGroup = null;
+        for (const record of records) {
+          const date = record.visitedAt === undefined ? null : new Date(record.visitedAt);
+          const group = date ? date.toLocaleDateString() : "日期未知";
+          if (group !== previousGroup) {
+            items.append(element("h3", "betterld-library-history-date", group));
+            previousGroup = group;
+          }
+          items.append(historyRow(record));
+        }
+      }
       positionPanel();
       return;
     }
-    for (const topic of library[activeGroup]) {
+    const visible = visibleItems();
+    if (!visible.length) {
+      items.append(element("p", "betterld-library-empty", emptyMessage()));
+      positionPanel();
+      return;
+    }
+    for (const topic of visible) {
       const row = element("div", "betterld-library-item");
       const label = topic.postNumber === undefined ? topic.title : `${topic.title} · #${topic.postNumber} 楼`;
       const link = element("a", "betterld-library-link", label);
@@ -371,14 +638,29 @@
         event.stopPropagation();
         location.assign(entry.href(topic));
       });
+      const controls = element("div", "betterld-library-item__controls");
+      if (activeGroup === "favorites") {
+        const move = element("select", "betterld-library-move");
+        move.setAttribute("aria-label", `移动「${topic.title}」到分组`);
+        move.disabled = folderPending;
+        move.append(...[["", "未分类"], ...library.folders.map((folder) => [folder.id, folder.name])].map(([value, text]) => {
+          const option = element("option", "", text);
+          option.value = value;
+          return option;
+        }));
+        move.value = topic.folderId ?? "";
+        move.addEventListener("change", () => moveItem(topic, move.value === "" ? null : move.value));
+        controls.append(move);
+      }
       const remove = element("button", "betterld-library-remove", "移除");
       remove.type = "button";
       remove.setAttribute("aria-label", `从${groups[activeGroup]}移除：${topic.title}`);
       remove.disabled = pending.has(`${activeGroup}:${entry.key(topic)}`);
       const group = activeGroup;
       remove.addEventListener("click", () => change(group, topic, true));
-      row.append(link, remove);
-      list.append(row);
+      controls.append(remove);
+      row.append(link, controls);
+      items.append(row);
     }
     positionPanel();
   }
@@ -389,7 +671,7 @@
     fab = element("button", "betterld-library-fab");
     fab.type = "button";
     fab.append(icon());
-    fab.setAttribute("aria-label", "打开收藏库：稍后再看与收藏；可拖动，Alt 加方向键移动");
+    fab.setAttribute("aria-label", "打开收藏库：稍后再看、收藏与浏览历史；可拖动，Alt 加方向键移动");
     fab.title = "点击打开收藏库，拖动改变位置；Alt + 方向键移动";
     fab.setAttribute("aria-expanded", "false");
     fab.setAttribute("aria-controls", "betterld-topic-library");
@@ -407,8 +689,8 @@
     header.append(title, close);
     tabs = element("div", "betterld-library-tabs");
     tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "收藏分类");
-    for (const group of Object.keys(groups)) {
+    tabs.setAttribute("aria-label", "收藏与历史分类");
+    for (const group of tabOrder) {
       const tab = element("button", "betterld-library-tab", groups[group]);
       tab.type = "button";
       tab.id = `betterld-library-tab-${group}`;
@@ -419,18 +701,54 @@
       tab.addEventListener("keydown", (event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
-        activeGroup = event.key === "Home" ? "later" : event.key === "End" ? "favorites" : activeGroup === "later" ? "favorites" : "later";
+        const index = tabOrder.indexOf(activeGroup);
+        activeGroup = event.key === "Home"
+          ? tabOrder[0]
+          : event.key === "End"
+            ? tabOrder[tabOrder.length - 1]
+            : tabOrder[(index + (event.key === "ArrowRight" ? 1 : tabOrder.length - 1)) % tabOrder.length];
         render();
         tabs.querySelector(`[data-group="${activeGroup}"]`).focus();
       });
       tabs.append(tab);
     }
+    toolbar = element("div", "betterld-library-toolbar");
+    searchInput = element("input", "betterld-library-search");
+    searchInput.type = "search";
+    searchInput.placeholder = "搜索标题";
+    searchInput.setAttribute("aria-label", "搜索收藏标题");
+    searchInput.addEventListener("input", () => {
+      query = searchInput.value;
+      render();
+    });
+    folderFilterSelect = element("select", "betterld-library-filter");
+    folderFilterSelect.setAttribute("aria-label", "按分组筛选收藏");
+    folderFilterSelect.addEventListener("change", () => {
+      folderFilter = folderFilterSelect.value;
+      render();
+    });
+    clearHistory = element("button", "betterld-library-clear", "清空历史");
+    clearHistory.type = "button";
+    clearHistory.hidden = true;
+    clearHistory.addEventListener("click", () => {
+      // 数据读不出来时条数为 0，只能靠错误文案说明这次清空会丢掉什么。
+      const detail = historyError
+        ? `浏览历史当前无法读取（${historyError}），清空会删除本机上保存的全部历史与已看标记。`
+        : `清空全部浏览历史（${history.records.length} 条）？已看标记会一起移除，收藏库不受影响。`;
+      if (!globalThis.confirm(detail)) return;
+      historyCommand({ type: "history-clear" }, "清空浏览历史失败");
+    });
+    toolbar.append(searchInput, folderFilterSelect, clearHistory);
     list = element("div", "betterld-library-list");
     list.id = "betterld-library-list";
     list.setAttribute("role", "tabpanel");
+    folderManager = element("section", "betterld-library-folders");
+    folderManager.setAttribute("aria-label", "收藏分组管理");
+    items = element("div", "betterld-library-items");
+    list.append(folderManager, items);
     status = element("p", "betterld-library-status");
     status.setAttribute("role", "status");
-    panel.append(header, tabs, list, status);
+    panel.append(header, tabs, toolbar, list, status);
     document.body.append(fab, panel);
     bindFabMovement();
     readFabPosition();
@@ -505,7 +823,9 @@
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (Object.hasOwn(changes, config.libraryStorageKey)) readLibrary();
+    if (Object.hasOwn(changes, config.visitedTopicStorageKey)) readHistory();
     if (fab && Object.hasOwn(changes, config.libraryPositionStorageKey)) readFabPosition();
   });
   readLibrary();
+  readHistory();
 })();

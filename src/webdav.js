@@ -2,7 +2,6 @@
   "use strict";
 
   const loopbackHosts = ["127.0.0.1", "localhost", "[::1]"];
-  const maxBodyLength = 1024 * 1024;
 
   function webdavUrl(value) {
     try {
@@ -40,7 +39,7 @@
     return headers;
   }
 
-  async function webdavRequest(message, fetchImpl) {
+  async function webdavRequest(message, fetchImpl, maxBodyLength) {
     const url = webdavUrl(message.url);
     if (!url) {
       return { ok: false, error: "WebDAV 地址无效：只接受 https:// 地址，http:// 仅允许本机地址" };
@@ -49,8 +48,8 @@
       return { ok: false, error: "WebDAV 只支持读取与写入" };
     }
     const body = typeof message.body === "string" ? message.body : "";
-    if (message.method === "PUT" && body.length > maxBodyLength) {
-      return { ok: false, error: "上传内容超过 1MB 限制" };
+    if (message.method === "PUT" && new TextEncoder().encode(body).length > maxBodyLength) {
+      return { ok: false, error: `上传内容超过 WebDAV 单次上限（${maxBodyLength} 字节）` };
     }
     let response;
     try {
@@ -70,9 +69,9 @@
     return { ok: true, text: message.method === "PUT" ? "" : await response.text() };
   }
 
-  function createWebdavApi(fetchImpl) {
+  function createWebdavApi(fetchImpl, maxBodyLength) {
     return {
-      request: (message) => webdavRequest(message, fetchImpl),
+      request: (message) => webdavRequest(message, fetchImpl, maxBodyLength),
       originPattern: (value) => {
         const url = webdavUrl(value);
         return url ? `${url.origin}/*` : "";

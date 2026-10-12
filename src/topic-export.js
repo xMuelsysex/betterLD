@@ -38,6 +38,8 @@
  * - HTML 导出改为完全离线单文件：正文图片、媒体、附件与作者头像由后台串行下载后内嵌 data URL，
  *   生成前完整遍历被动依赖，无法无损归档的嵌入内容显式失败并报楼层、类型与地址；
  * - HTML 导出用真实父子嵌套与 CSS 伪元素连线，Markdown 仍保留远程地址。
+ * - 分享图片（PNG）复用同一套楼层范围解析：主帖、全部回复、已加载回复与自定义楼层都可生成；
+ *   全部回复按无筛选的完整楼层流核对数量，缺正文或数量不一致时明确失败，不输出部分结果。
  * - Markdown 补 iframe / video / audio / table / details 的有意义表示。
  */
 (() => {
@@ -48,7 +50,8 @@
 
   const FORMAT_OPTIONS = Object.freeze([
     Object.freeze({ value: "html", label: "HTML" }),
-    Object.freeze({ value: "markdown", label: "Markdown" })
+    Object.freeze({ value: "markdown", label: "Markdown" }),
+    Object.freeze({ value: "png", label: "分享图片（PNG）" })
   ]);
   const HTML_RESOURCE_OPTIONS = Object.freeze([
     Object.freeze({ value: "offline", label: "完全离线内嵌" }),
@@ -56,10 +59,11 @@
   ]);
   const RANGE_OPTIONS = Object.freeze([
     Object.freeze({ value: "all", label: "全部回复" }),
+    Object.freeze({ value: "loaded", label: "已加载回复" }),
     Object.freeze({ value: "post", label: "只导出主帖" }),
     Object.freeze({ value: "custom", label: "自定义楼层" })
   ]);
-  const RANGE_LABELS = Object.freeze({ all: "全部回复", post: "主帖" });
+  const RANGE_LABELS = Object.freeze({ all: "全部回复", loaded: "已加载回复", post: "主帖" });
   const MIME_TYPES = Object.freeze({ html: "text/html;charset=utf-8", markdown: "text/markdown;charset=utf-8" });
   const FILE_EXTENSIONS = Object.freeze({ html: "html", markdown: "md" });
   const EMPTY_RANGE_HINT = "自定义楼层不能为空，例如：1,3-8";
@@ -197,6 +201,8 @@
     error.id = "betterld-export-dialog-error";
     error.setAttribute("role", "alert");
 
+    const preview = element("div", "betterld-export-image-preview");
+    preview.hidden = true;
     const actions = element("div", "betterld-export-actions");
     const permissionButton = element("button", "betterld-export-button betterld-export-button--tonal", "打开扩展授权页");
     permissionButton.type = "button";
@@ -208,7 +214,7 @@
     actions.append(permissionButton, closeButton, confirmButton);
 
     form.append(title, subject, fieldControl("导出格式", formatSelect), htmlResourceField, fieldControl("导出范围", rangeSelect),
-      customField, note, progress, error, actions);
+      customField, note, progress, error, preview, actions);
     dialog.append(form);
 
     return {
@@ -224,6 +230,9 @@
       progress,
       error,
       permissionButton,
+      preview,
+      imageUrls: [],
+      controller: null,
       closeButton,
       confirmButton,
       busy: false
@@ -231,11 +240,15 @@
   }
 
   function syncFormatNote(refs) {
+    clearImagePreview(refs);
+    const isImage = refs.formatSelect.value === "png";
+    syncCustomField(refs);
+    refs.confirmButton.textContent = isImage ? "生成图片预览" : "导出";
     const isHtml = refs.formatSelect.value === "html";
     refs.htmlResourceField.hidden = !isHtml;
     refs.note.textContent = isHtml
       ? (refs.htmlResourceSelect.value === "offline" ? OFFLINE_ASSET_NOTE : REMOTE_ASSET_NOTE)
-      : MARKDOWN_ASSET_NOTE;
+      : isImage ? "生成主帖、全部回复、已加载回复或指定楼层的排版图卡，预览后逐页下载 PNG；超长内容自动拆页。全部回复按无筛选的完整楼层流读取，数量不一致时明确失败；已加载回复只排版页面里已有的楼层。视频与外部播放器保留媒体链接，折叠和剧透保持隐藏。图片与头像复用离线资源授权，读取失败明确报出。" : MARKDOWN_ASSET_NOTE;
     refs.error.textContent = "";
     refs.progress.textContent = "";
     refs.permissionButton.hidden = true;
@@ -270,16 +283,18 @@
     state.previousFocus = document.activeElement;
     dialog.addEventListener("close", () => {
       if (state.dialog !== dialog) return;
+      refs.controller?.abort();
+      clearImagePreview(refs);
       state.dialog = null;
       dialog.remove();
       if (state.previousFocus?.isConnected) state.previousFocus.focus();
       state.previousFocus = null;
     });
-    refs.rangeSelect.addEventListener("change", () => syncCustomField(refs));
+    refs.rangeSelect.addEventListener("change", () => { clearImagePreview(refs); syncCustomField(refs); });
     refs.formatSelect.addEventListener("change", () => syncFormatNote(refs));
     refs.htmlResourceSelect.addEventListener("change", () => syncFormatNote(refs));
     syncFormatNote(refs);
-    refs.customInput.addEventListener("input", () => { refs.error.textContent = ""; });
+    refs.customInput.addEventListener("input", () => { clearImagePreview(refs); refs.error.textContent = ""; });
     refs.closeButton.addEventListener("click", closeDialog);
     refs.permissionButton.addEventListener("click", () => openOfflinePermissionSettings(refs));
     refs.form.addEventListener("submit", (event) => {
@@ -333,6 +348,8 @@
       refs.customInput.focus();
       return;
     }
+    clearImagePreview(refs);
+    refs.controller = new AbortController();
     const { dialog } = refs;
     const isActive = () => state.dialog === dialog && dialog.open;
     const assertActive = () => {
@@ -347,9 +364,14 @@
         rangeText: selection.rangeText,
         postNumbers: selection.postNumbers,
         onProgress: (value) => { refs.progress.textContent = formatProgress(value); },
-        isActive
+        isActive,
+        signal: refs.controller.signal
       });
       assertActive();
+      if (selection.format === "png") {
+        await buildImagePreview(refs, result, selection, assertActive);
+        return;
+      }
       const output = await buildOutput(result, selection, {
         assertActive,
         onProgress: (value) => { refs.progress.textContent = formatProgress(value); }
@@ -368,12 +390,87 @@
     }
   }
 
+  function clearImagePreview(refs) {
+    for (const url of refs.imageUrls) URL.revokeObjectURL(url);
+    refs.imageUrls = [];
+    refs.preview.replaceChildren();
+    refs.preview.hidden = true;
+  }
+
+  // 图卡只准备可见正文，媒体保留链接，不套用完全离线 HTML 对外部播放器的归档限制。
+  function imagePost(post, topicInfo) {
+    const root = new DOMParser().parseFromString(post.cooked, "text/html").body;
+    for (const image of root.querySelectorAll("img[data-src]")) {
+      if (!image.getAttribute("src")) image.setAttribute("src", image.getAttribute("data-src"));
+    }
+    for (const node of root.querySelectorAll("[src], [href], [poster], [data-video-src], [data-thumbnail-src], source")) {
+      for (const attr of ["src", "href", "poster", "data-video-src", "data-thumbnail-src"]) {
+        const value = node.getAttribute(attr);
+        if (value) node.setAttribute(attr, absoluteUrl(value, topicInfo.originalUrl));
+      }
+    }
+    return { ...post, cooked: root.innerHTML,
+      post_url: new URL(`/t/topic/${topicInfo.id}/${post.post_number}`, topicInfo.origin).href,
+      avatar_template: postAvatarUrl(post) };
+  }
+
+  async function buildImagePreview(refs, result, selection, assertActive) {
+    validateResult(result);
+    const posts = selectPosts(result.topic.posts, selection.postNumbers).map((post) => imagePost(post, result.topicInfo));
+    const cache = new Map();
+    let bytes = 0;
+    const loadImage = async (url) => {
+      assertActive();
+      if (cache.has(url)) return cache.get(url);
+      if (/^data:/i.test(url)) {
+        bytes += url.length;
+        if (bytes > config.topicExport.offlineMaxTotalBytes) throw new Error(`图片资源总量超过 ${formatBytes(config.topicExport.offlineMaxTotalBytes)}`);
+        offlineAssets.assertAssetMimeType(offlineAssets.dataUrlMimeType(url), ["image"], url.slice(0,80));
+        if (offlineAssets.dataUrlMimeType(url) === "image/svg+xml") offlineAssets.assertSelfContainedSvgDataUrl(url);
+        cache.set(url, url);
+        return url;
+      }
+      const response = await sendRuntimeMessage({ type: "topic-export-asset", url, kinds: ["image"] });
+      assertActive();
+      if (!response?.ok) {
+        const error = new Error(`图片读取失败：${url} —— ${response?.error || "后台没有返回资源"}`);
+        if (response?.missingOrigin) error.missingOrigins = [response.missingOrigin];
+        throw error;
+      }
+      bytes += response.dataUrl.length;
+      if (bytes > config.topicExport.offlineMaxTotalBytes) throw new Error(`图片资源总量超过 ${formatBytes(config.topicExport.offlineMaxTotalBytes)}`);
+      cache.set(url, response.dataUrl);
+      return response.dataUrl;
+    };
+    const pages = await globalThis.BETTERLD_SHARE_IMAGE.render({
+      topic: {id: result.topicInfo.id, title: result.topic.title}, posts,
+      loadImage, signal: refs.controller.signal, settings: config.topicExport.imageShare,
+      onProgress: ({ stage, done, total }) => { assertActive(); refs.progress.textContent = `${stage === "posts" ? "正在排版楼层" : "正在生成 PNG"}（${done}/${total}）`; }
+    });
+    assertActive();
+    for (const [index, page] of pages.entries()) {
+      const url = URL.createObjectURL(page.blob);
+      refs.imageUrls.push(url);
+      const figure = element("figure", "betterld-export-image-page");
+      const image = element("img", "betterld-export-image");
+      image.src = url;
+      image.alt = `分享图片第 ${index + 1} / ${pages.length} 页`;
+      const link = element("a", "betterld-export-button betterld-export-button--tonal", `下载第 ${index + 1} / ${pages.length} 页（${page.width}×${page.height}）`);
+      link.href = url;
+      link.download = `${config.topicExport.filenamePrefix}-${result.topicInfo.id}-${selection.rangeToken}-${index + 1}.png`;
+      figure.append(image, link);
+      refs.preview.append(figure);
+    }
+    refs.preview.hidden = false;
+    refs.progress.textContent = `已生成 ${pages.length} 张 PNG。请查看预览并点击每页下载。`;
+  }
+
   async function openOfflinePermissionSettings(refs) {
     refs.permissionButton.disabled = true;
     try {
       const response = await sendRuntimeMessage({ type: "open-topic-export-settings" });
       if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
-      refs.progress.textContent = "已打开扩展授权页：高级 → 导入与导出 → HTML 导出离线归档。授权缺失域名后回到主题页重新导出。";
+      refs.progress.textContent = "已打开扩展授权页：高级 → 导入与导出 → HTML 导出离线归档。HTML 归档与分享图片共用资源授权；授权缺失域名后回到主题页重新生成。";
     } catch (error) {
       refs.progress.textContent = `打开扩展授权页失败：${error.message}。可在浏览器工具栏打开 betterLD 设置，进入「高级 → 导入与导出」。`;
       console.error("[betterLD] topic export permission page failed", error);
@@ -954,6 +1051,11 @@
 
     if (!raw || normalized === "all" || raw === "全部") {
       return { kind: "all", label: raw || "all", postNumbers: null };
+    }
+
+    // 已加载回复只导出页面里已有的楼层，不补读服务端。
+    if (normalized === "loaded" || raw === "已加载回复") {
+      return { kind: "loaded", label: raw || "loaded", postNumbers: null };
     }
 
     if (POST_ONLY_ALIASES.has(normalized) || POST_ONLY_ALIASES.has(raw)) {

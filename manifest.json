@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "betterLD",
-  "version": "0.1.76",
+  "version": "0.1.77",
   "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
   "permissions": [
     "storage"
@@ -23,6 +23,9 @@
       "src/webdav.js",
       "src/external-search.js",
       "src/library-entry.js",
+      "src/library-store.js",
+      "src/user-marks.js",
+      "src/history-store.js",
       "src/background.js"
     ],
     "service_worker": "src/background.js"
@@ -39,9 +42,14 @@
         "src/markdown.js",
         "src/external-search.js",
         "src/library-entry.js",
+        "src/library-store.js",
+        "src/user-marks.js",
+        "src/history-store.js",
         "src/offline-assets.js",
+        "src/share-image.js",
         "src/topic-library.js",
         "src/topic-export.js",
+        "src/media.js",
         "src/content.js"
       ],
       "css": [
@@ -69,7 +77,11 @@
         "src/options.html",
         "src/options.css",
         "src/options.js",
-        "src/settings.js"
+        "src/settings.js",
+        "src/library-entry.js",
+        "src/library-store.js",
+        "src/user-marks.js",
+        "src/history-store.js"
       ],
       "matches": [
         "https://linux.do/*",
