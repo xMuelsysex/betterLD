@@ -94,6 +94,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     })
   }),
   replyTreePageSize: 20,
+  // 可见回复缺父楼时定点补一页，额外请求沿用主题队列并单独降低频率。
+  replyTreeParentLoadIntervalMs: 5000,
   replyTreeLoadAheadPx: 400,
   replyTreeTimeRefreshMs: 60000,
   replyTreeDeepLinkDelayMs: 1200,
