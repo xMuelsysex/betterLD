@@ -32,8 +32,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 ### 版本与开发包身份
 
 - 正式版本以根目录 `package.json` 的 `version` 为唯一权威；`manifest.json` 与打包 manifest 的数字版本同步自该值，不独立决定版本号。正式版本只由主分支整合者统一管理，功能工作树沿用基线正式版本，不按工作树数量递增。
-- 版本号采用三段数字语义：新增用户可见能力递增 minor（如 `0.1.77` → `0.2.0`），修复与打磨递增 patch（`0.2.1`），移除或不兼容变更递增 major。不因工作树数量或提交数量跳号，也不把 patch 当成交付计数器；浏览器只接受纯数字、最多四段且单段有上限，日期式版本不进入版本号。
-- 一次整合交付对应一个 tag：`v<package.json version>`（如 `v0.2.0`），并以此 tag 发布 GitHub Release。扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，比对前去掉前导 `v`、缺段按 0，所以 tag 必须与 manifest 的纯数字版本一致，不带 `m-` 开发标识。打 tag、发布 release 与推送 tag 都需主人明确授权。
+- 版本号语义与 tag/Release 规则以 `/home/muelsyse/AGENTS.md`「版本号与发布」为权威；本项目的绑定是扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，去掉前导 `v`、缺段按 0 与 manifest 版本比较，所以 tag 必须与 manifest 的纯数字版本一致、不带 `m-` 开发标识。
 - 开发身份与正式版本分开。例如正式版 `0.2.0`，开发包显示 `0.2.0-m-external-search` 或 `0.2.0-m-sidebar`。标识采用 `m-<分支标识>`，由打包工具按当前分支生成，仅写各工作树的 `dist`；正式包移除开发后缀。开发标识不参与更新版本比较，不另建手工维护的标识参数文件。
 - `manifest.json` 的 `version` 保持浏览器兼容的纯数字格式，禁止直接追加 `m`。Chrome 可使用 `version_name` 展示开发身份；Firefox 不支持该字段，跨浏览器统一在 betterLD「关于」页展示开发身份，并报告实际加载路径。
 - 自动版本同步、开发标识生成与展示属于打包/设置实现约定。当前打包工具（`scripts/package.js`）只做纯拷贝，不生成开发标识也不改写版本，因此保留纯数字版本、用分支与加载路径识别包，不宣称后缀已经生效；实现后只维护一套生成逻辑。
