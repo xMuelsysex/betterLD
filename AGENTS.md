@@ -23,7 +23,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - 主分支整合交付更新正式版本号后，完成对应改动、打包与验证即自动创建 Git 提交，无需再次询问；只提交该版本相关文件，保留无关工作区改动。功能工作树遵循下节版本规则，不单独递增正式版本。合并、推送、发布与部署仍需主人明确授权。
 - `npm run package`：每次完成扩展源码修改后自动将当前文件就地更新到固定测试包目录 `dist/betterLD/`，无需单独询问是否覆盖该生成包；保留该目录，不另建带版本或时间后缀的 ZIP。
 - Chrome：打开 `chrome://extensions`，启用开发者模式后加载 `dist/betterLD/`。
-- Firefox：打开 `about:debugging#/runtime/this-firefox`，临时加载 `dist/betterLD/manifest.json`；交付有实际改动的新包时重新打包，对实际加载路径的附加组件点击「重新载入」，再刷新已打开的 LinuxDo 标签页。正式包在 `about:addons` 核对版本；开发包同时核对加载路径与 betterLD「关于」页的开发标识。版本与开发标识按下节管理，不为区分工作树反复递增正式版本。版本已更新但页面未更新时，继续查内容脚本、用户设置和 CSS，而非重复打包。Firefox 已加载的内容脚本和样式留在内存中，仅覆盖磁盘文件不会更新页面。
+- Firefox：打开 `about:debugging#/runtime/this-firefox`，临时加载 `dist/betterLD/manifest.json`；交付有实际改动的新包时重新打包，对实际加载路径的附加组件点击「重新载入」，再刷新已打开的 LinuxDo 标签页。正式包在 `about:addons` 核对版本；开发包靠加载路径区分（不带标识后缀）。版本按下节管理，不为区分工作树反复递增正式版本。版本已更新但页面未更新时，继续查内容脚本、用户设置和 CSS，而非重复打包。Firefox 已加载的内容脚本和样式留在内存中，仅覆盖磁盘文件不会更新页面。
 - 交付前从 `dist/betterLD/` 实际加载扩展验证改动：检查页面确有 `body.betterld-shell` 和目标样式/控件，并核对附加组件实际加载的路径；仅比对源码与打包文件或在全新浏览器里加载，不能证明用户当前 Firefox 会话已经重载。Orca 的 `npm run preview:orca` 使用独立设置存储，只能辅助调试。
 - 临时浏览器与驱动的短时验证使用有界前台命令；需长驻才启用后台任务，结束时主动停止并说明 `killed` 通知来自清理。浏览器退出时的网络/GPU 日志要与打包或页面验证失败区分，不让清理通知反复干扰交付。
 
@@ -32,10 +32,10 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 ### 版本与开发包身份
 
 - 正式版本以根目录 `package.json` 的 `version` 为唯一权威；`manifest.json` 与打包 manifest 的数字版本同步自该值，不独立决定版本号。正式版本只由主分支整合者统一管理，功能工作树沿用基线正式版本，不按工作树数量递增。
-- 版本号语义与 tag/Release 规则以 `/home/muelsyse/AGENTS.md`「版本号与发布」为权威；本项目的绑定是扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，去掉前导 `v`、缺段按 0 与 manifest 版本比较，所以 tag 必须与 manifest 的纯数字版本一致、不带 `m-` 开发标识。
-- 开发身份与正式版本分开。例如正式版 `0.2.0`，开发包显示 `0.2.0-m-external-search` 或 `0.2.0-m-sidebar`。标识采用 `m-<分支标识>`，由打包工具按当前分支生成，仅写各工作树的 `dist`；正式包移除开发后缀。开发标识不参与更新版本比较，不另建手工维护的标识参数文件。
-- `manifest.json` 的 `version` 保持浏览器兼容的纯数字格式，禁止直接追加 `m`。Chrome 可使用 `version_name` 展示开发身份；Firefox 不支持该字段，跨浏览器统一在 betterLD「关于」页展示开发身份，并报告实际加载路径。
-- 自动版本同步、开发标识生成与展示属于打包/设置实现约定。当前打包工具（`scripts/package.js`）只做纯拷贝，不生成开发标识也不改写版本，因此保留纯数字版本、用分支与加载路径识别包，不宣称后缀已经生效；实现后只维护一套生成逻辑。
+- 版本号语义与 tag/Release 规则以 `/home/muelsyse/AGENTS.md`「版本号与发布」为权威；本项目的绑定是扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，去掉前导 `v`、缺段按 0 与 manifest 版本比较，所以 tag 必须与 manifest 的纯数字版本一致。
+- 开发包不带任何标识后缀：开发期间沿用基线正式版本，区分构建只靠分支与加载路径（Chrome `chrome://extensions` 的目录、Firefox `about:debugging` 的加载路径）；不为区分工作树反复递增正式版本，也不写 `version_name` 或额外标识文件。
+- `manifest.json` 的 `version` 保持浏览器兼容的纯数字格式，禁止追加后缀。
+- 打包工具（`scripts/package.js`）只把 `manifest.json`、`betterld.config.js` 与 `src/` 拷贝进各工作树的 `dist/`，不改写版本也不生成标识；正式版本号由整合者在 `package.json` 与 `manifest.json` 手工同步。
 - 每个工作树只写自己的固定 `dist/betterLD/`，开发包不覆盖主目录包；生成目录不参与源码合并。合入主分支后更新主目录固定包，并报告正式版本、路径和浏览器重载状态。
 
 ### 修改范围与冲突处理
