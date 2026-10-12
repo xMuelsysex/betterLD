@@ -146,6 +146,7 @@
 ### Version Reminder
 - **Definition**：关于页的「检查更新」动作，比对 GitHub Releases 的最新 tag 与本地 manifest 版本号，只做提示。
 - **Rules/Invariants**：只在用户点击时请求一次，不做自动轮询、不自动更新；
+  tag 名与 manifest 版本一致（`vX.Y.Z`），比对时去掉前导 `v`、缺段按 0，因此 Release tag 不得带开发标识；
   请求经后台 service worker 发出（设置窗口在页面内以 Shadow DOM 复用，页面环境直连不可靠），
   权限只限于 `host_permissions` 里声明的版本接口来源；请求失败只显示失败原因，不隐式降级为「已是最新」。
 
