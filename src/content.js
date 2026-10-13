@@ -4437,6 +4437,56 @@
     return { posts, streamNumbers, contextNumbers, byNumber: new Map(posts.map((post) => [post.post_number, post])) };
   }
 
+  function replyBranchExpanded(tree, number) {
+    return tree.branchStates.get(number) ?? number === 1;
+  }
+
+  function expandReplyBranchPath(tree, post, byNumber) {
+    let child = post;
+    while (child && child.post_number !== 1) {
+      const number = Number(child.reply_to_post_number) || 1;
+      if (!(number >= 1 && number < child.post_number)) break;
+      tree.branchStates.set(number, true);
+      child = byNumber.get(number);
+    }
+    tree.branchStates.set(1, true);
+  }
+
+  function setReplyBranchHighlight(tree, number) {
+    if (tree.highlightedBranch === number && (!number || tree.content.querySelector(`[data-post-number="${number}"][data-branch-highlight]`))) return;
+    tree.content.querySelector('[data-branch-highlight]')?.removeAttribute('data-branch-highlight');
+    tree.highlightedBranch = number;
+    if (number) tree.content.querySelector(`[data-post-number="${number}"]`)?.setAttribute('data-branch-highlight', 'true');
+  }
+
+  function bindReplyBranchInteraction(tree) {
+    const owner = (target) => Number(target instanceof Element ? target.closest('[data-reply-branch-owner]')?.dataset.replyBranchOwner : 0) || 0;
+    tree.content.addEventListener('pointerover', (event) => setReplyBranchHighlight(tree, owner(event.target)));
+    tree.content.addEventListener('pointerout', (event) => setReplyBranchHighlight(tree, owner(event.relatedTarget)));
+    tree.content.addEventListener('focusin', (event) => setReplyBranchHighlight(tree, owner(event.target)));
+    tree.content.addEventListener('focusout', (event) => setReplyBranchHighlight(tree, owner(event.relatedTarget)));
+    tree.content.addEventListener('click', (event) => {
+      const number = owner(event.target);
+      if (!number) return;
+      event.preventDefault();
+      tree.branchStates.set(number, !replyBranchExpanded(tree, number));
+      // 主动收起的意图优先于当前阅读路径保留。
+      tree.skipBranchAnchor = true;
+      tree.skipAnchorRestore = true;
+      tree.bodyLoadBlocked = true;
+      tree.compensating = true;
+      try {
+        renderReplyTree(tree);
+      } finally {
+        window.setTimeout(() => {
+          if (state.replyTree !== tree) return;
+          tree.bodyLoadScrollTop = pageScrollTop();
+          tree.compensating = false;
+        }, 0);
+      }
+    });
+  }
+
   function renderReplyTree(tree) {
     if (!pageActive()) {
       tree.renderPending = true;
@@ -4460,6 +4510,26 @@
     closeReplyReactionPicker(tree);
     // 摘要流中的回复沿已有祖先补作上下文，正文默认折叠但命中子树保持可见。
     const { posts, streamNumbers, contextNumbers, byNumber } = replyTreePostGraph(tree);
+    if (!tree.skipBranchAnchor && anchorNumber && byNumber.has(Number(anchorNumber))) {
+      const post = byNumber.get(Number(anchorNumber));
+      const previousPath = [];
+      let container = anchorCard.parentElement.parentElement.closest('.betterld-reply-tree__item');
+      while (container) {
+        previousPath.push(Number(container.dataset.postNumber));
+        container = container.parentElement.closest('.betterld-reply-tree__item');
+      }
+      const nextPath = [];
+      let child = post;
+      while (child && child.post_number !== 1) {
+        const parent = Number(child.reply_to_post_number);
+        const number = parent > 1 && parent < child.post_number && byNumber.has(parent) ? parent : 1;
+        nextPath.push(number);
+        child = byNumber.get(number);
+      }
+      // 比较整条归属路径：补祖父楼也须保持阅读，普通同步不推翻收放选择。
+      if (previousPath.join(',') !== nextPath.join(',')) expandReplyBranchPath(tree, post, byNumber);
+    }
+    tree.skipBranchAnchor = false;
     const topicOwnerId = byNumber.get(1)?.user_id;
     const currentUserId = preloadedCurrentUser()?.id;
     const children = new Map(posts.map((post) => [post.post_number, []]));
@@ -4776,44 +4846,53 @@
     }
     function syncChildren(item, post) {
       const replies = children.get(post.post_number) || [];
-      // 上下文楼只是回复链上的父节点，命中子树必须保持可见，不沿用树内的收起状态。
-      if (replies.length && !contextNumbers.has(post.post_number)) {
+      if (replies.length) {
         let button = item.querySelector(":scope > .betterld-reply-tree__collapse");
         let branch = item.querySelector(":scope > .betterld-reply-tree__children");
         if (!button) {
           button = createElement("button", "betterld-reply-tree__collapse");
           button.type = "button";
           branch = createElement("ol", "betterld-reply-tree__list betterld-reply-tree__children");
-          button.addEventListener("click", () => {
-            if (tree.collapsed.has(post.post_number)) tree.collapsed.delete(post.post_number);
-            else tree.collapsed.add(post.post_number);
-            renderReplyTree(tree);
-          });
           item.append(button, branch);
         }
-        button.textContent = tree.collapsed.has(post.post_number) ? "+" : "−";
-        button.setAttribute("aria-label", `${tree.collapsed.has(post.post_number) ? "展开" : "收起"} #${post.post_number} 的 ${replies.length} 条回复`);
-        button.setAttribute("aria-expanded", String(!tree.collapsed.has(post.post_number)));
-        branch.hidden = tree.collapsed.has(post.post_number);
+        if (item.dataset.branchHighlight && tree.highlightedBranch !== post.post_number) delete item.dataset.branchHighlight;
+        const expanded = replyBranchExpanded(tree, post.post_number);
+        button.dataset.replyBranchOwner = String(post.post_number);
+        button.textContent = expanded ? "−" : "+";
+        button.setAttribute("aria-label", `${expanded ? "收起" : "展开"} #${post.post_number} 的 ${replies.length} 条回复`);
+        button.setAttribute("aria-expanded", String(expanded));
+        branch.hidden = !expanded;
+        const card = item.querySelector(':scope > .betterld-reply-tree__card');
+        let stem = card.querySelector(':scope > .betterld-reply-tree__line-hit--stem');
+        if (!stem) {
+          stem = createElement('span', 'betterld-reply-tree__line-hit betterld-reply-tree__line-hit--stem');
+          stem.setAttribute('aria-hidden', 'true');
+          card.append(stem);
+        }
+        stem.dataset.replyBranchOwner = String(post.post_number);
         syncReplyTreeChildren(branch, replies.map(renderPost));
+        for (const child of branch.children) {
+          for (const type of ['trunk', 'arc']) {
+            let hit = child.querySelector(`:scope > .betterld-reply-tree__line-hit--${type}`);
+            if (!hit) {
+              hit = createElement('span', `betterld-reply-tree__line-hit betterld-reply-tree__line-hit--${type}`);
+              hit.setAttribute('aria-hidden', 'true');
+              child.append(hit);
+            }
+            hit.dataset.replyBranchOwner = String(post.post_number);
+          }
+        }
       } else {
+        delete item.dataset.branchHighlight;
         item.querySelector(":scope > .betterld-reply-tree__collapse")?.remove();
-        let branch = item.querySelector(":scope > .betterld-reply-tree__children");
-        if (!replies.length) {
-          branch?.remove();
-          return item;
-        }
-        if (!branch) {
-          branch = createElement("ol", "betterld-reply-tree__list betterld-reply-tree__children");
-          item.append(branch);
-        }
-        branch.hidden = false;
-        syncReplyTreeChildren(branch, replies.map(renderPost));
+        item.querySelector(":scope > .betterld-reply-tree__children")?.remove();
+        item.querySelector(':scope > .betterld-reply-tree__card > .betterld-reply-tree__line-hit--stem')?.remove();
       }
       return item;
     }
     const rootPost = byNumber.get(1);
     syncReplyTreeChildren(list, rootPost ? [renderPost(rootPost)] : []);
+    list.firstElementChild?.querySelectorAll(':scope > .betterld-reply-tree__line-hit').forEach((hit) => hit.remove());
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
     const myPosts = currentUserId ? posts.filter((post) => !contextNumbers.has(post.post_number) && post.user_id === currentUserId) : [];
     tree.mine.replaceChildren(...myPosts.map((post) => {
@@ -4843,6 +4922,7 @@
           if (state.replyTree !== tree) return;
           const remaining = replacement.isConnected ? replacement.getBoundingClientRect().top - anchorTop : 0;
           if (remaining) window.scrollBy(0, remaining);
+          tree.bodyLoadScrollTop = pageScrollTop();
           tree.compensating = false;
           maybeLoadMoreReplyTree(tree);
         }, 0);
@@ -4860,7 +4940,7 @@
       tree.topicContainer.dataset.betterldReplyTreeActive = "true";
     }
     scheduleReplyPosition();
-    tree.more.hidden = !tree.autoLoadPaused;
+    updateReplyTreeMore(tree);
     if (!tree.targetLocated && byNumber.has(tree.targetPostNumber)) {
       tree.anchorId = byNumber.get(tree.targetPostNumber).id;
       tree.targetLocated = true;
@@ -5336,6 +5416,9 @@
       // 只登记真实带正文的返回；漏返回或没正文的楼层用 loaded 判定为缺口，不假装成功。
       mergeReplyTreePosts(tree, posts, { overwrite: false });
       const missing = batch.ids.filter((id) => !tree.loaded.has(id));
+      // 折叠后哨兵可能长驻视口：一次续载后等待用户继续滚动或点击更多。
+      tree.bodyLoadBlocked = true;
+      tree.bodyLoadScrollTop = pageScrollTop();
       renderReplyTree(tree);
       if (missing.length) {
         tree.retryBatch = batch;
@@ -5460,6 +5543,12 @@
     }
   }
 
+  function updateReplyTreeMore(tree) {
+    const remaining = Boolean(replyTreeBodyBatch(tree, 'forward'));
+    tree.more.hidden = !tree.autoLoadPaused && !remaining;
+    tree.more.textContent = tree.autoLoadPaused ? '重试加载回复' : '加载更多回复';
+  }
+
   function maybeLoadMoreReplyTree(tree) {
     if (!pageActive() || state.replyTree !== tree || tree.busy || tree.compensating || tree.autoLoadPaused
       || tree.contentContainer.hidden || tree.filterBusy
@@ -5476,7 +5565,7 @@
     // 正文优先：锚点楼还没有正文就立即补齐；其余只在底部哨兵进入预读范围后续载窗口后方。
     const reading = replyTreeWindow(tree);
     const batch = tree.retryBatch || replyTreeBodyBatch(tree, "forward");
-    if (batch && (tree.retryBatch || reading.empty || replyTreeSentinelReached(tree))) {
+    if (batch && (tree.retryBatch || reading.empty || (!tree.bodyLoadBlocked && replyTreeSentinelReached(tree)))) {
       scheduleReplyTreeBody(tree, "forward");
       return;
     }
@@ -5678,16 +5767,7 @@
         // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
         tree.anchorId = post.id;
         tree.targetLocated = true;
-        // 祖先展开严格递减，遇到自引用或环立即停下。
-        let parent = Number(post.reply_to_post_number);
-        while (parent > 1 && parent < post.post_number) {
-          tree.collapsed.delete(parent);
-          const parentPost = [...tree.posts.values()].find((entry) => entry.post_number === parent);
-          const next = Number(parentPost?.reply_to_post_number);
-          if (!(next < parent)) break;
-          parent = next;
-        }
-        tree.collapsed.delete(1);
+        expandReplyBranchPath(tree, post, new Map([...tree.posts.values()].map((entry) => [entry.post_number, entry])));
         // 主动跳楼自己决定滚动位置，跳过锚点补偿。
         tree.skipAnchorRestore = true;
         renderReplyTree(tree);
@@ -6038,6 +6118,7 @@
     if (state.replyTreeNativeTopicId && state.replyTreeNativeTopicId !== topicId) state.replyTreeNativeTopicId = "";
     const urlFilters = topicStreamFiltersFromUrl();
     // 快照流只在筛选状态一致时复用：作者筛选的原帖模式不能把无筛选流当成筛选结果。
+    const previousBranches = state.replyTreeSnapshot?.topicId === topicId ? state.replyTreeSnapshot.branchStates : null;
     const previous = state.replyTreeSnapshot?.topicId === topicId && topicFilterStateKey(state.replyTreeSnapshot) === topicFilterStateKey(urlFilters) ? state.replyTreeSnapshot : null;
     state.replyTreeSnapshot = null;
     const panel = createElement("section", "betterld-reply-tree betterld-topic-reading");
@@ -6092,7 +6173,7 @@
     panel.append(toolbar, range, filterStatus, notice, mine, content);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.orphanContextIds = previous?.orphanContextIds || new Set();
     tree.parentErrors = previous?.parentErrors || new Map();
     tree.parentLoadingNumber = 0;
@@ -6107,6 +6188,9 @@
     tree.statusTimer = 0;
     tree.compensating = false;
     tree.skipAnchorRestore = false;
+    tree.bodyLoadBlocked = false;
+    tree.bodyLoadScrollTop = pageScrollTop();
+    bindReplyBranchInteraction(tree);
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
@@ -6131,8 +6215,10 @@
       tree.wait.until = 0;
       tree.wait.retryUsed = false;
       moreButton.hidden = true;
+      tree.bodyLoadBlocked = false;
       tree.status.textContent = "";
-      maybeLoadMoreReplyTree(tree);
+      if (replyTreeBodyBatch(tree, 'forward') && !tree.wait.pendingJump) scheduleReplyTreeBody(tree, 'forward');
+      else maybeLoadMoreReplyTree(tree);
     });
     previousButton.addEventListener("click", () => scheduleReplyTreeBody(tree, "backward"));
     if (content.hidden) panel.hidden = false;
@@ -6734,6 +6820,12 @@
 
   window.addEventListener("scroll", () => {
     updateListControlsScrollState();
+    const tree = state.replyTree;
+    if (tree && !tree.compensating && !tree.contentContainer.hidden && pageScrollTop() !== tree.bodyLoadScrollTop) {
+      tree.bodyLoadScrollTop = pageScrollTop();
+      tree.bodyLoadBlocked = false;
+      updateReplyTreeMore(tree);
+    }
     scheduleReplyPosition();
     scheduleHistoryFloor();
   }, { passive: true });

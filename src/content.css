@@ -4608,12 +4608,13 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   padding-left: 24px;
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden])) > .betterld-reply-tree__card::after {
+.betterld-reply-tree__item:has(> .betterld-reply-tree__collapse) > .betterld-reply-tree__card::after {
   content: "";
   position: absolute;
   top: 36px;
-  bottom: -28px;
+  bottom: -18px;
   left: 17px;
+  pointer-events: none;
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
 }
 
@@ -4631,6 +4632,14 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 .betterld-reply-tree__children > .betterld-reply-tree__item:last-child::after {
   bottom: auto;
   height: 8px;
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item:first-child::after {
+  top: -10px;
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item:only-child::after {
+  height: 18px;
 }
 
 .betterld-reply-tree__children > .betterld-reply-tree__item::before {
@@ -4657,7 +4666,63 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   line-height: 20px;
 }
 
-.betterld-reply-tree__collapse:hover,
+/* 命中区只覆盖连线走廊；正文、头像与子楼的按钮仍接收自身事件。 */
+.betterld-reply-tree__line-hit {
+  position: absolute;
+  z-index: 1;
+  cursor: pointer;
+}
+
+.betterld-reply-tree__line-hit--stem {
+  top: 36px;
+  bottom: -18px;
+  left: 11px;
+  width: 14px;
+}
+
+.betterld-reply-tree__line-hit--trunk {
+  top: 0;
+  bottom: 0;
+  left: -30px;
+  width: 14px;
+}
+
+.betterld-reply-tree__item:last-child > .betterld-reply-tree__line-hit--trunk {
+  bottom: auto;
+  height: 8px;
+}
+
+.betterld-reply-tree__item:first-child > .betterld-reply-tree__line-hit--trunk {
+  top: -10px;
+}
+
+.betterld-reply-tree__item:only-child > .betterld-reply-tree__line-hit--trunk {
+  height: 18px;
+}
+
+.betterld-reply-tree__line-hit--arc {
+  top: 8px;
+  left: -24px;
+  width: 22px;
+  height: 18px;
+}
+
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after,
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+  border-color: var(--betterld-primary);
+}
+
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+  color: var(--betterld-primary);
+}
+
+.betterld-reply-tree__collapse:focus-visible {
+  outline: 2px solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+
 .betterld-reply-tree__more:hover,
 .betterld-reply-tree__toggle:hover {
   border-color: var(--betterld-primary);
@@ -4690,6 +4755,13 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     left: -12px;
   }
+  .betterld-reply-tree__line-hit--trunk {
+    left: -18px;
+  }
+  .betterld-reply-tree__line-hit--arc {
+    left: -12px;
+    width: 10px;
+  }
 }
 
 @media (forced-colors: active) {
@@ -4698,6 +4770,12 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   .betterld-reply-tree__children > .betterld-reply-tree__item::before,
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     border-color: CanvasText;
+  }
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after,
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+    border-color: Highlight;
   }
 }
 
