@@ -97,6 +97,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   // 可见回复缺父楼时定点补一页，额外请求沿用主题队列并单独降低频率。
   replyTreeParentLoadIntervalMs: 5000,
   replyTreeLoadAheadPx: 400,
+  // 树内等待状态的可见刷新间隔：只读本地队列与冷却，不产生任何请求。
+  replyTreeStatusTickMs: 1000,
+  // 主题请求队列优先级：数字越小越先出队；刷新沿用原有最高优先，跳楼 > 正文 > 父楼。
+  topicRequestPriority: Object.freeze({ refresh: -1, jump: 0, body: 1, parent: 2 }),
   replyTreeTimeRefreshMs: 60000,
   replyTreeDeepLinkDelayMs: 1200,
   replyTreeActionTimeoutMs: 8000,

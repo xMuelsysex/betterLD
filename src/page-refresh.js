@@ -38,6 +38,16 @@
     if (timeline.element.style.getPropertyValue("--betterld-floor-progress") !== progress) timeline.element.style.setProperty("--betterld-floor-progress", progress);
   }
 
+  function armFloorJumpTimeout(timeline, delay) {
+    clearTimeout(timeline.timer);
+    const { requestId, target } = timeline.pending;
+    timeline.timer = setTimeout(() => {
+      if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
+        finishFloorJump(timeline, timeline.floor, `#${target} 跳转未完成，请重试。`);
+      }
+    }, delay);
+  }
+
   function finishFloorJump(timeline, floor, error = "") {
     clearTimeout(timeline.timer);
     timeline.pending = null;
@@ -94,11 +104,7 @@
         timeline.pending = { requestId, target };
         input.disabled = true;
         timeline.status.textContent = `正在前往 #${target}…`;
-        timeline.timer = setTimeout(() => {
-          if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
-            finishFloorJump(timeline, timeline.floor, `#${target} 跳转未完成，请重试。`);
-          }
-        }, timeline.timeoutMs);
+        armFloorJumpTimeout(timeline, timeline.timeoutMs);
         if (timeline.active) {
           jumpReply(target, undefined, requestId);
         } else {
@@ -129,6 +135,13 @@
   }
 
   document.addEventListener("betterld:timeline-reset", resetFloorTimeline);
+  document.addEventListener("betterld:reply-jump-wait", (event) => {
+    const { topicId, requestId, until, message } = JSON.parse(event.detail);
+    const timeline = floorTimeline;
+    if (timeline?.topicId !== topicId || timeline.pending?.requestId !== requestId) return;
+    timeline.status.textContent = message;
+    armFloorJumpTimeout(timeline, Math.max(0, until - Date.now()) + timeline.timeoutMs);
+  });
   document.addEventListener("betterld:reply-jumped", (event) => {
     const { topicId, requestId, postNumber, error } = JSON.parse(event.detail);
     const timeline = floorTimeline;

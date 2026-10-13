@@ -4667,6 +4667,11 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   margin-top: 12px;
 }
 
+/* 窗口前面的上段入口在列表上方，与底部“更多”按钮共用样式。 */
+.betterld-reply-tree__previous {
+  margin: 0 0 12px;
+}
+
 .betterld-reply-tree__sentinel {
   height: 1px;
 }

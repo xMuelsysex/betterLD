@@ -56,7 +56,10 @@
     metadataQueue: [],
     metadataRunning: false,
     metadataStarts: [],
+    metadataWakeTimer: 0,
+    metadataWakeAt: 0,
     responseRequests: new Map(),
+    preloadedReplyFilterKey: topicFilterStateKey(topicStreamFiltersFromUrl()),
     pageRefreshBridge: null,
     refreshPromise: null,
     refreshNextAt: 0,
@@ -2522,18 +2525,42 @@
   }
 
   // 树状回复请求串行并保留站点冷却；首页列表不进入此队列。
-  function scheduleMetadataRequest(task, isNeeded, isPriority = () => false) {
+  // priority 是可变引用：共享同一 URL 的消费者可以把自己的优先级提升进队列。
+  function scheduleMetadataRequest(task, isNeeded, priority = () => config.topicRequestPriority.body, canStart = () => true, readyAt = () => 0) {
     return new Promise((resolve, reject) => {
-      state.metadataQueue.push({ task, isNeeded, isPriority, resolve, reject });
+      state.metadataQueue.push({ task, isNeeded, priority, canStart, readyAt, resolve, reject });
       drainMetadataQueue();
     });
   }
 
-  function requestWindowWait(starts, windowMs, maxPerWindow, now) {
-    const recent = starts.filter((at) => now - at < windowMs);
-    starts.length = 0;
-    starts.push(...recent);
-    return recent.length >= maxPerWindow ? recent[0] + windowMs : 0;
+  // 滑动窗口的唯一规则：窗口内启动次数与最早一次启动的截止时间。
+  function metadataWindowState(now) {
+    const recent = state.metadataStarts.filter((at) => now - at < config.topicRequestWindowMs);
+    return {
+      recent,
+      until: recent.length >= config.topicRequestMaxPerWindow ? recent[0] + config.topicRequestWindowMs : 0
+    };
+  }
+
+  function trimMetadataWindow(now) {
+    const { recent } = metadataWindowState(now);
+    state.metadataStarts.length = 0;
+    state.metadataStarts.push(...recent);
+  }
+
+  // 队列下一次可以发请求的截止时间；只读，供树内状态行显示剩余等待。
+  function metadataQueueWaitUntil(now = Date.now()) {
+    return Math.max(state.metadataNextAt, state.metadataCooldownUntil, metadataWindowState(now).until);
+  }
+
+  // 已取消的条目先于等待出队，不让失效请求拖着队列空转。
+  function dropStaleMetadataRequests() {
+    for (let i = state.metadataQueue.length - 1; i >= 0; i -= 1) {
+      const entry = state.metadataQueue[i];
+      if (entry.isNeeded()) continue;
+      state.metadataQueue.splice(i, 1);
+      entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
+    }
   }
 
   async function drainMetadataQueue() {
@@ -2543,25 +2570,39 @@
     state.metadataRunning = true;
     try {
       while (state.metadataQueue.length) {
-        const wait = Math.max(
-          state.metadataNextAt,
-          state.metadataCooldownUntil,
-          requestWindowWait(state.metadataStarts, config.topicRequestWindowMs, config.topicRequestMaxPerWindow, Date.now())
-        ) - Date.now();
+        dropStaleMetadataRequests();
+        if (!state.metadataQueue.length) break;
+        const now = Date.now();
+        const wait = metadataQueueWaitUntil(now) - now;
+        trimMetadataWindow(now);
         if (wait > 0) {
           await new Promise((resolve) => window.setTimeout(resolve, wait));
           continue;
         }
-        const priority = state.metadataQueue.findIndex((entry) => entry.isPriority());
-        const [entry] = state.metadataQueue.splice(priority >= 0 ? priority : 0, 1);
-        if (!entry.isNeeded()) {
-          entry.reject(new DOMException("Topic request is no longer needed", "AbortError"));
-          continue;
+        // readyAt/canStart 只是可启动条件：未满足的条目留在队列里等下一次唤醒，
+        // 既不取消也不阻塞其他可启动条目，所以后来的跳楼能抢在未启动的父楼/正文前面。
+        let index = -1;
+        let earliestReadyAt = 0;
+        for (let i = 0; i < state.metadataQueue.length; i += 1) {
+          const candidate = state.metadataQueue[i];
+          const readyAt = candidate.readyAt();
+          if (readyAt > now || !candidate.canStart()) {
+            if (readyAt > now && (!earliestReadyAt || readyAt < earliestReadyAt)) earliestReadyAt = readyAt;
+            continue;
+          }
+          if (index < 0 || candidate.priority() < state.metadataQueue[index].priority()) index = i;
         }
+        if (index < 0) {
+          // 只按明确的就绪时间唤醒，不用定时轮询扫队列。
+          if (earliestReadyAt) scheduleMetadataWake(earliestReadyAt);
+          return;
+        }
+        const [entry] = state.metadataQueue.splice(index, 1);
         const startedAt = Date.now();
         state.metadataStarts.push(startedAt);
         state.metadataNextAt = startedAt + config.topicRequestMinIntervalMs;
         try {
+          // 条目的 task 包含取数与投影：队列在这一条目完全结束前不会启动下一个。
           entry.resolve(await entry.task());
         } catch (error) {
           entry.reject(error);
@@ -2570,6 +2611,18 @@
     } finally {
       state.metadataRunning = false;
     }
+  }
+
+  // 队列里只剩“还不能启动”的条目时，到最早的就绪时间再试一次，不靠轮询。
+  function scheduleMetadataWake(at) {
+    if (state.metadataWakeTimer && state.metadataWakeAt <= at) return;
+    clearTimeout(state.metadataWakeTimer);
+    state.metadataWakeAt = at;
+    state.metadataWakeTimer = window.setTimeout(() => {
+      state.metadataWakeTimer = 0;
+      state.metadataWakeAt = 0;
+      drainMetadataQueue();
+    }, Math.max(0, at - Date.now()));
   }
 
   function holdMetadataRequests(until) {
@@ -2586,47 +2639,95 @@
       config.topicChallengeCooldownMs));
   }
 
-  function requestTopicResponse(url, isNeeded = () => true, onStart = () => {}) {
+  // 冷却错误带明确截止时间，调用方可以区分限流与普通失败，不靠猜冷却状态。
+  function topicRequestError(message, options) {
+    const error = new Error(message);
+    Object.assign(error, options);
+    return error;
+  }
+
+  // 主题 JSON 的唯一出网实现：超时、冷却与错误分类都在这里，冷却错误带明确截止时间。
+  async function fetchTopicJson(url) {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(new DOMException("主题请求超时，请重试", "TimeoutError")), config.topicRequestTimeoutMs);
+    try {
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: discourseAjaxHeaders,
+        signal: controller.signal
+      });
+      if (response.headers.get("cf-mitigated") === "challenge") {
+        holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
+        throw topicRequestError("主题请求被站点质询拦截，已进入冷却", { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
+      }
+      if (response.status === 429) {
+        applyRateLimit(response.headers.get("Retry-After"));
+        throw topicRequestError("主题请求被站点限流，已进入冷却", { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
+      }
+      if (!response.ok) {
+        throw new Error(`topic request failed with ${response.status}`);
+      }
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // 树任务已在共享队列中启动；它也可满足同 URL 尚在排队的导出等消费者。
+  function shareTopicFetch(url, onStart = () => {}) {
+    let request = state.responseRequests.get(url);
+    if (request?.fetchPromise) {
+      onStart(request.startedAt);
+      return request.fetchPromise;
+    }
+    if (!request) {
+      request = { consumers: [], settled: false };
+      state.responseRequests.set(url, request);
+    }
+    request.startedAt = Date.now();
+    request.fetchPromise = (async () => {
+      onStart(request.startedAt);
+      for (const consumer of request.consumers) {
+        if (consumer.isNeeded()) consumer.onStart(request.startedAt);
+      }
+      return await fetchTopicJson(url);
+    })().then((data) => {
+      request.settled = true;
+      request.resolve?.(data);
+      return data;
+    }, (error) => {
+      request.settled = true;
+      request.reject?.(error);
+      throw error;
+    }).finally(() => {
+      if (state.responseRequests.get(url) === request) state.responseRequests.delete(url);
+    });
+    return request.fetchPromise;
+  }
+
+  function requestTopicResponse(url, isNeeded = () => true, onStart = () => {}, priority = config.topicRequestPriority.body) {
+    const consumer = { isNeeded, onStart, priority };
     const existing = state.responseRequests.get(url);
     if (existing) {
-      existing.consumers.push({ isNeeded, onStart });
-      if (existing.startedAt) onStart(existing.startedAt);
-      return existing.promise;
+      existing.consumers.push(consumer);
+      if (existing.startedAt && isNeeded()) onStart(existing.startedAt);
+      return existing.promise || existing.fetchPromise;
     }
-    const consumers = [{ isNeeded, onStart }];
-    const request = { consumers, startedAt: 0, promise: null };
-    const promise = scheduleMetadataRequest(async () => {
-      request.startedAt = Date.now();
-      consumers.forEach((consumer) => consumer.onStart(request.startedAt));
-      const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(new DOMException("主题请求超时，请重试", "TimeoutError")), config.topicRequestTimeoutMs);
-      try {
-        const response = await fetch(url, {
-          credentials: "same-origin",
-          cache: "no-store",
-          headers: discourseAjaxHeaders,
-          signal: controller.signal
-        });
-        if (response.headers.get("cf-mitigated") === "challenge") {
-          holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
-          throw new Error("topic request blocked by the site challenge; cooling down");
-        }
-        if (response.status === 429) {
-          applyRateLimit(response.headers.get("Retry-After"));
-          throw new Error("topic request rate limited; cooling down");
-        }
-        if (!response.ok) {
-          throw new Error(`topic request failed with ${response.status}`);
-        }
-        return await response.json();
-      } finally {
-        clearTimeout(timer);
-      }
-    }, () => consumers.some((consumer) => consumer.isNeeded()))
-      .finally(() => state.responseRequests.delete(url));
-    request.promise = promise;
+    const request = { consumers: [consumer], settled: false, fetchPromise: null };
+    request.promise = new Promise((resolve, reject) => Object.assign(request, { resolve, reject }));
     state.responseRequests.set(url, request);
-    return promise;
+    scheduleMetadataRequest(
+      () => shareTopicFetch(url),
+      () => !request.settled && request.consumers.some((entry) => entry.isNeeded()),
+      () => Math.min(...request.consumers.filter((entry) => entry.isNeeded()).map((entry) => entry.priority))
+    ).catch((error) => {
+      if (request.settled) return;
+      request.settled = true;
+      request.reject(error);
+      if (state.responseRequests.get(url) === request) state.responseRequests.delete(url);
+    });
+    return request.promise;
   }
 
   // 元信息仅消费原站预载或当前路由模型，缺字段不发逐主题请求。
@@ -3453,7 +3554,7 @@
     const scrollY = pageScrollTop();
     showActionStatus("正在局部刷新…", "success");
     state.refreshNextAt = Date.now() + config.pageRefreshMinIntervalMs;
-    state.refreshPromise = scheduleMetadataRequest(() => refreshSitePage(href), () => location.href === href, () => true)
+    state.refreshPromise = scheduleMetadataRequest(() => refreshSitePage(href), () => location.href === href, () => config.topicRequestPriority.refresh)
       .then(() => {
         if (location.href !== href) return;
         syncHomepage();
@@ -3710,6 +3811,9 @@
   function showNativeReply(tree) {
     if (!tree.userFilters.length && !tree.filterBusy) sessionStorage.setItem(config.topicReadingViewStorageKey, JSON.stringify({ topicId: tree.topicId, native: true }));
     closeReplyReactionPicker(tree);
+    // 隐藏树视图时尚未发请求的任务全部作废，不在后台偷偷续载。
+    cancelReplyTreeTasks(tree);
+    if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "视图已切换，楼层跳转请求已取消");
     state.replyTreeNativeTopicId = tree.topicId;
     tree.streamElement.removeAttribute("data-betterld-reply-source");
     tree.topicContainer.removeAttribute("data-betterld-reply-tree-active");
@@ -4343,11 +4447,15 @@
     for (const post of tree.posts.values()) {
       if (typeof post.bookmarked === "boolean") syncReplyBookmark(tree, post, post.bookmarked);
     }
-    const anchor = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].find((item) => {
-      const bounds = item.querySelector('.betterld-reply-tree__card').getBoundingClientRect();
+    // 锚点只取可见的直接 CARD：item 的 rect 包含整棵子树，会把祖先误当可见楼。
+    const anchorCard = tree.skipAnchorRestore ? null : [...tree.content.querySelectorAll('.betterld-reply-tree__card')].find((card) => {
+      if (!card.getClientRects().length) return false;
+      const bounds = card.getBoundingClientRect();
       return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
     });
-    const anchorTop = anchor?.getBoundingClientRect().top;
+    tree.skipAnchorRestore = false;
+    const anchorNumber = anchorCard?.parentElement.dataset.postNumber || "";
+    const anchorTop = anchorCard?.getBoundingClientRect().top;
     const focusedBoostInput = document.activeElement?.closest?.(".betterld-reply-tree__boost-editor") ? document.activeElement : null;
     closeReplyReactionPicker(tree);
     // 摘要流中的回复沿已有祖先补作上下文，正文默认折叠但命中子树保持可见。
@@ -4387,7 +4495,7 @@
         detail: JSON.stringify({ postIds: [...changedAuthors] })
       }));
     }
-    const list = tree.content.firstElementChild || createElement("ol", "betterld-reply-tree__list");
+    const list = tree.listElement;
     function renderPost(post) {
       const existing = existingItems.get(post.post_number);
       const previous = previousPosts.get(post.post_number);
@@ -4706,14 +4814,13 @@
     }
     const rootPost = byNumber.get(1);
     syncReplyTreeChildren(list, rootPost ? [renderPost(rootPost)] : []);
-    if (!list.parentElement) tree.content.append(list);
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
     const myPosts = currentUserId ? posts.filter((post) => !contextNumbers.has(post.post_number) && post.user_id === currentUserId) : [];
     tree.mine.replaceChildren(...myPosts.map((post) => {
       const item = createElement("button", "betterld-reply-tree__mine-item", `#${post.post_number}`);
       item.type = "button";
       item.title = `定位到 #${post.post_number}`;
-      item.addEventListener("click", () => jumpReplyTree(tree, post.post_number, post.id, ""));
+      item.addEventListener("click", () => requestReplyTreeJump(tree, post.post_number, post.id, ""));
       return item;
     }));
     tree.mine.hidden = myPosts.length === 0;
@@ -4726,10 +4833,24 @@
       if (bodies.length) document.dispatchEvent(new CustomEvent("betterld:reply-cooked-mount", { detail: JSON.stringify({ topicId: tree.topicId, bodies }) }));
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
-    if (anchor && !tree.contentContainer.hidden) {
-      const replacement = tree.content.querySelector(`[data-post-number="${anchor.dataset.postNumber}"]`);
-      if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
+    if (anchorCard && !tree.contentContainer.hidden) {
+      const replacement = tree.content.querySelector(`[data-post-number="${anchorNumber}"] > .betterld-reply-tree__card`);
+      if (replacement?.isConnected) {
+        // 补偿期间暂停自动续载；只测一次剩余差，避免与原站滚动锚定双重补偿。
+        tree.compensating = true;
+        window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
+        window.setTimeout(() => {
+          if (state.replyTree !== tree) return;
+          const remaining = replacement.isConnected ? replacement.getBoundingClientRect().top - anchorTop : 0;
+          if (remaining) window.scrollBy(0, remaining);
+          tree.compensating = false;
+          maybeLoadMoreReplyTree(tree);
+        }, 0);
+      }
     }
+    // 窗口前面还有未加载楼层时提供真实入口，而不是从流首缺口补到目标。
+    const reading = replyTreeWindow(tree);
+    tree.previous.hidden = !reading || reading.empty || reading.lo === 0;
     tree.panel.hidden = false;
     syncReplyTreeFilterBar(tree);
     // 未变编辑器保留光标；仅编辑器实际被替换时恢复输入焦点。
@@ -4741,11 +4862,14 @@
     scheduleReplyPosition();
     tree.more.hidden = !tree.autoLoadPaused;
     if (!tree.targetLocated && byNumber.has(tree.targetPostNumber)) {
+      tree.anchorId = byNumber.get(tree.targetPostNumber).id;
       tree.targetLocated = true;
+      const scrollY = pageScrollTop();
       setTimeout(() => {
-        if (state.replyTree === tree && state.replyTreeNativeTopicId !== tree.topicId) {
-          tree.content.querySelector(`[data-post-number="${tree.targetPostNumber}"]`)?.scrollIntoView({ block: "center" });
-        }
+        if (state.replyTree !== tree || state.replyTreeNativeTopicId === tree.topicId) return;
+        // 用户已经自己滚动时不再抢滚动位置。
+        if (pageScrollTop() !== scrollY) return;
+        tree.content.querySelector(`[data-post-number="${tree.targetPostNumber}"]`)?.scrollIntoView({ block: "center" });
       }, config.replyTreeDeepLinkDelayMs);
     }
     // 深链楼层不在筛选流里时明确告知；流还没加载完就继续等，不提前下结论。
@@ -4886,65 +5010,349 @@
     return previous !== JSON.stringify(tree.userBadges);
   }
 
-  async function loadReplyTree(tree, more = false) {
-    if (!pageActive() || tree.busy || tree.contentContainer.hidden) return;
-    tree.busy = true;
-    tree.more.disabled = true;
-    tree.status.textContent = "正在读取回复…";
+  // 树内读取任务只登记在 tree.tasks，任务本体直接进唯一的全局请求队列：
+  // 排队不占 busy，队列真正取数时才置 activeTask/busy，取数与投影在同一队列条目内完成，
+  // 所以同一棵树不会在前一次投影结束前启动下一个任务，后来的跳楼也能抢在未启动的父楼/正文前。
+  function scheduleReplyTreeTask(tree, task) {
+    const existing = tree.tasks.find((pending) => pending.kind === task.kind && pending.key === task.key);
+    if (existing) {
+      // 可启动条件可能刚刚满足（父楼预算到点、重新可见），再叫一次全局队列。
+      drainMetadataQueue();
+      return existing;
+    }
+    const generation = task.generation;
+    const entry = {
+      kind: task.kind,
+      key: task.key,
+      priority: task.priority,
+      cancelled: false,
+      run: task.run,
+      finish: task.finish,
+      jump: task.jump,
+      canStart: task.canStart || (() => true),
+      readyAt: task.readyAt || (() => 0),
+      isNeeded: () => !entry.cancelled && task.isNeeded()
+    };
+    // stillCurrent 用于错误处理（页面隐藏时也要保留失败状态），active 用于回写正文。
+    entry.stillCurrent = () => !entry.cancelled && state.replyTree === tree
+      && topicIdFromPath() === tree.topicId && tree.filterGeneration === generation;
+    entry.active = () => entry.stillCurrent() && pageActive() && !tree.contentContainer.hidden
+      && topicFilterStateKey(topicStreamFiltersFromUrl()) === tree.filterViewKey;
+    tree.tasks.push(entry);
+    // 正文与跳楼是当前阅读意图：尚未真正取数的父楼任务直接取消，不占住队列。
+    if (entry.priority <= config.topicRequestPriority.body) {
+      cancelReplyTreeTasks(tree, (pending) => pending.priority > config.topicRequestPriority.body);
+    }
+    scheduleMetadataRequest(async () => {
+      tree.activeTask = entry;
+      tree.busy = true;
+      syncReplyTreeStatusTimer(tree);
+      try {
+        await entry.run(entry);
+      } catch (error) {
+        // 取消不是错误；其他异常必须暴露，不能静默成“已处理”。
+        if (error?.name === "AbortError") {
+          console.warn("[betterLD] reply tree task aborted", error);
+        } else if (entry.stillCurrent()) {
+          handleReplyTreeTaskError(tree, error, "树状回复任务异常");
+        } else {
+          console.error("[betterLD] reply tree task failed", error);
+        }
+      } finally {
+        settleReplyTreeTask(tree, entry);
+      }
+    }, () => entry.isNeeded(), () => entry.priority, () => entry.canStart(), () => entry.readyAt())
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          if (entry.stillCurrent()) handleReplyTreeTaskError(tree, error, "回复请求排队失败");
+          else console.error("[betterLD] reply tree request rejected", error);
+        }
+        settleReplyTreeTask(tree, entry);
+      });
+    syncReplyTreeStatusTimer(tree);
+    return entry;
+  }
+
+  function settleReplyTreeTask(tree, entry) {
+    if (tree.activeTask === entry) {
+      tree.activeTask = null;
+      tree.busy = false;
+    }
+    tree.tasks = tree.tasks.filter((pending) => pending !== entry);
+    if (entry.finish) entry.finish();
+    syncReplyTreeStatusTimer(tree);
+    if (state.replyTree === tree) {
+      syncReplyTreeData(tree);
+      scheduleReplyTreeWake(tree);
+    }
+  }
+
+  function cancelReplyTreeTasks(tree, match = () => true) {
+    for (const pending of tree.tasks) {
+      if (!match(pending)) continue;
+      pending.cancelled = true;
+      // 尚未开始的跳楼被取消时也要回执，主世界不能等到超时。
+      if (pending.finish) pending.finish();
+    }
+    tree.tasks = tree.tasks.filter((pending) => !pending.cancelled);
+    drainMetadataQueue();
+  }
+
+  function scheduleReplyTreeWake(tree) {
+    window.setTimeout(() => {
+      if (state.replyTree === tree) maybeLoadMoreReplyTree(tree);
+    }, 0);
+  }
+
+  // 任务有效的唯一判据：同一棵树、同一主题、同一筛选世代、可见且页面活跃。
+  // 筛选可能回到原值（全部→摘要→全部），所以用单调递增的世代而不是比较键。
+  function replyTreeTaskActive(tree, generation) {
+    return pageActive() && state.replyTree === tree && !tree.contentContainer.hidden
+      && topicIdFromPath() === tree.topicId && tree.filterGeneration === generation
+      && topicFilterStateKey(topicStreamFiltersFromUrl()) === tree.filterViewKey;
+  }
+
+  // 等待可见性：冷却与队列等待只读本地状态，不产生任何轮询请求。
+  function syncReplyTreeStatusTimer(tree) {
+    const needed = Boolean(tree.activeTask || tree.wait.until
+      || (tree.tasks.length && metadataQueueWaitUntil() > Date.now()));
+    if (needed && !tree.statusTimer) {
+      tree.statusTimer = window.setInterval(() => tickReplyTreeStatus(tree), config.replyTreeStatusTickMs);
+    } else if (!needed && tree.statusTimer) {
+      stopReplyTreeStatusTimer(tree);
+    }
+  }
+
+  function stopReplyTreeStatusTimer(tree) {
+    clearInterval(tree.statusTimer);
+    tree.statusTimer = 0;
+  }
+
+  function tickReplyTreeStatus(tree) {
+    if (state.replyTree !== tree) {
+      stopReplyTreeStatusTimer(tree);
+      return;
+    }
+    const now = Date.now();
+    const waitingJump = tree.wait.pendingJump || tree.tasks.find((task) => task.kind === "jump")?.jump;
+    const until = Math.max(tree.wait.until, metadataQueueWaitUntil(now));
+    if (waitingJump?.requestId && until > now) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-jump-wait", {
+        detail: JSON.stringify({ topicId: tree.topicId, requestId: waitingJump.requestId, until,
+          message: `等待站点请求预算，剩 ${Math.ceil((until - now) / 1000)} 秒` })
+      }));
+    }
+    if (tree.wait.until && now >= tree.wait.until) {
+      // 冷却到点后按当前阅读需要续载一次；再次失败转为手动重试。
+      tree.wait.until = 0;
+      if (tree.status.textContent.startsWith("站点限流冷却中")) tree.status.textContent = "";
+      if (tree.autoLoadPaused) {
+        // 手动重试阶段：保留待恢复的跳楼意图，等用户点“重试加载回复”。
+      } else {
+        maybeLoadMoreReplyTree(tree);
+      }
+    } else if (tree.wait.until) {
+      tree.status.textContent = `站点限流冷却中（剩 ${Math.ceil((tree.wait.until - now) / 1000)} 秒），到点自动继续。`;
+    } else if (!tree.busy && tree.tasks.length) {
+      const wait = metadataQueueWaitUntil(now) - now;
+      if (wait > 0) tree.status.textContent = `等待站点请求队列（剩 ${Math.ceil(wait / 1000)} 秒）`;
+      else if (tree.status.textContent.startsWith("等待站点请求队列")) tree.status.textContent = "";
+    }
+    if (!tree.activeTask && !tree.wait.until
+      && (!tree.tasks.length || metadataQueueWaitUntil(now) <= now)) stopReplyTreeStatusTimer(tree);
+  }
+
+  function clearReplyTreeWait(tree) {
+    tree.wait.until = 0;
+    tree.wait.retryUsed = false;
+    syncReplyTreeStatusTimer(tree);
+  }
+
+  // 首次限流只记录到点自动续载一次；再次限流（或普通网络失败）保留给用户手动重试。
+  function noteReplyTreeRateLimit(tree, error) {
+    const until = Math.max(Number(error?.cooldownUntil) || 0, state.metadataCooldownUntil, Date.now() + 1000);
+    if (tree.wait.retryUsed) {
+      tree.autoLoadPaused = true;
+      tree.more.hidden = false;
+      tree.more.textContent = "重试加载回复";
+      tree.status.textContent = `站点限流冷却到 ${new Date(until).toLocaleTimeString()}；点击“重试加载回复”继续。`;
+      return;
+    }
+    tree.wait.retryUsed = true;
+    tree.wait.until = until;
+    tree.status.textContent = `站点限流冷却中（剩 ${Math.ceil((until - Date.now()) / 1000)} 秒），到点自动继续。`;
+    syncReplyTreeStatusTimer(tree);
+  }
+
+  function handleReplyTreeTaskError(tree, error, label) {
+    if (error?.name === "AbortError" || state.replyTree !== tree) return;
+    if (error?.rateLimited) {
+      noteReplyTreeRateLimit(tree, error);
+      return;
+    }
+    console.error("[betterLD] reply tree load failed", error);
+    tree.panel.hidden = false;
+    tree.autoLoadPaused = true;
+    tree.status.textContent = `${label}：${error.message}。${tree.posts.size ? "可通过楼层链接进入原站回复。" : "原站回复保持可用。"}`;
+    tree.more.hidden = false;
+    tree.more.textContent = "重试加载回复";
+  }
+
+  // 树内正文的唯一写入点：只接受属于本主题且带真实正文的帖子。
+  // overwrite=false 用于 HTTP 补读：已有正文的楼层不覆盖，原站模型同步才是权威更新。
+  function mergeReplyTreePost(tree, post, { overwrite = true } = {}) {
+    if (!Number.isInteger(post?.id) || !Number.isInteger(post?.post_number)) return false;
+    if (post.topic_id !== undefined && String(post.topic_id) !== tree.topicId) return false;
+    if (typeof post.cooked !== "string" || !post.cooked.trim()) return false;
+    const previous = tree.posts.get(post.id);
+    const cached = typeof previous?.cooked === "string" && Boolean(previous.cooked.trim());
+    if (cached && !overwrite) {
+      tree.loaded.add(post.id);
+      return false;
+    }
+    tree.posts.set(post.id, post);
+    tree.loaded.add(post.id);
+    if (!tree.stream.includes(post.id)) tree.orphanContextIds.add(post.id);
+    return true;
+  }
+
+  function mergeReplyTreePosts(tree, posts, options) {
+    let changed = false;
+    for (const post of posts || []) {
+      if (mergeReplyTreePost(tree, post, options)) changed = true;
+    }
+    return changed;
+  }
+
+  // 阅读窗口：围绕锚点（跳楼/深链命中或当前阅读楼）的连续已加载区间，stream 索引是唯一权威顺序。
+  function replyTreeWindow(tree) {
+    const stream = tree.stream;
+    if (!stream.length) return null;
+    let anchor = tree.anchorId ? stream.indexOf(tree.anchorId) : -1;
+    if (anchor < 0) anchor = stream.findIndex((id) => tree.loaded.has(id));
+    if (anchor < 0) return { lo: 0, hi: -1, anchor: 0, empty: true };
+    if (!tree.loaded.has(stream[anchor])) return { lo: anchor, hi: anchor, anchor, empty: true };
+    let lo = anchor;
+    let hi = anchor;
+    while (lo > 0 && tree.loaded.has(stream[lo - 1])) lo -= 1;
+    while (hi < stream.length - 1 && tree.loaded.has(stream[hi + 1])) hi += 1;
+    return { lo, hi, anchor, empty: false };
+  }
+
+  // 正文批次只围绕窗口取，不从流首缺口补到目标；上段缺失由窗口前的入口单独取。
+  function replyTreeBodyBatch(tree, direction) {
+    const reading = replyTreeWindow(tree);
+    if (!reading) return null;
+    const stream = tree.stream;
+    const unloaded = (ids) => ids.filter((id) => !tree.loaded.has(id));
+    if (reading.empty) {
+      const ids = unloaded(stream.slice(reading.anchor, reading.anchor + config.replyTreePageSize));
+      return ids.length ? { key: `body:at:${reading.anchor}`, ids } : null;
+    }
+    if (direction === "backward") {
+      if (!reading.lo) return null;
+      const ids = unloaded(stream.slice(Math.max(0, reading.lo - config.replyTreePageSize), reading.lo));
+      return ids.length ? { key: `body:back:${reading.lo}`, ids } : null;
+    }
+    const ids = unloaded(stream.slice(reading.hi + 1, reading.hi + 1 + config.replyTreePageSize));
+    return ids.length ? { key: `body:next:${reading.hi}`, ids } : null;
+  }
+
+  function scheduleReplyTreeTopic(tree) {
+    const generation = tree.filterGeneration;
+    return scheduleReplyTreeTask(tree, {
+      kind: "topic",
+      key: "topic",
+      generation,
+      priority: config.topicRequestPriority.body,
+      isNeeded: () => replyTreeTaskActive(tree, generation)
+        && (!tree.stream.length || ![...tree.posts.values()].some((post) => post.post_number === 1)),
+      run: (entry) => loadReplyTreeTopic(tree, entry)
+    });
+  }
+
+  async function loadReplyTreeTopic(tree, entry) {
+    if (!tree.posts.size) tree.status.textContent = "正在读取回复…";
     try {
-      const active = () => state.replyTree === tree && topicIdFromPath() === tree.topicId;
-      let data;
+      const preloaded = preloadedReplyTopic(tree.topicId);
+      const startsAtFirstPost = state.preloadedReplyFilterKey === tree.filterViewKey
+        && preloaded?.post_stream?.posts?.some((post) => post.post_number === 1);
+      let data = preloaded;
       let nearbyPosts = [];
-      if (!more) {
-        const preloaded = preloadedReplyTopic(tree.topicId);
-        const startsAtFirstPost = preloaded?.post_stream?.posts?.some((post) => post.post_number === 1);
+      if (!startsAtFirstPost) {
         // 深链或 SPA 切换时预载可能不含主帖；补读带上当前摘要与作者筛选，不用完整流覆盖筛选结果。
         const params = new URLSearchParams();
         if (tree.topReplies) params.set("filter", "summary");
         if (tree.userFilters.length) params.set("username_filters", tree.userFilters.join(","));
-        data = startsAtFirstPost ? preloaded : await requestTopicResponse(`/t/${tree.topicId}.json${params.size ? `?${params}` : ""}`, active);
-        if (!active()) return;
-        if (!startsAtFirstPost && Array.isArray(preloaded?.post_stream?.posts)) nearbyPosts = preloaded.post_stream.posts;
-        const stream = data?.post_stream?.stream;
-        if (!Array.isArray(stream) || !Array.isArray(data?.post_stream?.posts) || !data.post_stream.posts.some((post) => post.post_number === 1)) {
-          throw new Error("主题回复数据格式不正确");
-        }
-        tree.stream = stream;
-        if (data.details?.created_by?.username) tree.ownerUsername = data.details.created_by.username;
-      } else {
-        const ids = tree.stream.filter((id) => !tree.loaded.has(id)).slice(0, config.replyTreePageSize);
-        const params = new URLSearchParams();
-        ids.forEach((id) => params.append("post_ids[]", id));
-        data = await requestTopicResponse(`/t/${tree.topicId}/posts.json?${params}`, active);
-        if (!active()) return;
-        if (!Array.isArray(data?.post_stream?.posts)) throw new Error("回复分页数据格式不正确");
-        ids.forEach((id) => tree.loaded.add(id));
+        data = await shareTopicFetch(`/t/${tree.topicId}.json${params.size ? `?${params}` : ""}`);
+        if (!entry.active()) return;
+        if (state.preloadedReplyFilterKey === tree.filterViewKey && Array.isArray(preloaded?.post_stream?.posts)) nearbyPosts = preloaded.post_stream.posts;
       }
+      const stream = data?.post_stream?.stream;
+      if (!Array.isArray(stream) || !Array.isArray(data?.post_stream?.posts) || !data.post_stream.posts.some((post) => post.post_number === 1)) {
+        throw new Error("主题回复数据格式不正确");
+      }
+      tree.stream = stream;
+      if (data.details?.created_by?.username) tree.ownerUsername = data.details.created_by.username;
       if (data.title) tree.title = cleanText(data.title);
       mergeReplyUserBadges(tree, data.user_badges);
-      const streamIds = new Set(tree.stream);
-      [...data.post_stream.posts, ...nearbyPosts].forEach((post) => {
-        if (Number.isInteger(post.id) && Number.isInteger(post.post_number) && streamIds.has(post.id)) {
-          tree.posts.set(post.id, post);
-          tree.loaded.add(post.id);
-        }
-      });
-      if (!tree.posts.size) throw new Error("主题没有可读取的帖子");
-      renderReplyTree(tree);
+      mergeReplyTreePosts(tree, data.post_stream.posts, { overwrite: false });
+      mergeReplyTreePosts(tree, nearbyPosts, { overwrite: false });
+      clearReplyTreeWait(tree);
+      tree.autoLoadPaused = false;
       tree.status.textContent = "";
+      renderReplyTree(tree);
     } catch (error) {
-      if (state.replyTree === tree) {
-        console.error("[betterLD] reply tree load failed", error);
-        tree.panel.hidden = false;
+      if (!entry.stillCurrent()) return;
+      handleReplyTreeTaskError(tree, error, "树状回复读取失败");
+    }
+  }
+
+  function scheduleReplyTreeBody(tree, direction) {
+    const batch = tree.retryBatch || replyTreeBodyBatch(tree, direction);
+    if (!batch) return null;
+    const generation = tree.filterGeneration;
+    return scheduleReplyTreeTask(tree, {
+      kind: "body",
+      key: batch.key,
+      generation,
+      priority: config.topicRequestPriority.body,
+      isNeeded: () => replyTreeTaskActive(tree, generation) && batch.ids.some((id) => !tree.loaded.has(id)),
+      canStart: () => !tree.tasks.some((pending) => pending.kind === "jump" && !pending.cancelled),
+      run: (entry) => loadReplyTreeBody(tree, entry, batch)
+    });
+  }
+
+  async function loadReplyTreeBody(tree, entry, batch) {
+    if (!tree.posts.size) tree.status.textContent = "正在读取回复…";
+    try {
+      const params = new URLSearchParams();
+      batch.ids.forEach((id) => params.append("post_ids[]", id));
+      const data = await shareTopicFetch(`/t/${tree.topicId}/posts.json?${params}`);
+      if (!entry.active()) return;
+      const posts = Array.isArray(data?.post_stream?.posts) ? data.post_stream.posts : null;
+      if (!posts) throw new Error("回复分页数据格式不正确");
+      mergeReplyUserBadges(tree, data.user_badges);
+      // 只登记真实带正文的返回；漏返回或没正文的楼层用 loaded 判定为缺口，不假装成功。
+      mergeReplyTreePosts(tree, posts, { overwrite: false });
+      const missing = batch.ids.filter((id) => !tree.loaded.has(id));
+      renderReplyTree(tree);
+      if (missing.length) {
+        tree.retryBatch = batch;
         tree.autoLoadPaused = true;
-        tree.status.textContent = `树状回复读取失败：${error.message}。${tree.posts.size ? "可通过楼层链接进入原站回复。" : "原站回复保持可用。"}`;
         tree.more.hidden = false;
         tree.more.textContent = "重试加载回复";
+        tree.status.textContent = `原站没有返回帖子 ${missing.join("、")} 的正文；点击“重试加载回复”继续。`;
+        return;
       }
-    } finally {
-      tree.busy = false;
-      tree.more.disabled = false;
-      requestAnimationFrame(() => maybeLoadMoreReplyTree(tree));
+      tree.retryBatch = null;
+      clearReplyTreeWait(tree);
+      tree.autoLoadPaused = false;
+      tree.status.textContent = "";
+    } catch (error) {
+      if (!entry.stillCurrent()) return;
+      tree.retryBatch = batch;
+      handleReplyTreeTaskError(tree, error, "回复续载失败");
     }
   }
 
@@ -4972,8 +5380,7 @@
 
   function cacheReplyParentPage(tree, posts, parentNumber) {
     const returned = new Map(posts.map((post) => [post.post_number, post]));
-    const streamIds = new Set(tree.stream);
-    const accepted = new Set(posts.filter((post) => streamIds.has(post.id)));
+    const accepted = new Set(posts.filter((post) => tree.stream.includes(post.id)));
     let parent = returned.get(parentNumber);
     while (parent) {
       accepted.add(parent);
@@ -4982,32 +5389,44 @@
       parent = returned.get(number);
     }
     for (const post of accepted) {
-      // 模型同步可能已给出更近的编辑/回应，补上下文不覆盖已缓存的楼层。
-      if (!tree.posts.has(post.id)) tree.posts.set(post.id, post);
-      tree.loaded.add(post.id);
+      // 模型同步可能已给出更近的编辑/回应，补上下文不覆盖已缓存的正文楼层。
+      mergeReplyTreePost(tree, post, { overwrite: false });
       tree.parentErrors.delete(post.post_number);
-      if (!streamIds.has(post.id)) tree.orphanContextIds.add(post.id);
     }
   }
 
-  async function loadReplyParent(tree, gap) {
-    const filterKey = topicFilterStateKey(tree);
-    const active = () => pageActive() && state.replyTree === tree && topicIdFromPath() === tree.topicId
-      && !tree.contentContainer.hidden && !tree.filterBusy && topicFilterStateKey(tree) === filterKey
-      && topicFilterStateKey(topicStreamFiltersFromUrl()) === filterKey;
-    const needed = () => {
-      if (!active() || Date.now() < state.replyParentNextAt) return false;
-      const current = visibleReplyParentGap(tree);
-      return current?.number === gap.number && current.child.id === gap.child.id;
-    };
-    tree.busy = true;
-    tree.parentLoadingNumber = gap.number;
-    renderReplyTree(tree);
+  function scheduleReplyTreeParent(tree, gap) {
+    const generation = tree.filterGeneration;
+    const key = `parent:${gap.number}`;
+    // 只保留一个父楼意图：换了另一对父子就直接取消旧的，不留多个待办。
+    cancelReplyTreeTasks(tree, (pending) => pending.kind === "parent" && pending.key !== key);
+    return scheduleReplyTreeTask(tree, {
+      kind: "parent",
+      key,
+      generation,
+      priority: config.topicRequestPriority.parent,
+      // 可见性属于有效性：离开视口就是意图失效，当场取消，不永久滞留。
+      isNeeded: () => {
+        if (!replyTreeTaskActive(tree, generation) || tree.parentLoadPaused) return false;
+        const current = visibleReplyParentGap(tree);
+        return current?.number === gap.number && current.child.id === gap.child.id;
+      },
+      // 父楼预算只是可启动条件：还没到 5s 就等，不代表可见意图失效。
+      readyAt: () => state.replyParentNextAt,
+      canStart: () => !tree.tasks.some((pending) => pending.priority < config.topicRequestPriority.parent && !pending.cancelled),
+      run: (entry) => loadReplyParent(tree, entry, gap)
+    });
+  }
+
+  async function loadReplyParent(tree, entry, gap) {
     try {
-      const data = await requestTopicResponse(`/t/${tree.topicId}/${gap.number}.json`, needed, (at) => {
+      tree.parentLoadingNumber = gap.number;
+      renderReplyTree(tree);
+      const data = await shareTopicFetch(`/t/${tree.topicId}/${gap.number}.json`, (at) => {
         state.replyParentNextAt = Math.max(state.replyParentNextAt, at + config.replyTreeParentLoadIntervalMs);
       });
-      if (!active() || Number(tree.posts.get(gap.child.id)?.reply_to_post_number) !== gap.number) return;
+      if (!entry.active()) return;
+      if (Number(tree.posts.get(gap.child.id)?.reply_to_post_number) !== gap.number) return;
       if (String(data?.id) !== tree.topicId || !Array.isArray(data?.post_stream?.posts)) throw new Error("父楼数据格式不正确");
       const posts = data.post_stream.posts;
       if (posts.some((post) => !Number.isInteger(post.id) || !Number.isInteger(post.post_number)
@@ -5017,16 +5436,22 @@
       mergeReplyUserBadges(tree, data.user_badges);
       cacheReplyParentPage(tree, posts.filter((post) => typeof post.cooked === "string" && post.cooked.trim()), gap.number);
       tree.parentRetryNumber = 0;
+      clearReplyTreeWait(tree);
       tree.status.textContent = "";
     } catch (error) {
-      if (active() && error.name !== "AbortError") {
-        console.error('[betterLD] reply parent load failed', error);
-        tree.parentErrors.set(gap.number, error.message);
+      if (error?.name === "AbortError" || !entry.stillCurrent()) return;
+      if (error?.rateLimited) {
         tree.parentLoadPaused = true;
-        tree.status.textContent = `父楼 #${gap.number} 读取失败：${error.message}。点击“查看上文”重试，或通过楼层链接打开原帖。`;
+        tree.parentErrors.set(gap.number, error.message);
+        tree.status.textContent = `上文读取受站点限制，冷却到 ${new Date(error.cooldownUntil).toLocaleTimeString()}；已载正文保持可读，上文可点击重试。`;
+        return;
       }
+      console.error("[betterLD] reply parent load failed", error);
+      // 父楼失败只暂停父楼补载，正文续载继续。
+      tree.parentErrors.set(gap.number, error.message);
+      tree.parentLoadPaused = true;
+      tree.status.textContent = `父楼 #${gap.number} 读取失败：${error.message}。点击“查看上文”重试，或通过楼层链接打开原帖。`;
     } finally {
-      tree.busy = false;
       tree.parentLoadingNumber = 0;
       if (state.replyTree === tree) {
         renderReplyTree(tree);
@@ -5036,42 +5461,72 @@
   }
 
   function maybeLoadMoreReplyTree(tree) {
-    if (!pageActive() || state.replyTree !== tree || tree.busy || tree.autoLoadPaused || tree.contentContainer.hidden || tree.filterBusy) return;
-    if (tree.parentRetryNumber && [...tree.posts.values()].some((post) => post.post_number === tree.parentRetryNumber)) tree.parentRetryNumber = 0;
-    const gap = !tree.parentLoadPaused && topicFilterStateKey(tree) === topicFilterStateKey(topicStreamFiltersFromUrl()) ? visibleReplyParentGap(tree) : null;
-    if (!gap) tree.parentRetryNumber = 0;
-    if (gap && Date.now() >= state.replyParentNextAt) {
-      loadReplyParent(tree, gap);
+    if (!pageActive() || state.replyTree !== tree || tree.busy || tree.compensating || tree.autoLoadPaused
+      || tree.contentContainer.hidden || tree.filterBusy
+      || topicFilterStateKey(topicStreamFiltersFromUrl()) !== tree.filterViewKey) return;
+    if (tree.wait.until) return;
+    if (!tree.stream.length || ![...tree.posts.values()].some((post) => post.post_number === 1)) {
+      scheduleReplyTreeTopic(tree);
       return;
     }
-    // 显式补父重试不变成后续分页请求；慢同步会在预算恢复时继续。
-    if (tree.parentRetryNumber) return;
-    if (!tree.stream.some((id) => !tree.loaded.has(id))) return;
+    if (tree.wait.pendingJump) {
+      scheduleReplyTreeJump(tree, tree.wait.pendingJump);
+      return;
+    }
+    // 正文优先：锚点楼还没有正文就立即补齐；其余只在底部哨兵进入预读范围后续载窗口后方。
+    const reading = replyTreeWindow(tree);
+    const batch = tree.retryBatch || replyTreeBodyBatch(tree, "forward");
+    if (batch && (tree.retryBatch || reading.empty || replyTreeSentinelReached(tree))) {
+      scheduleReplyTreeBody(tree, "forward");
+      return;
+    }
+    // 空闲时才补可见回复的父楼上文；图索引扫描按父楼预算节流，滚动不反复全量构建。
+    if (tree.parentLoadPaused) return;
+    if (!tree.parentRetryNumber && Date.now() - tree.parentScanAt < config.replyTreeParentLoadIntervalMs) return;
+    tree.parentScanAt = Date.now();
+    const gap = topicFilterStateKey(tree) === topicFilterStateKey(topicStreamFiltersFromUrl()) ? visibleReplyParentGap(tree) : null;
+    if (!gap) tree.parentRetryNumber = 0;
+    if (gap && Date.now() >= state.replyParentNextAt) scheduleReplyTreeParent(tree, gap);
+  }
+
+  function replyTreeSentinelReached(tree) {
+    const reading = replyTreeWindow(tree);
+    const lastPost = reading && tree.posts.get(tree.stream[reading.hi]);
+    const card = lastPost && tree.content.querySelector(`[data-post-number="${lastPost.post_number}"] > .betterld-reply-tree__card`);
+    if (card?.getClientRects().length) {
+      const boundary = card.getBoundingClientRect();
+      if (boundary.bottom >= 0 && boundary.bottom <= innerHeight + config.replyTreeLoadAheadPx) return true;
+    }
     const boundary = tree.sentinel.getBoundingClientRect();
-    if (boundary.top <= innerHeight + config.replyTreeLoadAheadPx && boundary.bottom >= 0) loadReplyTree(tree, true);
+    return boundary.top <= innerHeight + config.replyTreeLoadAheadPx && boundary.bottom >= 0;
   }
 
   function replyTreeCurrentPost(tree) {
-    if (tree.positionedPost && tree.positionedPost.scrollY === pageScrollTop()) return tree.positionedPost;
+    if (tree.positionedPost && tree.positionedPost.scrollY === pageScrollTop()) return { ...tree.positionedPost, visible: true };
     tree.positionedPost = null;
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     const cards = tree.content.querySelectorAll('.betterld-reply-tree__card');
     let visible;
     for (const card of cards) {
-      if (card.getClientRects().length && card.getBoundingClientRect().bottom > headerHeight) {
+      const bounds = card.getBoundingClientRect();
+      if (card.getClientRects().length && bounds.bottom > headerHeight && bounds.top < innerHeight) {
         visible = card;
         break;
       }
     }
     const postNumber = Number(visible?.parentElement.dataset.postNumber) || 1;
     const postId = [...tree.posts.values()].find((post) => post.post_number === postNumber)?.id;
-    return { postNumber, postId };
+    // visible 为假时不能拿默认的首帖当阅读锚点，否则首帖会错误改变正文窗口边界。
+    return { postNumber, postId, visible: Boolean(visible) };
   }
 
-  async function syncReplyTreeData(tree) {
+  // 实时同步只合并原站模型与流；正文由阅读窗口按需续载，不在这里自己发请求。
+  function syncReplyTreeData(tree) {
     if (!pageActive() || tree.busy || !tree.pendingData) return;
     const data = tree.pendingData;
     tree.pendingData = null;
+    // 与任务同一世代：筛选切换后遗留的旧世代批次不再消费。
+    if (data.generation !== undefined && data.generation !== tree.filterGeneration) return;
     if (data.error) {
       tree.status.textContent = `回复实时同步失败：${data.error}`;
       return;
@@ -5095,14 +5550,9 @@
     if (Array.isArray(data.userFilters)) {
       tree.userFilters = data.userFilters;
     }
-    if (typeof data.ownerUsername === "string" && data.ownerUsername) {
-      tree.ownerUsername = data.ownerUsername;
-    }
     applyTopicReadingFilterView(tree);
     if (tree.contentContainer.hidden || !data.stream.length) return;
     const streamChanged = JSON.stringify(tree.stream) !== JSON.stringify(data.stream);
-    const previousIds = new Set(tree.stream);
-    const added = data.stream.filter((id) => !previousIds.has(id));
     tree.stream = data.stream;
     const streamIds = new Set(tree.stream);
     const badgesChanged = mergeReplyUserBadges(tree, data.user_badges);
@@ -5121,94 +5571,149 @@
       if (!streamIds.has(post.id) || !post.cooked) continue;
       const previous = tree.posts.get(post.id);
       if (previous && Object.keys(post).every((key) => JSON.stringify(previous[key]) === JSON.stringify(post[key]))) continue;
-      tree.posts.set(post.id, { ...previous, ...post });
-      tree.loaded.add(post.id);
-      changed = true;
+      if (mergeReplyTreePost(tree, post)) changed = true;
     }
-    added.forEach((id) => { if (!tree.loaded.has(id)) tree.liveIds.add(id); });
-    if (changed && tree.posts.has(tree.stream[0])) renderReplyTree(tree);
-    if (!tree.liveIds.size || tree.autoLoadPaused) return;
-    tree.liveIds = new Set([...tree.liveIds].filter((id) => tree.stream.includes(id) && !tree.loaded.has(id)));
-    if (!tree.liveIds.size) return;
-    tree.busy = true;
-    const ids = [...tree.liveIds].slice(0, config.replyTreePageSize);
-    try {
-      const params = new URLSearchParams();
-      ids.forEach((id) => params.append('post_ids[]', id));
-      const result = await requestTopicResponse(`/t/${tree.topicId}/posts.json?${params}`, () => state.replyTree === tree);
-      if (state.replyTree !== tree) return;
-      if (!Array.isArray(result?.post_stream?.posts)) throw new Error('新回复数据格式不正确');
-      mergeReplyUserBadges(tree, result.user_badges);
-      for (const post of result.post_stream.posts) {
-        if (!tree.stream.includes(post.id)) continue;
-        tree.posts.set(post.id, post);
-        tree.loaded.add(post.id);
-      }
-      ids.forEach((id) => tree.liveIds.delete(id));
-      renderReplyTree(tree);
-      tree.status.textContent = '';
-    } catch (error) {
-      if (state.replyTree === tree) {
-        console.error('[betterLD] live replies failed', error);
-        tree.autoLoadPaused = true;
-        tree.status.textContent = `新回复同步失败：${error.message}`;
-        tree.more.hidden = false;
-      }
-    } finally {
-      tree.busy = false;
-    }
+    if (changed && tree.posts.size) renderReplyTree(tree);
+    scheduleReplyTreeWake(tree);
   }
 
-  async function jumpReplyTree(tree, postNumber, postId, requestId) {
-    if (tree.busy) {
-      tree.pendingJump = { postNumber, postId, requestId };
+  function replyTreePostByTarget(tree, postNumber, postId) {
+    if (postId) return tree.posts.get(postId);
+    return [...tree.posts.values()].find((post) => post.post_number === postNumber);
+  }
+
+  // 跳转回执只发一次：同一个 requestId 不会因为冷却重试而被重复确认。
+  function ackReplyTreeJump(tree, record, errorMessage) {
+    if (record.acked) return;
+    record.acked = true;
+    if (tree.wait.pendingJump === record) tree.wait.pendingJump = null;
+    if (!record.requestId) return;
+    document.dispatchEvent(new CustomEvent("betterld:reply-jumped", {
+      detail: JSON.stringify({ topicId: tree.topicId, requestId: record.requestId, postNumber: record.postNumber || 0, error: errorMessage })
+    }));
+  }
+
+  function createReplyTreeJump(postNumber, postId, requestId) {
+    return { postNumber: Number(postNumber) || 0, postId: postId || 0, requestId: requestId || "", acked: false, state: "pending" };
+  }
+
+  // 已缓存的楼层直接定位：不发请求，也不占用树的忙碌状态。
+  function requestReplyTreeJump(tree, postNumber, postId, requestId) {
+    const record = createReplyTreeJump(postNumber, postId, requestId);
+    cancelReplyTreeTasks(tree, (pending) => pending.kind === "jump" || pending.kind === "body");
+    tree.retryBatch = null;
+    if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "跳转请求已被新的跳转取代");
+    const post = replyTreePostByTarget(tree, record.postNumber, record.postId);
+    if ([...tree.posts.values()].some((entry) => entry.post_number === 1)
+      && tree.stream.length && post && typeof post.cooked === "string" && post.cooked.trim()) {
+      applyReplyTreeJump(tree, record, post, "");
       return;
     }
-    tree.busy = true;
-    let errorMessage = "";
+    scheduleReplyTreeJump(tree, record);
+  }
+
+  function scheduleReplyTreeJump(tree, record) {
+    // 冷却期间只保留最新一次跳楼意图；被取代的那次立刻回执，不让主世界超时。
+    const superseded = tree.wait.pendingJump;
+    if (superseded && superseded !== record) ackReplyTreeJump(tree, superseded, "跳转请求已被新的跳转取代");
+    record.state = "pending";
+    const generation = tree.filterGeneration;
+    return scheduleReplyTreeTask(tree, {
+      kind: "jump",
+      jump: record,
+      key: `jump:${record.postId || `#${record.postNumber}`}`,
+      generation,
+      priority: config.topicRequestPriority.jump,
+      isNeeded: () => replyTreeTaskActive(tree, generation),
+      canStart: () => tree.stream.length > 0 && [...tree.posts.values()].some((post) => post.post_number === 1),
+      // 排队中或取数中被取消（切帖、隐藏、筛选切换）时也要及时回执。
+      finish: () => {
+        if (record.state === "pending") ackReplyTreeJump(tree, record, "楼层跳转请求已取消");
+      },
+      run: (entry) => loadReplyTreeJump(tree, entry, record)
+    });
+  }
+
+  async function loadReplyTreeJump(tree, entry, record) {
+    let post = null;
     try {
-      let post = postId ? tree.posts.get(postId) : [...tree.posts.values()].find((entry) => entry.post_number === postNumber);
-      if (!post) {
-        const endpoint = postId ? `/t/${tree.topicId}/posts.json?post_ids[]=${postId}` : `/t/${tree.topicId}/${postNumber}.json`;
-        const data = await requestTopicResponse(endpoint, () => state.replyTree === tree);
-        if (state.replyTree !== tree) return;
-        if (!Array.isArray(data?.post_stream?.posts)) throw new Error('跳转楼层数据格式不正确');
-        mergeReplyUserBadges(tree, data.user_badges);
-        for (const entry of data.post_stream.posts) {
-          if (!tree.stream.includes(entry.id)) continue;
-          tree.posts.set(entry.id, entry);
-          tree.loaded.add(entry.id);
-        }
-        post = postId ? tree.posts.get(postId) : [...tree.posts.values()].find((entry) => entry.post_number === postNumber);
-      }
-      if (!post) throw new Error(`目标楼层不存在或不可访问`);
-      postNumber = post.post_number;
-      let parent = Number(post.reply_to_post_number);
-      while (parent > 1) {
-        tree.collapsed.delete(parent);
-        const parentPost = [...tree.posts.values()].find((entry) => entry.post_number === parent);
-        parent = Number(parentPost?.reply_to_post_number);
-      }
-      tree.collapsed.delete(1);
-      tree.targetLocated = true;
-      renderReplyTree(tree);
-      const card = tree.content.querySelector(`[data-post-number="${postNumber}"] > .betterld-reply-tree__card`);
-      const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
-      window.scrollTo({ top: pageScrollTop() + card.getBoundingClientRect().top - headerHeight, behavior: 'instant' });
-      // 末楼可能无法贴到视口顶部；在用户实际滚动前保持刚命中的楼号。
-      tree.positionedPost = { postNumber, postId: post.id, scrollY: pageScrollTop() };
-      tree.status.textContent = '';
+      const endpoint = record.postId
+        ? `/t/${tree.topicId}/posts.json?post_ids[]=${record.postId}`
+        : `/t/${tree.topicId}/${record.postNumber}.json`;
+      const data = await shareTopicFetch(endpoint);
+      if (!entry.active()) return;
+      if (!Array.isArray(data?.post_stream?.posts)) throw new Error("跳转楼层数据格式不正确");
+      mergeReplyUserBadges(tree, data.user_badges);
+      mergeReplyTreePosts(tree, data.post_stream.posts, { overwrite: false });
+      post = replyTreePostByTarget(tree, record.postNumber, record.postId);
+      if (!post) throw new Error("目标楼层不存在或不可访问");
     } catch (error) {
-      errorMessage = `楼层跳转失败：${error.message}`;
-      if (state.replyTree === tree) tree.status.textContent = errorMessage;
-    } finally {
-      tree.busy = false;
-      if (state.replyTree === tree && requestId) {
-        document.dispatchEvent(new CustomEvent('betterld:reply-jumped', {
-          detail: JSON.stringify({ topicId: tree.topicId, requestId, postNumber, error: errorMessage })
-        }));
+      if (error?.name === "AbortError" || !entry.stillCurrent()) return;
+      if (error?.rateLimited) {
+        // 首次限流保留这一次跳楼意图，冷却到点自动再试一次。
+        const firstLimit = !tree.wait.retryUsed;
+        noteReplyTreeRateLimit(tree, error);
+        if (firstLimit) {
+          record.state = "deferred";
+          tree.wait.pendingJump = record;
+          return;
+        }
       }
+      applyReplyTreeJump(tree, record, null, `楼层跳转失败：${error.message}`);
+      return;
     }
+    applyReplyTreeJump(tree, record, post, "");
+  }
+
+  function applyReplyTreeJump(tree, record, post, errorMessage) {
+    record.state = "settled";
+    if (post) record.postNumber = post.post_number;
+    if (post && !tree.stream.includes(post.id)) {
+      errorMessage = `楼层 #${post.post_number} 不在当前筛选结果中，请点击“返回全部回复”查看。`;
+      post = null;
+    }
+    try {
+      if (post && state.replyTree === tree) {
+        clearReplyTreeWait(tree);
+        // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
+        tree.anchorId = post.id;
+        tree.targetLocated = true;
+        // 祖先展开严格递减，遇到自引用或环立即停下。
+        let parent = Number(post.reply_to_post_number);
+        while (parent > 1 && parent < post.post_number) {
+          tree.collapsed.delete(parent);
+          const parentPost = [...tree.posts.values()].find((entry) => entry.post_number === parent);
+          const next = Number(parentPost?.reply_to_post_number);
+          if (!(next < parent)) break;
+          parent = next;
+        }
+        tree.collapsed.delete(1);
+        // 主动跳楼自己决定滚动位置，跳过锚点补偿。
+        tree.skipAnchorRestore = true;
+        renderReplyTree(tree);
+        const card = tree.content.querySelector(`[data-post-number="${post.post_number}"] > .betterld-reply-tree__card`);
+        if (!card?.getClientRects().length) throw new Error(`楼层 #${post.post_number} 尚未渲染，跳转未完成`);
+        scrollReplyTreeCard(tree, post);
+        tree.status.textContent = "";
+      } else if (errorMessage && state.replyTree === tree) {
+        tree.status.textContent = errorMessage;
+      }
+    } catch (error) {
+      console.error("[betterLD] reply jump projection failed", error);
+      errorMessage = `楼层跳转失败：${error.message}`;
+      post = null;
+      if (state.replyTree === tree) tree.status.textContent = errorMessage;
+    }
+    ackReplyTreeJump(tree, record, post ? "" : errorMessage);
+  }
+
+  function scrollReplyTreeCard(tree, post) {
+    const card = tree.content.querySelector(`[data-post-number="${post.post_number}"] > .betterld-reply-tree__card`);
+    if (!card) return;
+    const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
+    window.scrollTo({ top: pageScrollTop() + card.getBoundingClientRect().top - headerHeight, behavior: 'instant' });
+    // 末楼可能无法贴到视口顶部；在用户实际滚动前保持刚命中的楼号。
+    tree.positionedPost = { postNumber: post.post_number, postId: post.id, scrollY: pageScrollTop() };
   }
 
   function syncReplyBookmark(tree, post, bookmarked, changed = false) {
@@ -5255,7 +5760,7 @@
     // 忙碌/隐藏期间多个增量批次合并，后到的批次只覆盖同一楼，不能丢掉之前的其他楼。
     const posts = new Map((tree.pendingData?.posts || []).map((post) => [post.id, post]));
     for (const post of data.posts) posts.set(post.id, post);
-    tree.pendingData = { ...data, posts: [...posts.values()] };
+    tree.pendingData = { ...data, posts: [...posts.values()], generation: tree.filterGeneration };
     syncReplyTreeData(tree);
   });
   document.addEventListener("betterld:reply-author-status", (event) => {
@@ -5269,7 +5774,7 @@
   document.addEventListener('betterld:reply-jump', (event) => {
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
-    if (tree?.topicId === data.topicId && !tree.contentContainer.hidden) jumpReplyTree(tree, data.postNumber, data.postId, data.requestId);
+    if (tree?.topicId === data.topicId && !tree.contentContainer.hidden) requestReplyTreeJump(tree, data.postNumber, data.postId, data.requestId);
   });
 
   function returnAllReplyTreePosts(tree) {
@@ -5349,10 +5854,8 @@
     tree.toggle.textContent = "原帖回复";
     tree.contentContainer.hidden = false;
     syncReplyTreeFilterBar(tree);
-    if (tree.posts.size) {
-      renderReplyTree(tree);
-      requestAnimationFrame(() => maybeLoadMoreReplyTree(tree));
-    } else loadReplyTree(tree);
+    if (tree.posts.size) renderReplyTree(tree);
+    maybeLoadMoreReplyTree(tree);
   }
 
   // 筛选视图的唯一规则：作者筛选由服务端过滤整条流，用原帖回复呈现，不强制构建筛选树；
@@ -5368,13 +5871,24 @@
       tree.stream = [];
       tree.loaded.clear();
       tree.posts.clear();
-      tree.liveIds.clear();
       tree.orphanContextIds.clear();
       tree.parentErrors.clear();
       tree.parentLoadPaused = false;
       tree.parentRetryNumber = 0;
+      tree.anchorId = "";
+      tree.retryBatch = null;
+      tree.autoLoadPaused = false;
+      tree.wait.until = 0;
+      tree.wait.retryUsed = false;
+      tree.status.textContent = "";
+      tree.pendingData = null;
+      // 筛选世代变化后，尚未发请求的旧世代任务全部作废。
+      cancelReplyTreeTasks(tree);
+      if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "筛选切换，楼层跳转请求已取消");
     }
     clearReplyTreeFilterError(tree);
+    // 筛选世代单调递增：全部→摘要→全部 这类回到原值的切换也能作废旧任务。
+    tree.filterGeneration += 1;
     tree.filterViewKey = key;
     if (tree.userFilters.length) {
       showNativeReply(tree);
@@ -5482,6 +5996,9 @@
       }
       state.replyTree.observer.disconnect();
       clearInterval(state.replyTree.relativeTimeTimer);
+      stopReplyTreeStatusTimer(state.replyTree);
+      cancelReplyTreeTasks(state.replyTree);
+      if (state.replyTree.wait.pendingJump) ackReplyTreeJump(state.replyTree, state.replyTree.wait.pendingJump, "主题已切换，楼层跳转请求已取消");
       closeReplyReactionPicker(state.replyTree);
       state.replyTree.streamElement.removeAttribute("data-betterld-reply-source");
       state.replyTree.topicContainer.removeAttribute("data-betterld-reply-tree-active");
@@ -5509,12 +6026,6 @@
       tree.userFilters = currentFilters.userFilters;
       applyTopicReadingFilterView(tree);
       if (tree.renderPending && !tree.busy) renderReplyTree(tree);
-      if (tree.pendingJump && !tree.busy) {
-        const { postNumber, postId, requestId } = tree.pendingJump;
-        tree.pendingJump = null;
-        jumpReplyTree(tree, postNumber, postId, requestId);
-      }
-      if (tree.liveIds.size && !tree.pendingData) tree.pendingData = { stream: tree.stream, posts: [] };
       syncReplyTreeData(tree);
       // 可见性恢复与低频数据核对仍补查续载，避免交叉观察器在忙碌时漏掉一次回调。
       maybeLoadMoreReplyTree(tree);
@@ -5562,7 +6073,12 @@
     notice.setAttribute("role", "status");
     const content = createElement("div", "betterld-reply-tree__content");
     content.hidden = state.replyTreeNativeTopicId === topicId;
-    const replies = createElement("div");
+    const replies = createElement("div", "betterld-reply-tree__replies");
+    const previousButton = createElement("button", "betterld-reply-tree__more betterld-reply-tree__previous", "加载前面的回复");
+    previousButton.type = "button";
+    previousButton.hidden = true;
+    const listElement = createElement("ol", "betterld-reply-tree__list");
+    replies.append(previousButton, listElement);
     const status = createElement("p", "betterld-reply-tree__status", previous?.autoLoadPaused ? previous.status.textContent : "");
     status.setAttribute("role", "status");
     const sentinel = createElement("div", "betterld-reply-tree__sentinel");
@@ -5576,17 +6092,25 @@
     panel.append(toolbar, range, filterStatus, notice, mine, content);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], collapsed: previous?.collapsed || new Set(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.orphanContextIds = previous?.orphanContextIds || new Set();
     tree.parentErrors = previous?.parentErrors || new Map();
     tree.parentLoadingNumber = 0;
     tree.parentLoadPaused = previous?.parentLoadPaused || false;
     tree.parentRetryNumber = 0;
+    tree.parentScanAt = 0;
+    // 阅读窗口锚点、任务队列与等待状态都属于本树实例，不跨树共享。
+    tree.anchorId = previous?.anchorId || "";
+    tree.tasks = [];
+    tree.activeTask = null;
+    tree.wait = { until: 0, retryUsed: false, pendingJump: null };
+    tree.statusTimer = 0;
+    tree.compensating = false;
+    tree.skipAnchorRestore = false;
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
     tree.observer.observe(sentinel);
-    tree.liveIds = previous?.liveIds || new Set();
     tree.userBadges = previous?.userBadges;
     state.replyTree = tree;
     loadPageRefreshBridge().then(() => {
@@ -5604,17 +6128,20 @@
     toggle.addEventListener("click", () => tree.contentContainer.hidden ? showReplyTree(tree) : showNativeReply(tree));
     moreButton.addEventListener("click", () => {
       tree.autoLoadPaused = false;
+      tree.wait.until = 0;
+      tree.wait.retryUsed = false;
       moreButton.hidden = true;
-      if (tree.liveIds.size) {
-        tree.pendingData = { stream: tree.stream, posts: [] };
-        syncReplyTreeData(tree);
-      } else loadReplyTree(tree, tree.posts.size > 0);
+      tree.status.textContent = "";
+      maybeLoadMoreReplyTree(tree);
     });
+    previousButton.addEventListener("click", () => scheduleReplyTreeBody(tree, "backward"));
     if (content.hidden) panel.hidden = false;
-    else if (tree.posts.size) {
-      renderReplyTree(tree);
-      requestAnimationFrame(() => maybeLoadMoreReplyTree(tree));
-    } else loadReplyTree(tree);
+    else if (tree.posts.size) renderReplyTree(tree);
+    // 深链先登记目标意图，优先级高于任何正文/上文任务。
+    if (!content.hidden && tree.targetPostNumber > 1) {
+      requestReplyTreeJump(tree, tree.targetPostNumber, 0, "");
+    }
+    maybeLoadMoreReplyTree(tree);
   }
 
   function checkDailyWallpaper() {
@@ -5628,11 +6155,17 @@
 
   function syncReplyTreePosition() {
     const tree = state.replyTree;
-    if (!pageActive() || !tree?.bridgeReady) return;
+    if (!pageActive() || !tree) return;
     const active = !tree.contentContainer.hidden;
-    document.dispatchEvent(new CustomEvent("betterld:reply-position", {
-      detail: JSON.stringify({ topicId: tree.topicId, ...(active ? replyTreeCurrentPost(tree) : {}), active, timeoutMs: config.pageRefreshTimeoutMs })
-    }));
+    const current = active ? replyTreeCurrentPost(tree) : null;
+    // 当前阅读楼成为正文窗口锚点：滚动到哪里，续载就从哪里往后取；无可见楼时不改边界。
+    if (current?.postId && current.visible) tree.anchorId = current.postId;
+    // 楼层上报依赖原站桥接，本地锚点更新不依赖。
+    if (tree.bridgeReady) {
+      document.dispatchEvent(new CustomEvent("betterld:reply-position", {
+        detail: JSON.stringify({ topicId: tree.topicId, ...(current || {}), active, timeoutMs: config.pageRefreshTimeoutMs })
+      }));
+    }
     // 树展开或重建后可见楼层可能变化，阅读楼层跟着核对一次。
     scheduleHistoryFloor();
   }
