@@ -4487,6 +4487,23 @@
     });
   }
 
+  function positionReplyBranchControls(tree) {
+    if (state.replyTree !== tree || tree.contentContainer.hidden) return;
+    for (const button of tree.content.querySelectorAll('.betterld-reply-tree__collapse')) {
+      const item = button.parentElement;
+      const card = item.querySelector(':scope > .betterld-reply-tree__card');
+      const actions = card.querySelector('.betterld-reply-tree__actions');
+      const anchor = actions.firstElementChild || actions;
+      if (!anchor.getClientRects().length) continue;
+      const bounds = anchor.getBoundingClientRect();
+      const y = bounds.top + bounds.height / 2 - item.getBoundingClientRect().top;
+      const value = `${y}px`;
+      if (item.style.getPropertyValue('--betterld-branch-toggle-y') !== value) {
+        item.style.setProperty('--betterld-branch-toggle-y', value);
+      }
+    }
+  }
+
   function renderReplyTree(tree) {
     if (!pageActive()) {
       tree.renderPending = true;
@@ -4858,7 +4875,13 @@
         if (item.dataset.branchHighlight && tree.highlightedBranch !== post.post_number) delete item.dataset.branchHighlight;
         const expanded = replyBranchExpanded(tree, post.post_number);
         button.dataset.replyBranchOwner = String(post.post_number);
-        button.textContent = expanded ? "−" : "+";
+        let symbol = button.querySelector('.betterld-reply-tree__collapse-symbol');
+        if (!symbol) {
+          symbol = createElement('span', 'betterld-reply-tree__collapse-symbol');
+          symbol.setAttribute('aria-hidden', 'true');
+          button.append(symbol);
+        }
+        symbol.textContent = expanded ? "−" : "+";
         button.setAttribute("aria-label", `${expanded ? "收起" : "展开"} #${post.post_number} 的 ${replies.length} 条回复`);
         button.setAttribute("aria-expanded", String(expanded));
         branch.hidden = !expanded;
@@ -4870,6 +4893,13 @@
           card.append(stem);
         }
         stem.dataset.replyBranchOwner = String(post.post_number);
+        let tail = card.querySelector(':scope > .betterld-reply-tree__line-hit--tail');
+        if (!tail) {
+          tail = createElement('span', 'betterld-reply-tree__line-hit betterld-reply-tree__line-hit--tail');
+          tail.setAttribute('aria-hidden', 'true');
+          card.append(tail);
+        }
+        tail.dataset.replyBranchOwner = String(post.post_number);
         syncReplyTreeChildren(branch, replies.map(renderPost));
         for (const child of branch.children) {
           for (const type of ['trunk', 'arc']) {
@@ -4886,13 +4916,25 @@
         delete item.dataset.branchHighlight;
         item.querySelector(":scope > .betterld-reply-tree__collapse")?.remove();
         item.querySelector(":scope > .betterld-reply-tree__children")?.remove();
-        item.querySelector(':scope > .betterld-reply-tree__card > .betterld-reply-tree__line-hit--stem')?.remove();
+        const card = item.querySelector(':scope > .betterld-reply-tree__card');
+        tree.branchLayoutObserver.unobserve(card);
+        tree.branchLayoutObserver.unobserve(card.querySelector('.betterld-reply-tree__actions'));
+        card.querySelectorAll(':scope > .betterld-reply-tree__line-hit').forEach((hit) => hit.remove());
+        item.style.removeProperty('--betterld-branch-toggle-y');
       }
       return item;
     }
     const rootPost = byNumber.get(1);
     syncReplyTreeChildren(list, rootPost ? [renderPost(rootPost)] : []);
     list.firstElementChild?.querySelectorAll(':scope > .betterld-reply-tree__line-hit').forEach((hit) => hit.remove());
+    // 重建观察范围，已替换或移出树的卡片即时释放。
+    tree.branchLayoutObserver.disconnect();
+    for (const button of tree.content.querySelectorAll('.betterld-reply-tree__collapse')) {
+      const card = button.parentElement.querySelector(':scope > .betterld-reply-tree__card');
+      tree.branchLayoutObserver.observe(card);
+      tree.branchLayoutObserver.observe(card.querySelector('.betterld-reply-tree__actions'));
+    }
+    positionReplyBranchControls(tree);
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
     const myPosts = currentUserId ? posts.filter((post) => !contextNumbers.has(post.post_number) && post.user_id === currentUserId) : [];
     tree.mine.replaceChildren(...myPosts.map((post) => {
@@ -6075,6 +6117,7 @@
         state.replyTreeSnapshot = null;
       }
       state.replyTree.observer.disconnect();
+    state.replyTree.branchLayoutObserver.disconnect();
       clearInterval(state.replyTree.relativeTimeTimer);
       stopReplyTreeStatusTimer(state.replyTree);
       cancelReplyTreeTasks(state.replyTree);
@@ -6191,6 +6234,7 @@
     tree.bodyLoadBlocked = false;
     tree.bodyLoadScrollTop = pageScrollTop();
     bindReplyBranchInteraction(tree);
+    tree.branchLayoutObserver = new ResizeObserver(() => positionReplyBranchControls(tree));
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
