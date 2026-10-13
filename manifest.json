@@ -4,7 +4,9 @@
   "version": "0.2.0",
   "description": "Material 3 原生主题列表、真实网页预览与树状回复。",
   "permissions": [
-    "storage"
+    "storage",
+    "contextMenus",
+    "downloads"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -14,6 +16,8 @@
   "host_permissions": [
     "https://linux.do/*",
     "https://www.linux.do/*",
+    "https://cdn.ldstatic.com/*",
+    "https://cdn3.ldstatic.com/*",
     "https://api.github.com/*"
   ],
   "background": {
@@ -26,6 +30,8 @@
       "src/library-store.js",
       "src/user-marks.js",
       "src/history-store.js",
+      "src/sticker-store.js",
+      "src/sticker-db.js",
       "src/background.js"
     ],
     "service_worker": "src/background.js"
@@ -45,6 +51,9 @@
         "src/library-store.js",
         "src/user-marks.js",
         "src/history-store.js",
+        "src/sticker-store.js",
+        "src/sticker-zip.js",
+        "src/sticker-library.js",
         "src/offline-assets.js",
         "src/share-image.js",
         "src/topic-library.js",
@@ -55,7 +64,8 @@
       "css": [
         "src/content.css",
         "src/topic-library.css",
-        "src/topic-export.css"
+        "src/topic-export.css",
+        "src/sticker-library.css"
       ],
       "all_frames": true,
       "run_at": "document_idle"
@@ -74,6 +84,7 @@
       "resources": [
         "betterld.config.js",
         "src/page-refresh.js",
+        "src/sticker-composer.js",
         "src/options.html",
         "src/options.css",
         "src/options.js",

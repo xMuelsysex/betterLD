@@ -349,6 +349,40 @@
                     <p id="maintenance-status" class="settings-inline-status" role="status" aria-live="polite"></p>
                   </section>
 
+                  <section class="settings-panel" data-panel="advanced" data-subpanel="sticker" hidden>
+                    <div data-fields="sticker"></div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">表情库文件</p>
+                      <p class="settings-group-card__desc">导出整库图片本体、名称与分组；导入按内容追加，内容相同的图片跳过并保留已有名称与分组，不覆盖现有表情。</p>
+                      <p class="settings-inline-note" id="sticker-library-summary"></p>
+                      <details id="sticker-library-details" hidden>
+                        <summary class="settings-inline-note">逐项失败原因</summary>
+                        <ul id="sticker-library-failures" class="settings-origin-list"></ul>
+                      </details>
+                      <div class="settings-group-card__surface">
+                        <div class="settings-actions">
+                          <button id="export-stickers" class="settings-button settings-button--tonal" type="button">导出表情库</button>
+                          <button id="import-stickers" class="settings-button settings-button--tonal" type="button">导入表情库</button>
+                          <input id="sticker-import-file" type="file" accept="application/json,.json" hidden>
+                        </div>
+                      </div>
+                      <p id="sticker-library-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                    </div>
+                    <div class="settings-group-card">
+                      <p class="settings-group-card__title">图片域名授权</p>
+                      <p class="settings-group-card__desc">右键点击「保存到表情包面板」时，会直接向浏览器申请 cdn.ldstatic.com、cdn3.ldstatic.com 与本次图片域名的访问权限，允许后继续保存。这里也可手动授权预置域名及保存时发现的其他域名。只申请精确域名，下载到电脑不使用这里的权限。</p>
+                      <div class="settings-group-card__surface">
+                        <ul id="sticker-origin-list" class="settings-origin-list"></ul>
+                        <p id="sticker-origin-empty" class="settings-inline-note">当前没有待授权域名；右键保存时发现的其他未授权域名会出现在这里。</p>
+                        <div class="settings-actions">
+                          <button id="sticker-origin-grant" class="settings-button settings-button--tonal" type="button">授权所选域名</button>
+                          <button id="sticker-origin-refresh" class="settings-button settings-button--tonal" type="button">刷新域名列表</button>
+                        </div>
+                      </div>
+                      <p id="sticker-origin-status" class="settings-inline-status" role="status" aria-live="polite"></p>
+                    </div>
+                  </section>
+
                   <section class="settings-panel" data-panel="advanced" data-subpanel="reset" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">恢复默认</p>
@@ -404,6 +438,7 @@
     <script src="settings.js"></script>
     <script src="library-entry.js"></script>
     <script src="library-store.js"></script>
+    <script src="sticker-store.js"></script>
     <script src="user-marks.js"></script>
     <script src="options.js"></script>
   </body>

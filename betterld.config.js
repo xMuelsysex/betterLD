@@ -134,6 +134,58 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   userMarksStorageKey: "betterld.user-marks",
   userMarksLimits: Object.freeze({ tagMaxLength: 16, noteMaxLength: 200, maxEntries: 500 }),
   libraryPositionStorageKey: "betterld.library-position",
+  // 个人表情库：图片本体存扩展后台 IndexedDB，容量上限由设置项控制，缺项按默认值。
+  stickerLibrary: Object.freeze({
+    dbName: "betterld-stickers",
+    dbVersion: 1,
+    schema: "betterld.stickers",
+    schemaVersion: 1,
+    // 缩略图只在面板里预览，原始图片始终单独取回，避免整库大载荷往返。
+    thumbnailMaxSizePx: 160,
+    thumbnailType: "image/webp",
+    nameMaxLength: 60,
+    foldersMax: 64,
+    folderNameMaxLength: 40,
+    itemsMax: 5000,
+    thumbBatchSize: 60,
+    importMaxFiles: 500,
+    zipMaxEntries: 2000,
+    supportedExtensions: Object.freeze(["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"]),
+    // 明确不支持的格式各自报出原因，不静默跳过也不转换。
+    unsupportedExtensions: Object.freeze({
+      tgs: "Telegram TGS 动画",
+      lottie: "Lottie 动画",
+      json: "Telegram TGS／Lottie 数据文件",
+      mp4: "视频文件",
+      webm: "视频文件",
+      mov: "视频文件",
+      mkv: "视频文件",
+      avi: "视频文件",
+      ts: "视频文件"
+    }),
+    defaultOrigins: Object.freeze(["https://cdn.ldstatic.com", "https://cdn3.ldstatic.com"]),
+    pendingOriginsStorageKey: "betterld.sticker-pending-origins",
+    pendingOriginsMax: 12,
+    // 同一批导入会连续写入，广播合并到一个窗口内，避免其他标签反复整库刷新。
+    broadcastDebounceMs: 400,
+    uploadTimeoutMs: 120000,
+    bridgeTimeoutMs: 8000,
+    panelWidthPx: 460,
+    panelMaxHeightPx: 560,
+    panelInsetPx: 12,
+    panelGapPx: 8,
+    toastDurationMs: 6000,
+    acquisitionLinks: Object.freeze([
+      Object.freeze({ label: "Telegram 下载 Bot", url: "https://t.me/DownloadStickersBot" }),
+      Object.freeze({ label: "本地下载／转换工具", url: "https://github.com/SwaggyMacro/LottieViewConvert" })
+    ]),
+    downloadFilenamePrefix: "betterld-sticker",
+    downloadNameMaxLength: 60,
+    contextMenuIds: Object.freeze({
+      save: "betterld-sticker-save-image",
+      download: "betterld-sticker-download-image"
+    })
+  }),
   libraryDragThresholdPx: 6,
   libraryMoveStepPx: 16,
   libraryViewportInsetPx: 12,
@@ -598,6 +650,12 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword", "libraryWebdavUrl"]
         },
         {
+          id: "sticker",
+          title: "表情包",
+          description: "个人表情库的容量上限、整库备份与图片域名授权；图片内容只保存在本机扩展存储。",
+          keys: ["stickerMaxItemMiB", "stickerMaxTotalMiB"]
+        },
+        {
           id: "data",
           title: "导入与导出",
           description: "导出内容不包含本地壁纸正文、账号信息或页面内容。",
@@ -758,7 +816,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     webdavUrl: "",
     webdavUsername: "",
     webdavPassword: "",
-    libraryWebdavUrl: ""
+    libraryWebdavUrl: "",
+    // 表情库容量按图片本体大小计量；调低上限不清理已有图片。
+    stickerMaxItemMiB: 10,
+    stickerMaxTotalMiB: 200
   }),
   settingsLimits: Object.freeze({
     maskOpacity: Object.freeze({ min: 0, max: 0.8, step: 0.01 }),
@@ -779,6 +840,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     webdavPassword: Object.freeze({ maxLength: 200 }),
     webdavUrl: Object.freeze({ maxLength: 2048 }),
     libraryWebdavUrl: Object.freeze({ maxLength: 2048 }),
+    stickerMaxItemMiB: Object.freeze({ min: 1, max: 64, step: 1 }),
+    stickerMaxTotalMiB: Object.freeze({ min: 20, max: 4096, step: 10 }),
     shortcut: Object.freeze({ maxLength: 24 }),
     searchHistory: Object.freeze({ maxItems: 50, maxLength: 200 })
   })

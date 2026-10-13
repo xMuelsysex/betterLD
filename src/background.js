@@ -7,6 +7,8 @@
     if (!globalThis.BETTERLD_LIBRARY_STORE) importScripts("library-store.js");
     if (!globalThis.BETTERLD_USER_MARKS) importScripts("user-marks.js");
     if (!globalThis.BETTERLD_HISTORY_STORE) importScripts("history-store.js");
+    if (!globalThis.BETTERLD_STICKER_STORE) importScripts("sticker-store.js");
+    if (!globalThis.BETTERLD_STICKER_DB) importScripts("sticker-db.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
     // 只借 searchUrl 构造引擎请求地址；后台没有 DOMParser，HTML 解析留在内容脚本
     if (!globalThis.BETTERLD_EXTERNAL_SEARCH) importScripts("external-search.js");
@@ -18,6 +20,9 @@
   const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
   const userMarks = globalThis.BETTERLD_USER_MARKS;
   const historyStore = globalThis.BETTERLD_HISTORY_STORE;
+  const stickerStore = globalThis.BETTERLD_STICKER_STORE;
+  const sticker = config.stickerLibrary;
+  const stickerDb = globalThis.BETTERLD_STICKER_DB.createStickerDb(indexedDB);
   const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
   const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch, config.webdavMaxBodyLength);
   if (!api?.runtime?.onMessage || !api.tabs?.create) {
@@ -121,7 +126,7 @@
   }
 
   // 设置页深链只接受已知字段，避免任意 hash 被当成定位目标
-  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl"]);
+  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl", "stickerOrigins"]);
 
   async function handleOpenSettingsAt(message, sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
@@ -495,6 +500,396 @@
     "library-import": importLibrary
   };
 
+  // ---- 个人表情库 ----
+
+  // 面板、右键保存与设置页备份都经由同一个后台串行队列或同一事务写入，多标签并发不会丢数据。
+  let stickerQueue = Promise.resolve();
+
+  async function stickerCapacity() {
+    const stored = await api.storage.local.get(config.storageKey);
+    return stickerStore.limits(stored[config.storageKey]);
+  }
+
+  function stickerMessage(message) {
+    return { type: "sticker-notice", message: message.message, status: message.status || "", refresh: message.refresh === true, openSettings: message.openSettings || "" };
+  }
+
+  function sendToTab(tabId, message, frameId) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        callback(value);
+      };
+      try {
+        const options = typeof frameId === "number" ? { frameId } : undefined;
+        const result = options ? api.tabs.sendMessage(tabId, message, options, onResponse) : api.tabs.sendMessage(tabId, message, onResponse);
+        if (result?.then) {
+          result.then((response) => finish(resolve, response)).catch((error) => finish(reject, error));
+        }
+      } catch (error) {
+        finish(reject, error);
+      }
+      function onResponse(response) {
+        const error = api.runtime.lastError;
+        if (error) {
+          finish(reject, new Error(error.message));
+          return;
+        }
+        finish(resolve, response);
+      }
+    });
+  }
+
+  function notifyStickerTab(tabId, frameId, message) {
+    if (typeof tabId !== "number") {
+      return;
+    }
+    sendToTab(tabId, stickerMessage(message), frameId).catch((error) => {
+      console.warn("[betterLD] 表情库提示发送失败", error);
+    });
+  }
+
+  // 跨标签一致性：表情库写入后广播一次，其他标签打开的面板从同一数据源重新读取。
+  let stickerBroadcastTimer = 0;
+
+  function scheduleStickerBroadcast() {
+    if (stickerBroadcastTimer) {
+      return;
+    }
+    stickerBroadcastTimer = setTimeout(() => {
+      stickerBroadcastTimer = 0;
+      broadcastStickerChange().catch((error) => console.warn("[betterLD] 表情库变更广播失败", error));
+    }, sticker.broadcastDebounceMs);
+  }
+
+  function queryStickerTabs() {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        callback(value);
+      };
+      try {
+        const result = api.tabs.query({ url: ["https://linux.do/*", "https://www.linux.do/*"] }, (tabs) => {
+          const error = api.runtime.lastError;
+          if (error) {
+            finish(reject, new Error(error.message));
+            return;
+          }
+          finish(resolve, tabs || []);
+        });
+        if (result?.then) {
+          result.then((tabs) => finish(resolve, tabs || [])).catch((error) => finish(reject, error));
+        }
+      } catch (error) {
+        finish(reject, error);
+      }
+    });
+  }
+
+  async function broadcastStickerChange() {
+    const tabs = await queryStickerTabs();
+    for (const tab of tabs) {
+      if (typeof tab?.id === "number") {
+        sendToTab(tab.id, { type: "sticker-changed" }).catch(() => undefined);
+      }
+    }
+  }
+
+  // 表情库只申请精确图片域名，实际保存前仍核对浏览器授权。
+  async function stickerOriginAllowed(origin) {
+    return api.permissions.contains({ origins: [`${origin}/*`] });
+  }
+
+  async function rememberStickerOrigin(origin) {
+    const key = sticker.pendingOriginsStorageKey;
+    const stored = await api.storage.local.get(key);
+    const value = stored[key];
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error("表情库待授权域名存储格式异常，原数据保持不变");
+    }
+    const known = new Set((value || []).map((item) => String(item)));
+    known.delete(origin);
+    known.add(origin);
+    const list = [...known].slice(-sticker.pendingOriginsMax);
+    await api.storage.local.set({ [key]: list });
+  }
+
+  const stickerPermissionHint = "请在扩展设置页的「高级 → 表情包 → 图片域名授权」中授权该域名后重试";
+
+  function stickerDownloadName(name, url) {
+    const extension = stickerStore.extensionOf(new URL(url).pathname);
+    // 地址里没有扩展名时交给浏览器按响应头命名，不猜格式。
+    return extension ? stickerStore.downloadName(name, extension) : undefined;
+  }
+
+  async function handleStickerMenuSave(target) {
+    const url = new URL(target.url);
+    if (url.protocol !== "https:") {
+      return { status: "error", message: `只接受 https 图片地址：${url.href}` };
+    }
+    const capacity = await stickerCapacity();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.topicExport.offlineFetchTimeoutMs);
+    try {
+      if (!await stickerOriginAllowed(url.origin)) {
+        await rememberStickerOrigin(url.origin);
+        return { status: "error", message: `缺少 ${url.origin} 的访问权限，未保存。${stickerPermissionHint}`, openSettings: "stickerOrigins" };
+      }
+      const response = await fetch(url.href, {
+        method: "GET",
+        credentials: offlineCredentialOrigins.has(url.origin) ? "include" : "omit",
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        return { status: "error", message: `读取图片失败：HTTP ${response.status}` };
+      }
+      const mime = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      const extension = stickerStore.extensionForMime(mime) || stickerStore.extensionOf(url.pathname);
+      if (!extension) {
+        return { status: "error", message: `无法确认图片格式（响应类型 ${mime || "未知"}）` };
+      }
+      const classified = stickerStore.classify(`${target.name}.${extension}`, mime);
+      if (!classified.ok) {
+        return { status: "error", message: classified.reason };
+      }
+      const bytes = await readBoundedBody(response, capacity.itemBytes, url.href);
+      const result = await stickerDb.add({ name: target.name, folderId: null, type: classified.mime, bytes, capacity });
+      scheduleStickerBroadcast();
+      if (result.status === "duplicate") {
+        return { status: "success", message: `表情库里已有相同图片，保留原有「${result.item.name}」`, refresh: true };
+      }
+      return { status: "success", message: `已保存「${result.item.name}」到表情库`, refresh: true };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return { status: "error", message: `读取图片超时（${config.topicExport.offlineFetchTimeoutMs}ms）` };
+      }
+      return { status: "error", message: error instanceof Error ? error.message : String(error) };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function handleStickerMenuDownload(target) {
+    try {
+      const filename = stickerDownloadName(target.name, target.url);
+      await api.downloads.download({
+        url: target.url,
+        saveAs: false,
+        ...(filename ? { filename } : {})
+      });
+      return { status: "success", message: `已开始下载「${target.name}」` };
+    } catch (error) {
+      return { status: "error", message: `下载失败：${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+
+  // 右键只认帖子正文图片：目标校验在内容脚本里按真实 DOM 完成，头像与界面图标不进入这里。
+  async function handleStickerMenuClick(info, tab, save) {
+    const tabId = tab?.id;
+    const frameId = info.frameId;
+    if (typeof tabId !== "number") {
+      return;
+    }
+    if (save) {
+      try {
+        const imageUrl = new URL(info.srcUrl);
+        if (imageUrl.protocol !== "https:") {
+          throw new Error("只接受 https 图片地址");
+        }
+        const origins = [...new Set([...sticker.defaultOrigins, imageUrl.origin])];
+        // 菜单点击是扩展用户手势；必须在任何 await、页面回查和队列等待之前调用。
+        const granted = await api.permissions.request({ origins: origins.map((origin) => `${origin}/*`) });
+        if (!granted) {
+          notifyStickerTab(tabId, frameId, { status: "error", message: "浏览器未授予图片域名访问权限，图片未保存；再次点击「保存到表情包面板」可重新申请。" });
+          return;
+        }
+      } catch (error) {
+        console.error("[betterLD] 表情库右键授权失败", error);
+        notifyStickerTab(tabId, frameId, { status: "error", message: `图片域名授权失败，未保存：${error.message || String(error)}` });
+        return;
+      }
+    }
+    let target;
+    try {
+      target = await sendToTab(tabId, { type: "sticker-context-image", srcUrl: info.srcUrl || "" }, frameId);
+    } catch (error) {
+      // 插件入口只在顶层页面与主题预览 iframe 里运行：其他帧无法回查时明确说明，不静默失败。
+      console.warn("[betterLD] 表情库右键目标读取失败", error);
+      notifyStickerTab(tabId, 0, { status: "error", message: "无法读取这张图片所在的页面，未保存；请在主题主页面重试" });
+      return;
+    }
+    if (!target?.ok) {
+      notifyStickerTab(tabId, frameId, { status: "error", message: target?.error || "这里不是帖子正文里的图片，未保存" });
+      return;
+    }
+    let result;
+    if (save) {
+      const operation = stickerQueue.then(() => handleStickerMenuSave(target));
+      stickerQueue = operation.then(() => undefined, () => undefined);
+      result = await operation;
+    } else {
+      result = await handleStickerMenuDownload(target);
+    }
+    notifyStickerTab(tabId, frameId, result);
+  }
+
+  function updateStickerMenu(id, title, visible) {
+    return new Promise((resolve, reject) => {
+      api.contextMenus.update(id, { visible }, () => {
+        const error = api.runtime.lastError;
+        if (!error) {
+          resolve();
+          return;
+        }
+        // 临时重载没有菜单时创建；已有菜单由 update 保留，后台重新唤醒不会清空菜单。
+        if (!/cannot find|could not find|not found|does not exist/i.test(error.message)) {
+          reject(new Error(error.message));
+          return;
+        }
+        api.contextMenus.create({ id, title, contexts: ["image"], documentUrlPatterns: ["https://linux.do/*", "https://www.linux.do/*"], visible }, () => {
+          const createError = api.runtime.lastError;
+          if (createError) reject(new Error(createError.message));
+          else resolve();
+        });
+      });
+    });
+  }
+
+  let stickerMenuQueue = Promise.resolve();
+  function setStickerMenuVisible(visible) {
+    const operation = stickerMenuQueue.then(async () => {
+      const ids = sticker.contextMenuIds;
+      await updateStickerMenu(ids.save, "保存到表情包面板", visible);
+      await updateStickerMenu(ids.download, "下载图片", visible);
+    });
+    stickerMenuQueue = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  if (api.contextMenus?.create) {
+    const initialize = () => setStickerMenuVisible(false).catch((error) => console.error("[betterLD] 表情库右键菜单初始化失败", error));
+    api.runtime.onInstalled?.addListener(initialize);
+    api.runtime.onStartup?.addListener(initialize);
+    // Firefox 在菜单显示时刷新，避免页面到后台的异步消息晚于原生菜单创建。
+    api.contextMenus.onShown?.addListener(async (info, tab) => {
+      try {
+        const target = info.mediaType === "image"
+          ? await sendToTab(tab.id, { type: "sticker-context-image", srcUrl: info.srcUrl || "" }, info.frameId)
+          : null;
+        await setStickerMenuVisible(target?.ok === true);
+        await api.contextMenus.refresh();
+      } catch (error) {
+        console.error("[betterLD] 表情库右键菜单刷新失败", error);
+      }
+    });
+    api.contextMenus.onClicked.addListener((info, tab) => {
+      const ids = sticker.contextMenuIds;
+      if (info.menuItemId !== ids.save && info.menuItemId !== ids.download) {
+        return;
+      }
+      handleStickerMenuClick(info, tab, info.menuItemId === ids.save).catch((error) => {
+        console.error("[betterLD] 表情库右键操作失败", error);
+      });
+    });
+  }
+
+  async function stickerList(sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const data = await stickerDb.list();
+    return { ok: true, folders: data.folders, items: data.items, totalBytes: data.totalBytes };
+  }
+
+  async function stickerThumbs(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (!Array.isArray(message.ids) || !message.ids.length) throw new Error("没有提供缩略图请求的图片");
+    if (message.ids.length > sticker.thumbBatchSize) throw new Error(`一次最多读取 ${sticker.thumbBatchSize} 张缩略图`);
+    return { ok: true, thumbs: await stickerDb.thumbs(message.ids.map(String)) };
+  }
+
+  async function stickerBlob(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const record = await stickerDb.record(String(message.id || ""));
+    if (!record) throw new Error("这张表情已不在表情库里");
+    return { ok: true, dataUrl: record.dataUrl, name: record.name, type: record.type, size: record.size };
+  }
+
+  async function stickerSave(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const capacity = await stickerCapacity();
+    const result = await stickerDb.add({
+      name: message.name,
+      folderId: message.folderId ? String(message.folderId) : null,
+      // 消息字段用 mime，避免与消息自身的 type 字段撞名
+      type: String(message.mime || ""),
+      bytes: stickerStore.base64ToBytes(message.base64, capacity.itemBytes),
+      capacity
+    });
+    return { ok: true, status: result.status, item: result.item };
+  }
+
+  async function stickerFolderEnsure(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    return { ok: true, folder: await stickerDb.createFolderIfMissing(message.name) };
+  }
+
+  async function stickerRename(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    return { ok: true, item: await stickerDb.rename(String(message.id || ""), message.name) };
+  }
+
+  async function stickerMove(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (!Array.isArray(message.ids) || !message.ids.length) throw new Error("没有选择要移动的表情");
+    if (message.folderId !== null && typeof message.folderId !== "string") throw new Error("目标分组无效");
+    const result = await stickerDb.move(message.ids.map(String), message.folderId === null ? null : String(message.folderId));
+    return { ok: true, moved: result.moved };
+  }
+
+  async function stickerDelete(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    if (!Array.isArray(message.ids) || !message.ids.length) throw new Error("没有选择要删除的表情");
+    const result = await stickerDb.remove(message.ids.map(String));
+    return { ok: true, removed: result.removed };
+  }
+
+  async function stickerFolderCreate(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    return { ok: true, folder: await stickerDb.createFolder(message.name) };
+  }
+
+  async function stickerFolderRename(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    return { ok: true, folder: await stickerDb.renameFolder(String(message.id || ""), message.name) };
+  }
+
+  async function stickerFolderDelete(message, sender) {
+    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
+    const result = await stickerDb.deleteFolder(String(message.id || ""));
+    return { ok: true, movedItems: result.movedItems };
+  }
+
+  const stickerHandlers = {
+    "sticker-list": stickerList,
+    "sticker-thumbs": stickerThumbs,
+    "sticker-blob": stickerBlob,
+    "sticker-save": stickerSave,
+    "sticker-rename": stickerRename,
+    "sticker-move": stickerMove,
+    "sticker-delete": stickerDelete,
+    "sticker-folder-create": stickerFolderCreate,
+    "sticker-folder-ensure": stickerFolderEnsure,
+    "sticker-folder-rename": stickerFolderRename,
+    "sticker-folder-delete": stickerFolderDelete
+  };
+
   async function handleOpenDnsSettings(sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
     const guide = config.browserDnsGuides[/Firefox\//.test(navigator.userAgent) ? "firefox" : "chrome"];
@@ -502,7 +897,40 @@
     return createTab({ url: guide.url, active: true });
   }
 
+  const stickerMutationTypes = new Set([
+    "sticker-save",
+    "sticker-rename",
+    "sticker-move",
+    "sticker-delete",
+    "sticker-folder-create",
+    "sticker-folder-rename",
+    "sticker-folder-delete"
+  ]);
+
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "sticker-context-menu") {
+      if (!isTrustedSender(sender)) {
+        sendResponse({ ok: false, error: "请求来源无效" });
+        return true;
+      }
+      setStickerMenuVisible(message.visible === true)
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+    const stickerHandler = stickerHandlers[message?.type];
+    if (stickerHandler) {
+      const request = stickerQueue.then(async () => {
+        const result = await stickerHandler(message, sender);
+        if (stickerMutationTypes.has(message.type)) {
+          scheduleStickerBroadcast();
+        }
+        return result;
+      });
+      stickerQueue = request.then(() => undefined, () => undefined);
+      request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
     const libraryHandler = libraryHandlers[message?.type];
     if (libraryHandler) {
       const request = libraryQueue.then(() => libraryHandler(message, sender));

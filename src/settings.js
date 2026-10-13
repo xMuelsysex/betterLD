@@ -145,7 +145,9 @@
     "surfaceBlurPx",
     "userCardCoverMaskOpacity",
     "shadowHeight",
-    "topicFilterMaxAgeDays"
+    "topicFilterMaxAgeDays",
+    "stickerMaxItemMiB",
+    "stickerMaxTotalMiB"
   ];
   const textKeys = ["fontFamily", "customCss", "webdavUsername", "webdavPassword"];
   const textLimits = {
@@ -418,7 +420,7 @@
     }
     for (const key of rangedKeys) {
       result[key] = bounded(source[key], limits[key], defaults[key]);
-      if (key === "shadowHeight" || key === "topicFilterMaxAgeDays") {
+      if (key === "shadowHeight" || key === "topicFilterMaxAgeDays" || key === "stickerMaxItemMiB" || key === "stickerMaxTotalMiB") {
         result[key] = Number(result[key].toFixed(key === "shadowHeight" ? 1 : 0));
       }
     }

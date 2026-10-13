@@ -18,6 +18,7 @@
   const config = globalThis.BETTERLD_CONFIG;
   const settingsApi = globalThis.BETTERLD_SETTINGS;
   const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
+  const stickerStore = globalThis.BETTERLD_STICKER_STORE;
   const ruleGroupKeys = (config?.topicRuleGroups || []).map((group) => group.key);
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
@@ -33,6 +34,16 @@
   }
   if (!libraryStore?.read || !config.libraryStorageKey) {
     throw new Error("betterLD settings could not initialize: library store is unavailable");
+  }
+  if (!stickerStore?.readBackup || !config.stickerLibrary?.dbName) {
+    throw new Error("betterLD settings could not initialize: sticker store is unavailable");
+  }
+
+  // 网页内设置与扩展页都通过后台读取，保持扩展表情库为唯一数据源。
+  async function readStickerLibrary(message) {
+    const result = await sendRuntimeMessage(message);
+    if (!result?.ok) throw new Error(result?.error || "表情库读取失败");
+    return result;
   }
 
   const settingsRailList = document.querySelector("#settings-rail-list");
@@ -68,9 +79,12 @@
   let externalSearchPermissionBusy = false;
   let topicExportOrigins = [];
   let topicExportGrantBusy = false;
+  let stickerOrigins = [];
+  let stickerOriginGrantBusy = false;
   const canRequestExternalSearchPermission = !isEmbedded && typeof api.permissions?.request === "function";
   const canRequestWebdavPermission = !isEmbedded && typeof api.permissions?.request === "function";
   const canRequestTopicExportPermission = !isEmbedded && typeof api.permissions?.request === "function";
+  const canRequestStickerPermission = !isEmbedded && typeof api.permissions?.request === "function";
 
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
@@ -1132,7 +1146,9 @@
     { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "指向规则备份文件的完整地址；只接受 https://，本机地址可用 http://。", wide: true },
     { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "留空则不发送认证头。" },
     { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" },
-    { key: "libraryWebdavUrl", type: "url", label: "收藏备份 WebDAV 地址", help: "收藏库备份文件的完整地址，复用上面的账号与密码；必须与规则备份地址不同，否则上传会覆盖规则备份。只接受 https://，本机地址可用 http://。", wide: true }
+    { key: "libraryWebdavUrl", type: "url", label: "收藏备份 WebDAV 地址", help: "收藏库备份文件的完整地址，复用上面的账号与密码；必须与规则备份地址不同，否则上传会覆盖规则备份。只接受 https://，本机地址可用 http://。", wide: true },
+    { key: "stickerMaxItemMiB", type: "range", label: "单张表情上限", unit: " MiB", help: "按图片本体大小计量；超过上限的图片不会保存，调低不会删除已有表情。" },
+    { key: "stickerMaxTotalMiB", type: "range", label: "整库容量上限", unit: " MiB", help: "按所有表情图片本体大小合计；调低不清理已有图片，新的保存会因容量不足失败。" }
   ];
 
   const labelMap = {
@@ -1151,6 +1167,16 @@
   const settingsImportFile = document.querySelector("#settings-import-file");
   const rulesImportFile = document.querySelector("#rules-import-file");
   const libraryImportFile = document.querySelector("#library-import-file");
+  const stickerImportFile = document.querySelector("#sticker-import-file");
+  const stickerLibrarySummary = document.querySelector("#sticker-library-summary");
+  const stickerLibraryStatus = document.querySelector("#sticker-library-status");
+  const stickerLibraryDetails = document.querySelector("#sticker-library-details");
+  const stickerLibraryFailures = document.querySelector("#sticker-library-failures");
+  const stickerOriginList = document.querySelector("#sticker-origin-list");
+  const stickerOriginEmpty = document.querySelector("#sticker-origin-empty");
+  const stickerOriginGrant = document.querySelector("#sticker-origin-grant");
+  const stickerOriginRefresh = document.querySelector("#sticker-origin-refresh");
+  const stickerOriginStatus = document.querySelector("#sticker-origin-status");
   const topicExportOriginList = document.querySelector("#topic-export-origin-list");
   const topicExportOriginEmpty = document.querySelector("#topic-export-origin-empty");
   const topicExportGrantButton = document.querySelector("#topic-export-grant");
@@ -1878,8 +1904,7 @@
     });
   }
 
-  function downloadJson(filename, value) {
-    const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
+  function downloadBlob(filename, blob) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -1887,6 +1912,10 @@
     anchor.click();
     URL.revokeObjectURL(url);
     return blob.size;
+  }
+
+  function downloadJson(filename, value) {
+    return downloadBlob(filename, new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
   }
 
   function currentRules() {
@@ -2225,6 +2254,219 @@
   async function importLibraryFile(file) {
     const parsed = JSON.parse(await file.text());
     await importLibraryPayload(parsed);
+  }
+
+  // ---- 表情库文件与图片域名授权 ----
+
+  async function refreshStickerSummary() {
+    try {
+      const data = await readStickerLibrary({ type: "sticker-list" });
+      const capacity = stickerStore.limits(state.settings);
+      stickerLibrarySummary.textContent = `当前 ${data.items.length} 张，已用 ${stickerStore.formatBytes(data.totalBytes)} / ${stickerStore.formatBytes(capacity.totalBytes)}。`;
+    } catch (error) {
+      stickerLibrarySummary.textContent = `表情库读取失败：${error.message}`;
+    }
+  }
+
+  // 导出逐个写入 base64 分片，不把整库拼成一个巨型字符串；文件名按图片类型补全，导入端据此识别格式。
+  async function exportStickers() {
+    try {
+      const data = await readStickerLibrary({ type: "sticker-list" });
+      const folderNames = new Map(data.folders.map((folder) => [folder.id, folder.name]));
+      const head = JSON.stringify({
+        schema: config.stickerLibrary.schema,
+        schemaVersion: config.stickerLibrary.schemaVersion,
+        exportedAt: new Date().toISOString(),
+        folders: data.folders.map((folder) => ({ id: folder.id, name: folder.name }))
+      });
+      const parts = [head.slice(0, -1), ',"stickers":['];
+      let first = true;
+      for (const item of data.items) {
+        const record = await readStickerLibrary({ type: "sticker-blob", id: item.id });
+        const entry = {
+          name: item.name,
+          folder: folderNames.get(item.folderId) || "",
+          type: item.type,
+          fileName: `${item.name}.${stickerStore.extensionForMime(item.type)}`,
+          data: record.dataUrl.slice(record.dataUrl.indexOf(",") + 1)
+        };
+        parts.push(`${first ? "" : ","}${JSON.stringify(entry)}`);
+        first = false;
+      }
+      parts.push("]}");
+      const size = downloadBlob(`betterld-stickers-${timestampSuffix()}.json`, new Blob(parts, { type: "application/json" }));
+      setStatusMessage(stickerLibraryStatus, `表情库已导出（${data.items.length} 张，${stickerStore.formatBytes(size)}）。`, "success");
+      await refreshStickerSummary();
+    } catch (error) {
+      setStatusMessage(stickerLibraryStatus, `表情库导出失败，未生成文件。${error instanceof Error ? error.message : "读取失败"}`, "error");
+    }
+  }
+
+  // 导入逐条走后台队列：与面板共用同一写入路径，容量与去重规则一致，也不会与后台写入抢同一份存储。
+  async function importStickersFile(file) {
+    try {
+      const parsed = stickerStore.readBackup(JSON.parse(await file.text()));
+      const preview = `待导入 ${parsed.stickers.length} 张，备份分组 ${parsed.folders.length} 个${parsed.failed.length ? `，备份中 ${parsed.failed.length} 条记录无法识别` : ""}`;
+      if (!globalThis.confirm(`${preview}。\n\n导入按内容追加，内容相同的图片跳过并保留已有名称与分组，是否继续？`)) {
+        setStatusMessage(stickerLibraryStatus, `已取消导入。${preview}。`, "error");
+        return;
+      }
+      const failed = [...parsed.failed];
+      const folderIds = new Map();
+      const ensureFolder = async (name) => {
+        if (!folderIds.has(name)) {
+          const ensured = await sendRuntimeMessage({ type: "sticker-folder-ensure", name });
+          if (!ensured?.ok) {
+            throw new Error(ensured?.error || "分组创建失败");
+          }
+          folderIds.set(name, ensured.folder.id);
+        }
+        return folderIds.get(name);
+      };
+      for (const folder of parsed.folders) {
+        try {
+          await ensureFolder(folder.name);
+        } catch (error) {
+          failed.push({ name: `分组 ${folder.name}`, reason: error.message });
+        }
+      }
+      let added = 0;
+      let duplicates = 0;
+      for (const [index, item] of parsed.stickers.entries()) {
+        setStatusMessage(stickerLibraryStatus, `正在导入 ${index + 1}/${parsed.stickers.length}…`);
+        try {
+          const folderId = item.folder ? await ensureFolder(item.folder) : null;
+          const result = await sendRuntimeMessage({ type: "sticker-save", name: item.name, mime: item.type, folderId, base64: item.data });
+          if (!result?.ok) {
+            throw new Error(result?.error || "保存失败");
+          }
+          if (result.status === "duplicate") {
+            duplicates += 1;
+          } else {
+            added += 1;
+          }
+        } catch (error) {
+          failed.push({ name: item.name, reason: error.message });
+        }
+      }
+      const detail = failed.length
+        ? `；失败 ${failed.length} 条（见下方逐项原因）`
+        : "";
+      renderStickerFailures(failed);
+      setStatusMessage(stickerLibraryStatus, `表情库已导入：新增 ${added} 张，重复跳过 ${duplicates} 张${detail}`, failed.length ? "error" : "success");
+      await refreshStickerSummary();
+    } catch (error) {
+      setStatusMessage(stickerLibraryStatus, `表情库导入失败：${error instanceof Error ? error.message : "读取失败"}`, "error");
+    }
+  }
+
+  // 逐项失败原因完整列出并保持可展开：不截断，用户能看到每一条为什么没导入。
+  function renderStickerFailures(failed) {
+    if (!failed.length) {
+      stickerLibraryDetails.hidden = true;
+      stickerLibraryFailures.replaceChildren();
+      return;
+    }
+    stickerLibraryFailures.replaceChildren(...failed.map((entry) => {
+      const item = document.createElement("li");
+      item.className = "settings-origin-list__item";
+      item.textContent = `${entry.name}：${entry.reason}`;
+      return item;
+    }));
+    stickerLibraryDetails.hidden = false;
+  }
+
+  function stickerOrigin(value) {
+    const origin = String(value);
+    const url = new URL(origin);
+    if (url.protocol !== "https:" || url.origin !== origin) {
+      throw new Error(`表情库授权域名无效：${origin}`);
+    }
+    return origin;
+  }
+
+  async function loadStickerOrigins() {
+    const key = config.stickerLibrary.pendingOriginsStorageKey;
+    const stored = await storageGet(key);
+    const value = stored[key];
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error("表情库待授权域名存储格式异常");
+    }
+    const origins = [...new Set([...config.stickerLibrary.defaultOrigins, ...(value || [])].map(stickerOrigin))];
+    const missing = [];
+    for (const origin of origins) {
+      if (!canRequestStickerPermission || !await api.permissions.contains({ origins: [`${origin}/*`] })) {
+        missing.push(origin);
+      }
+    }
+    stickerOrigins = missing;
+    renderStickerOrigins();
+    if (canRequestStickerPermission) {
+      setStatusMessage(stickerOriginStatus, missing.length
+        ? "请点击「授权所选域名」，在浏览器提示中允许访问后，即可保存对应域名的图片。"
+        : "所需图片域名均已授权。", missing.length ? "" : "success");
+    }
+  }
+
+  function renderStickerOrigins() {
+    stickerOriginList.replaceChildren(...stickerOrigins.map((origin) => {
+      const item = document.createElement("li");
+      item.className = "settings-origin-list__item";
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = true;
+      checkbox.value = origin;
+      checkbox.dataset.stickerOrigin = origin;
+      const text = document.createElement("span");
+      text.textContent = origin;
+      label.append(checkbox, text);
+      item.append(label);
+      return item;
+    }));
+    stickerOriginEmpty.hidden = stickerOrigins.length > 0;
+    // 网页内设置不能弹权限窗口，此时按钮用于打开完整扩展设置页，列表为空也可点。
+    stickerOriginGrant.disabled = stickerOriginGrantBusy || (canRequestStickerPermission && !stickerOrigins.length);
+  }
+
+  async function openStickerSettings() {
+    try {
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "stickerOrigins" });
+      if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
+      setStatusMessage(stickerOriginStatus, "已打开扩展授权页：高级 → 表情包 → 图片域名授权。", "success");
+    } catch (error) {
+      setStatusMessage(stickerOriginStatus, `打开授权页失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    }
+  }
+
+  async function grantStickerOrigins() {
+    if (stickerOriginGrantBusy) return;
+    const requested = [...stickerOriginList.querySelectorAll("input[data-sticker-origin]")]
+      .filter((input) => input.checked)
+      .map((input) => stickerOrigin(input.value));
+    if (!requested.length) {
+      setStatusMessage(stickerOriginStatus, "请先勾选需要授权的域名。", "error");
+      return;
+    }
+    stickerOriginGrantBusy = true;
+    renderStickerOrigins();
+    try {
+      // 必须在点击的同步调用链里申请精确 origins，不申请全部网站权限。
+      const granted = await api.permissions.request({ origins: requested.map((origin) => `${origin}/*`) });
+      if (!granted) throw new Error("浏览器没有授予所选域名的访问权限");
+      const remaining = [];
+      for (const origin of stickerOrigins) {
+        if (!await api.permissions.contains({ origins: [`${origin}/*`] })) remaining.push(origin);
+      }
+      await storageSet({ [config.stickerLibrary.pendingOriginsStorageKey]: remaining });
+      stickerOrigins = remaining;
+      setStatusMessage(stickerOriginStatus, "已授权所选域名，可以回到帖子页重新右键保存。", "success");
+    } catch (error) {
+      setStatusMessage(stickerOriginStatus, `授权失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+    } finally {
+      stickerOriginGrantBusy = false;
+      renderStickerOrigins();
+    }
   }
 
   // 嵌入设置没有 permissions API：按外部搜索的方式开扩展设置页并定位到收藏备份地址。
@@ -2632,6 +2874,35 @@
   if (!isEmbedded && location.hash === "#topicExportOffline") {
     showCategory("advanced", "data");
     topicExportOriginList.closest(".settings-group-card").scrollIntoView({ block: "start" });
+  }
+
+  stickerOriginGrant.textContent = canRequestStickerPermission ? "授权所选域名" : "打开扩展授权页";
+  stickerOriginGrant.addEventListener("click", () => {
+    if (canRequestStickerPermission) grantStickerOrigins();
+    else openStickerSettings();
+  });
+  stickerOriginRefresh.addEventListener("click", () => {
+    loadStickerOrigins().catch((error) => {
+      setStatusMessage(stickerOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    });
+  });
+  loadStickerOrigins().catch((error) => {
+    setStatusMessage(stickerOriginStatus, `域名列表读取失败：${error.message}`, "error");
+    console.error("[betterLD] sticker origins load failed", error);
+  });
+  document.querySelector("#export-stickers").addEventListener("click", () => exportStickers());
+  document.querySelector("#import-stickers").addEventListener("click", () => stickerImportFile.click());
+  stickerImportFile.addEventListener("change", () => {
+    const file = stickerImportFile.files[0];
+    stickerImportFile.value = "";
+    if (file) {
+      importStickersFile(file);
+    }
+  });
+  refreshStickerSummary();
+  if (!isEmbedded && location.hash === "#stickerOrigins") {
+    showCategory("advanced", "sticker");
+    stickerOriginList.closest(".settings-group-card").scrollIntoView({ block: "start" });
   }
 
   settingsPageBody.addEventListener("change", (event) => {

@@ -1,0 +1,306 @@
+/* 个人表情库：原站编辑器工具栏入口与 betterLD 自有 Material 3 面板。 */
+.betterld-sticker-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.betterld-sticker-trigger svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.betterld-sticker-trigger[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--betterld-primary) 20%, transparent);
+  color: var(--betterld-primary);
+}
+
+.betterld-sticker-panel {
+  position: fixed;
+  z-index: 2147483001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 16px;
+  gap: 12px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .24);
+  border-radius: var(--betterld-radius-xl);
+  background: rgb(var(--betterld-surface-container-rgb));
+  color: var(--betterld-on-surface);
+  box-shadow: var(--betterld-shadow-level-3);
+  font-family: var(--betterld-font-family);
+}
+.betterld-sticker-panel[hidden] { display: none; }
+.betterld-sticker-controls {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 60%;
+  gap: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.betterld-sticker-controls > * { flex-shrink: 0; }
+.betterld-sticker-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.betterld-sticker-header__text { display: grid; gap: 2px; min-width: 0; }
+.betterld-sticker-header__title { margin: 0; font-size: 18px; font-weight: 600; }
+.betterld-sticker-capacity { margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; line-height: 1.5; }
+.betterld-sticker-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  cursor: pointer;
+}
+.betterld-sticker-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.betterld-sticker-icon:hover { background: rgb(var(--betterld-outline-rgb) / .12); }
+
+.betterld-sticker-groups { display: flex; flex-wrap: wrap; gap: 6px; max-height: 96px; overflow: auto; }
+.betterld-sticker-chip {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.betterld-sticker-chip[aria-selected="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--betterld-primary) 18%, transparent);
+  color: var(--betterld-primary);
+  font-weight: 600;
+}
+.betterld-sticker-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.betterld-sticker-managebar { display: grid; gap: 8px; padding: 10px; border-radius: var(--betterld-radius-md); background: rgb(var(--betterld-outline-rgb) / .08); }
+.betterld-sticker-managebar[hidden] { display: none; }
+.betterld-sticker-managebar__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.betterld-sticker-button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .3);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.betterld-sticker-button--danger { color: var(--betterld-error); }
+.betterld-sticker-button[aria-pressed="true"] { background: color-mix(in srgb, var(--betterld-primary) 16%, transparent); border-color: transparent; }
+.betterld-sticker-button:disabled { opacity: .5; cursor: not-allowed; }
+.betterld-sticker-select,
+.betterld-sticker-input {
+  min-height: 36px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .35);
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-surface-rgb));
+  color: var(--betterld-on-surface);
+  font: inherit;
+  font-size: 13px;
+}
+.betterld-sticker-status { margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; line-height: 1.6; }
+.betterld-sticker-status[data-state="success"] { color: var(--betterld-success); }
+.betterld-sticker-status[data-state="error"] { color: var(--betterld-error); }
+.betterld-sticker-status-actions { display: flex; gap: 8px; }
+.betterld-sticker-status-actions[hidden] { display: none; }
+.betterld-sticker-guide { font-size: 12px; line-height: 1.6; color: var(--betterld-on-surface-variant); }
+.betterld-sticker-guide summary { cursor: pointer; }
+.betterld-sticker-guide p { margin: 6px 0; }
+.betterld-sticker-guide a { color: var(--betterld-primary); margin-right: 12px; }
+.betterld-sticker-details { font-size: 12px; color: var(--betterld-on-surface-variant); }
+.betterld-sticker-details[hidden] { display: none; }
+.betterld-sticker-details__list { margin: 6px 0 0; padding-left: 18px; max-height: 120px; overflow: auto; line-height: 1.6; }
+
+.betterld-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+}
+.betterld-sticker-empty { grid-column: 1 / -1; margin: 8px 0; color: var(--betterld-on-surface-variant); font-size: 13px; line-height: 1.7; }
+.betterld-sticker-tile {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 32px;
+  align-content: start;
+  min-width: 0;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .18);
+  border-radius: var(--betterld-radius-md);
+  background: rgb(var(--betterld-surface-rgb) / .7);
+}
+.betterld-sticker-tile[data-selected="true"] { border-color: var(--betterld-primary); background: color-mix(in srgb, var(--betterld-primary) 12%, transparent); }
+.betterld-sticker-tile__main {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-outline-rgb) / .08);
+  cursor: pointer;
+}
+.betterld-sticker-tile__main:disabled { cursor: progress; opacity: .6; }
+.betterld-sticker-tile__image {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  object-fit: contain;
+}
+.betterld-sticker-tile[data-pending="true"] .betterld-sticker-tile__image { visibility: hidden; }
+.betterld-sticker-tile__name {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.betterld-sticker-tile__tools { display: flex; justify-content: flex-end; gap: 4px; }
+.betterld-sticker-tile__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .28);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--betterld-on-surface-variant);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.betterld-sticker-tile__tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.betterld-sticker-tile__tool:hover { background: rgb(var(--betterld-outline-rgb) / .12); }
+.betterld-sticker-tile__menu {
+  position: absolute;
+  right: 8px;
+  top: 40px;
+  z-index: 2;
+  display: grid;
+  min-width: 132px;
+  padding: 4px;
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .24);
+  border-radius: var(--betterld-radius-md);
+  background: rgb(var(--betterld-surface-container-high-rgb));
+  box-shadow: var(--betterld-shadow-level-2);
+}
+.betterld-sticker-tile__menu[hidden] { display: none; }
+.betterld-sticker-menu__item {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--betterld-radius-sm);
+  background: transparent;
+  color: var(--betterld-on-surface);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.betterld-sticker-menu__item:hover { background: rgb(var(--betterld-outline-rgb) / .12); }
+.betterld-sticker-menu__item--danger { color: var(--betterld-error); }
+.betterld-sticker-tile__select { position: absolute; left: 8px; top: 8px; padding: 2px; border-radius: 999px; background: rgb(var(--betterld-surface-rgb) / .9); }
+.betterld-sticker-tile__select[hidden] { display: none; }
+.betterld-sticker-tile__select input { width: 18px; height: 18px; accent-color: var(--betterld-primary); }
+.betterld-sticker-tile[data-animated="true"]::after {
+  content: "GIF";
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(var(--betterld-surface-rgb) / .92);
+  color: var(--betterld-on-surface-variant);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.betterld-sticker-inline { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 1 / -1; }
+.betterld-sticker-inline .betterld-sticker-input,
+.betterld-sticker-inline .betterld-sticker-select { flex: 1 1 120px; min-width: 0; }
+
+.betterld-sticker-confirm,
+.betterld-sticker-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border-radius: var(--betterld-radius-xl);
+  background: rgb(var(--betterld-surface-container-rgb) / .96);
+}
+.betterld-sticker-confirm[hidden],
+.betterld-sticker-viewer[hidden] { display: none; }
+.betterld-sticker-confirm__box { display: grid; gap: 10px; max-width: 320px; text-align: center; }
+.betterld-sticker-confirm__title { margin: 0; font-size: 16px; font-weight: 600; }
+.betterld-sticker-confirm__message { margin: 0; color: var(--betterld-on-surface-variant); font-size: 13px; line-height: 1.6; }
+.betterld-sticker-confirm__actions { display: flex; justify-content: center; gap: 8px; }
+.betterld-sticker-viewer { grid-template-rows: minmax(0, 1fr) auto auto; gap: 8px; }
+.betterld-sticker-viewer__stage { display: grid; place-items: center; min-width: 0; min-height: 0; width: 100%; height: 100%; }
+.betterld-sticker-viewer__image { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.betterld-sticker-viewer__caption,
+.betterld-sticker-viewer__status { margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+
+.betterld-sticker-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 2147483002;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100% - 32px));
+  padding: 10px 16px;
+  border-radius: var(--betterld-radius-md);
+  background: rgb(var(--betterld-surface-container-high-rgb));
+  color: var(--betterld-on-surface);
+  box-shadow: var(--betterld-shadow-level-3);
+  font-family: var(--betterld-font-family);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.betterld-sticker-toast[hidden] { display: none; }
+.betterld-sticker-toast[data-state="error"] { color: var(--betterld-error); }
+.betterld-sticker-toast[data-state="success"] { color: var(--betterld-success); }
+
+:is(.betterld-sticker-button, .betterld-sticker-chip, .betterld-sticker-icon, .betterld-sticker-tile__main, .betterld-sticker-tile__tool, .betterld-sticker-menu__item, .betterld-sticker-trigger):focus-visible {
+  outline: var(--betterld-focus-width) solid var(--betterld-primary);
+  outline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .betterld-sticker-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+}
+@media (forced-colors: active) {
+  .betterld-sticker-panel,
+  .betterld-sticker-toast { background: Canvas; color: CanvasText; border: 1px solid ButtonText; }
+  .betterld-sticker-chip[aria-selected="true"] { outline: 2px solid Highlight; }
+}
