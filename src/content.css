@@ -4079,6 +4079,10 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 }
 
 .betterld-reply-tree__item {
+  /* 每楼由自身操作栏定位，未测量的隐藏楼不继承祖先坐标。 */
+  --betterld-branch-toggle-y: initial;
+  --betterld-reply-tail-y: initial;
+  --betterld-reply-trunk-end: initial;
   position: relative;
   min-width: 0;
   padding-bottom: 14px;
@@ -4612,7 +4616,18 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   content: "";
   position: absolute;
   top: 36px;
-  bottom: -18px;
+  bottom: auto;
+  height: max(0px, calc(var(--betterld-branch-toggle-y) - 43px));
+  left: 17px;
+  pointer-events: none;
+  border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
+}
+
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden])) > .betterld-reply-tree__card::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--betterld-branch-toggle-y) + 7px);
+  bottom: -8px;
   left: 17px;
   pointer-events: none;
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
@@ -4654,16 +4669,55 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   border-bottom-left-radius: 12px;
 }
 
-.betterld-reply-tree__collapse {
-  position: relative;
-  z-index: 1;
-  display: block;
+.betterld-reply-tree .betterld-reply-tree__collapse,
+.betterld-reply-tree .betterld-reply-tree__tail-control {
+  position: absolute;
+  top: var(--betterld-branch-toggle-y);
+  left: 18px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: grid;
+  place-items: center;
   width: 24px;
   height: 24px;
-  margin: 6px 0 -10px 6px;
+  margin: 0;
   padding: 0;
-  border-radius: 50% !important;
-  line-height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgb(var(--betterld-outline-rgb) / 0.56);
+  line-height: 1;
+}
+
+.betterld-reply-tree .betterld-reply-tree__tail-control {
+  top: var(--betterld-reply-tail-y);
+  left: -23px;
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]::after,
+.betterld-reply-tree__item[data-reply-last-visible] > .betterld-reply-tree__line-hit--trunk {
+  bottom: auto;
+  height: var(--betterld-reply-trunk-end, 8px);
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]:first-child::after,
+.betterld-reply-tree__item[data-reply-last-visible]:first-child > .betterld-reply-tree__line-hit--trunk {
+  height: calc(var(--betterld-reply-trunk-end, 8px) + 10px);
+}
+
+.betterld-reply-tree__collapse-symbol {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  background: rgb(var(--betterld-surface-rgb));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 10px;
+  pointer-events: none;
 }
 
 /* 命中区只覆盖连线走廊；正文、头像与子楼的按钮仍接收自身事件。 */
@@ -4675,9 +4729,21 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 
 .betterld-reply-tree__line-hit--stem {
   top: 36px;
-  bottom: -18px;
+  bottom: auto;
+  height: max(0px, calc(var(--betterld-branch-toggle-y) - 43px));
   left: 11px;
   width: 14px;
+}
+
+.betterld-reply-tree__line-hit--tail {
+  top: calc(var(--betterld-branch-toggle-y) + 7px);
+  bottom: -8px;
+  left: 11px;
+  width: 14px;
+}
+
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children[hidden]) > .betterld-reply-tree__card > .betterld-reply-tree__line-hit--tail {
+  display: none;
 }
 
 .betterld-reply-tree__line-hit--trunk {
@@ -4707,18 +4773,20 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   height: 18px;
 }
 
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
 .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
 .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after {
   border-color: var(--betterld-primary);
 }
 
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+.betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse,
+.betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item > .betterld-reply-tree__tail-control {
   color: var(--betterld-primary);
 }
 
-.betterld-reply-tree__collapse:focus-visible {
+.betterld-reply-tree__collapse:focus-visible,
+.betterld-reply-tree__tail-control:focus-visible {
   outline: 2px solid var(--betterld-primary);
   outline-offset: 2px;
 }
@@ -4755,6 +4823,9 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     left: -12px;
   }
+  .betterld-reply-tree .betterld-reply-tree__tail-control {
+    left: -11px;
+  }
   .betterld-reply-tree__line-hit--trunk {
     left: -18px;
   }
@@ -4766,16 +4837,25 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 
 @media (forced-colors: active) {
   .betterld-reply-tree,
+  .betterld-reply-tree__item > .betterld-reply-tree__card::before,
   .betterld-reply-tree__item > .betterld-reply-tree__card::after,
   .betterld-reply-tree__children > .betterld-reply-tree__item::before,
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     border-color: CanvasText;
   }
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     border-color: Highlight;
+  }
+  .betterld-reply-tree .betterld-reply-tree__collapse,
+  .betterld-reply-tree .betterld-reply-tree__tail-control {
+    color: CanvasText;
+  }
+  .betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse,
+  .betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item > .betterld-reply-tree__tail-control {
+    color: Highlight;
   }
 }
 
