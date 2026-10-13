@@ -4081,6 +4081,8 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 .betterld-reply-tree__item {
   /* 每楼由自身操作栏定位，未测量的隐藏楼不继承祖先坐标。 */
   --betterld-branch-toggle-y: initial;
+  --betterld-reply-tail-y: initial;
+  --betterld-reply-trunk-end: initial;
   position: relative;
   min-width: 0;
   padding-bottom: 14px;
@@ -4667,7 +4669,8 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   border-bottom-left-radius: 12px;
 }
 
-.betterld-reply-tree .betterld-reply-tree__collapse {
+.betterld-reply-tree .betterld-reply-tree__collapse,
+.betterld-reply-tree .betterld-reply-tree__tail-control {
   position: absolute;
   top: var(--betterld-branch-toggle-y);
   left: 18px;
@@ -4686,6 +4689,22 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   line-height: 1;
 }
 
+.betterld-reply-tree .betterld-reply-tree__tail-control {
+  top: var(--betterld-reply-tail-y);
+  left: -23px;
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]::after,
+.betterld-reply-tree__item[data-reply-last-visible] > .betterld-reply-tree__line-hit--trunk {
+  bottom: auto;
+  height: var(--betterld-reply-trunk-end, 8px);
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]:first-child::after,
+.betterld-reply-tree__item[data-reply-last-visible]:first-child > .betterld-reply-tree__line-hit--trunk {
+  height: calc(var(--betterld-reply-trunk-end, 8px) + 10px);
+}
+
 .betterld-reply-tree__collapse-symbol {
   display: grid;
   place-items: center;
@@ -4694,6 +4713,7 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   height: 14px;
   border: 2px solid currentColor;
   border-radius: 50%;
+  background: rgb(var(--betterld-surface-rgb));
   font-size: 12px;
   font-weight: 600;
   line-height: 10px;
@@ -4760,11 +4780,13 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   border-color: var(--betterld-primary);
 }
 
-.betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+.betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse,
+.betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item > .betterld-reply-tree__tail-control {
   color: var(--betterld-primary);
 }
 
-.betterld-reply-tree__collapse:focus-visible {
+.betterld-reply-tree__collapse:focus-visible,
+.betterld-reply-tree__tail-control:focus-visible {
   outline: 2px solid var(--betterld-primary);
   outline-offset: 2px;
 }
@@ -4801,6 +4823,9 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     left: -12px;
   }
+  .betterld-reply-tree .betterld-reply-tree__tail-control {
+    left: -11px;
+  }
   .betterld-reply-tree__line-hit--trunk {
     left: -18px;
   }
@@ -4824,10 +4849,12 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after {
     border-color: Highlight;
   }
-  .betterld-reply-tree .betterld-reply-tree__collapse {
+  .betterld-reply-tree .betterld-reply-tree__collapse,
+  .betterld-reply-tree .betterld-reply-tree__tail-control {
     color: CanvasText;
   }
-  .betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse {
+  .betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__collapse,
+  .betterld-reply-tree .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item > .betterld-reply-tree__tail-control {
     color: Highlight;
   }
 }
