@@ -3847,6 +3847,11 @@
       promptReplyTreeLogin(tree);
       return;
     }
+    // 主题权限来自桥的原站投影：不允许回复时明确拒绝，不在客户端假装可以提交。
+    if (tree.context?.canCreatePost === false) {
+      tree.status.textContent = "当前主题不允许回复。";
+      return;
+    }
     try {
       await loadPageRefreshBridge();
       await new Promise((resolve, reject) => {
@@ -3972,6 +3977,20 @@
     tree.reactionPicker = null;
     tree.reactionTrigger = null;
     tree.reactionPickerCleanup = null;
+    tree.reactionTarget = null;
+  }
+
+  function syncReplyReactionPopover(tree) {
+    if (!tree.reactionPicker) return;
+    const target = tree.reactionTarget;
+    const trigger = tree.content.querySelector(`[data-post-number="${target.postNumber}"] > .betterld-reply-tree__card ${target.selector}`);
+    if (!trigger || !trigger.getClientRects().length || trigger.disabled || tree.contentContainer.hidden) {
+      closeReplyReactionPicker(tree);
+      return;
+    }
+    tree.reactionTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    positionReplyReactionPopover(tree.reactionPicker, trigger);
   }
 
   function positionReplyReactionPopover(popup, trigger) {
@@ -3986,17 +4005,21 @@
     tree.reactionPicker = popup;
     tree.reactionTrigger = trigger;
     trigger.setAttribute("aria-expanded", "true");
+    tree.reactionTarget = { postNumber: Number(trigger.closest('[data-post-number]').dataset.postNumber),
+      selector: trigger.classList.contains('betterld-reply-tree__reaction-summary')
+        ? '.betterld-reply-tree__reaction-summary' : '.betterld-reply-tree__action[aria-pressed]' };
     positionReplyReactionPopover(popup, trigger);
     const dismiss = (event) => {
-      if (!popup.contains(event.target) && !trigger.contains(event.target)) closeReplyReactionPicker(tree);
+      if (!popup.contains(event.target) && !tree.reactionTrigger.contains(event.target)) closeReplyReactionPicker(tree);
     };
     const escape = (event) => {
       if (event.key === "Escape") {
+        const currentTrigger = tree.reactionTrigger;
         closeReplyReactionPicker(tree);
-        trigger.focus();
+        currentTrigger.focus();
       }
     };
-    const reposition = () => positionReplyReactionPopover(popup, trigger);
+    const reposition = () => positionReplyReactionPopover(popup, tree.reactionTrigger);
     document.addEventListener("pointerdown", dismiss, true);
     document.addEventListener("keydown", escape);
     window.addEventListener("resize", reposition);
@@ -4018,8 +4041,9 @@
     close.type = "button";
     close.setAttribute("aria-label", "关闭回应人名单");
     close.addEventListener("click", () => {
+      const currentTrigger = tree.reactionTrigger;
       closeReplyReactionPicker(tree);
-      trigger.focus();
+      currentTrigger.focus();
     });
     head.append(heading, close);
     const list = createElement("div", "betterld-reply-tree__users-list");
@@ -4095,7 +4119,7 @@
         busy = false;
         if (active()) {
           more.disabled = false;
-          positionReplyReactionPopover(popup, trigger);
+          positionReplyReactionPopover(popup, tree.reactionTrigger);
         }
       }
     };
@@ -4133,8 +4157,9 @@
       }, { once: true });
       choice.append(image);
       choice.addEventListener("click", () => {
+        const currentTrigger = tree.reactionTrigger;
         closeReplyReactionPicker(tree);
-        toggleReplyTreeReaction(tree, post, trigger, name);
+        toggleReplyTreeReaction(tree, tree.posts.get(post.id), currentTrigger, name);
       });
       picker.append(choice);
     });
@@ -4142,7 +4167,7 @@
     if (count) {
       const view = createElement("button", "betterld-reply-tree__reaction-view", `查看 ${count} 个回应`);
       view.type = "button";
-      view.addEventListener("click", () => openReplyReactionUsers(tree, post, trigger));
+      view.addEventListener("click", () => openReplyReactionUsers(tree, tree.posts.get(post.id), tree.reactionTrigger));
       picker.append(view);
     }
     mountReplyReactionPopover(tree, picker, trigger);
@@ -4159,6 +4184,8 @@
     try {
       const token = document.querySelector('meta[name="csrf-token"]')?.content;
       if (!token) throw new Error("无法读取 CSRF 令牌");
+      await requestReplyTreeAction(tree, post, 'like-check');
+      if (state.replyTree !== tree || topicIdFromPath() !== tree.topicId) throw new Error('主题已切换');
       const response = await fetch(`/discourse-reactions/posts/${post.id}/custom-reactions/${encodeURIComponent(reaction)}/toggle.json`, {
         method: "PUT",
         credentials: "same-origin",
@@ -4167,13 +4194,96 @@
       if (!response.ok) throw new Error(`回应请求失败（HTTP ${response.status}）`);
       const updated = await response.json();
       if (updated?.id !== post.id || updated.post_number !== post.post_number) throw new Error("回应结果格式不正确");
+      const result = await requestReplyTreeAction(tree, post, 'reaction-update', { updated });
       if (state.replyTree?.topicId === tree.topicId && topicIdFromPath() === tree.topicId) {
-        state.replyTree.posts.set(post.id, updated);
+        mergeReplyTreePost(state.replyTree, result.post);
         renderReplyTree(state.replyTree);
       }
     } catch (error) {
       console.error("[betterLD] reply reaction failed", error);
       if (state.replyTree?.topicId === tree.topicId) state.replyTree.status.textContent = `回应操作失败：${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  // 隐藏楼的真实正文只在用户点击时按需读取一次：走既有请求队列，写回同一个原站模型，
+  // 由常规同步把正文带回树里；失败按原样报错，不留旧缓存正文冒充结果。
+  async function revealReplyTreeHiddenBody(tree, post, button) {
+    button.disabled = true;
+    tree.status.textContent = "正在读取被隐藏的正文…";
+    try {
+      await loadPageRefreshBridge();
+      const data = await requestTopicResponse(`/posts/${post.id}/cooked.json`, () => state.replyTree === tree && topicIdFromPath() === tree.topicId);
+      if (state.replyTree !== tree) return;
+      if (typeof data?.cooked !== "string" || !data.cooked.trim()) throw new Error("站点没有返回该楼正文");
+      const result = await requestReplyTreeAction(tree, post, 'reveal', { cooked: data.cooked });
+      if (state.replyTree !== tree) return;
+      mergeReplyTreePost(tree, result.post);
+      tree.status.textContent = "";
+      renderReplyTree(tree);
+    } catch (error) {
+      if (state.replyTree === tree) tree.status.textContent = `读取隐藏正文失败：${error.message}`;
+      button.disabled = false;
+    }
+  }
+
+  async function requestReplyTreeAction(tree, post, action, detail = {}) {
+    await loadPageRefreshBridge();
+    if (state.replyTree !== tree || topicIdFromPath() !== tree.topicId) throw new Error('主题已切换');
+    return new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      const finish = (error, payload) => {
+        clearTimeout(timer);
+        document.removeEventListener('betterld:reply-action-wait', onWait);
+        document.removeEventListener('betterld:reply-action-result', onResult);
+        if (error) reject(error); else resolve(payload);
+      };
+      const onResult = (event) => {
+        const payload = JSON.parse(event.detail);
+        if (payload.id === id) finish(payload.error ? new Error(payload.error) : null, payload);
+      };
+      let timer;
+      const armTimeout = () => {
+        timer = setTimeout(() => finish(new Error('原站操作响应超时，结果尚未确认，请核对最新帖子状态后再操作')), config.replyTreeActionTimeoutMs);
+      };
+      const onWait = (event) => {
+        const payload = JSON.parse(event.detail);
+        if (payload.id !== id) return;
+        clearTimeout(timer);
+        if (!payload.waiting) armTimeout();
+      };
+      armTimeout();
+      document.addEventListener('betterld:reply-action-wait', onWait);
+      document.addEventListener('betterld:reply-action-result', onResult);
+      document.dispatchEvent(new CustomEvent('betterld:reply-action', {
+        detail: JSON.stringify({ id, topicId: tree.topicId, postId: post.id, action, ...detail })
+      }));
+    });
+  }
+
+  async function manageReplyTreeBoost(tree, post, boost, action, button) {
+    button.disabled = true;
+    tree.status.textContent = '';
+    try {
+      let permissions;
+      if (boost.can_delete === undefined || boost.can_flag === undefined || (action === 'flag' && !Array.isArray(boost.available_flags))) {
+        permissions = await requestTopicResponse(`/discourse-boosts/boosts/${boost.id}`, () => state.replyTree === tree && topicIdFromPath() === tree.topicId);
+        if (!permissions || typeof permissions.can_delete !== 'boolean' || typeof permissions.can_flag !== 'boolean') throw new Error('Boost 权限响应不完整');
+      }
+      const result = await requestReplyTreeAction(tree, post, `boost-${action}`, { boostId: boost.id, permissions });
+      if (state.replyTree !== tree) return;
+      if (result.post) mergeReplyTreePost(tree, result.post);
+      renderReplyTree(tree);
+      tree.status.textContent = result.cancelled ? '已取消删除 Boost' : action === 'delete' ? '已删除 Boost' : action === 'flag' ? '已打开原站举报窗口' : '';
+    } catch (error) {
+      if (state.replyTree === tree) {
+        if (action === 'inspect') {
+          tree.boostExpanded.delete(boost.id);
+          renderReplyTree(tree);
+        }
+        tree.status.textContent = `Boost 操作失败：${error.message}`;
+      }
     } finally {
       button.disabled = false;
     }
@@ -4350,6 +4460,66 @@
     focusReplyTreeBoostInput(tree);
   }
 
+  function syncReplyBoostControls(tree, bubble, post, boost) {
+    const signature = JSON.stringify([tree.context?.currentUserId, tree.boostExpanded.has(boost.id), boost.can_delete, boost.can_flag, boost.available_flags]);
+    if (bubble.dataset.betterldBoostControls === signature) return;
+    bubble.dataset.betterldBoostControls = signature;
+    bubble.querySelectorAll(':scope > .betterld-reply-tree__boost-control').forEach((control) => control.remove());
+    const actionable = Boolean(tree.context?.currentUserId) &&
+      (boost.can_delete === undefined || boost.can_flag === undefined || boost.can_delete || boost.can_flag);
+    const expanded = actionable && tree.boostExpanded.has(boost.id);
+    bubble.classList.toggle('--actionable', actionable);
+    bubble.classList.toggle('--selected', expanded);
+    const cooked = bubble.querySelector(':scope > .discourse-boosts__cooked');
+    if (actionable) {
+      cooked.setAttribute('role', 'button');
+      cooked.tabIndex = 0;
+      cooked.setAttribute('aria-expanded', String(expanded));
+      cooked.setAttribute('aria-label', '展开或收起 Boost 操作');
+    } else {
+      cooked.removeAttribute('role');
+      cooked.removeAttribute('tabindex');
+      cooked.removeAttribute('aria-expanded');
+      cooked.removeAttribute('aria-label');
+      tree.boostExpanded.delete(boost.id);
+    }
+    if (!expanded) return;
+    for (const [allowed, action, label, icon] of [[boost.can_flag, 'flag', '举报 Boost', 'flag'], [boost.can_delete, 'delete', '删除 Boost', 'trash-can']]) {
+      if (!allowed) continue;
+      const control = replyTreeActionButton(label, icon, () => {
+        if (action === 'flag') {
+          tree.boostExpanded.delete(boost.id);
+          syncReplyBoostControls(tree, bubble, post, boost);
+        }
+        const current = tree.posts.get(post.id);
+        manageReplyTreeBoost(tree, current, current.boosts.find((entry) => entry.id === boost.id), action, control);
+      }, 'betterld-reply-tree__boost-control');
+      bubble.append(control);
+    }
+  }
+
+  async function toggleReplyBoostControls(tree, bubble, post, boost) {
+    if (!bubble.classList.contains('--actionable')) return;
+    if (tree.boostExpanded.has(boost.id)) {
+      tree.boostExpanded.delete(boost.id);
+      syncReplyBoostControls(tree, bubble, post, boost);
+      return;
+    }
+    if (bubble.dataset.betterldBoostBusy) return;
+    tree.boostExpanded.add(boost.id);
+    syncReplyBoostControls(tree, bubble, post, boost);
+    if (boost.can_delete === undefined || boost.can_flag === undefined) {
+      bubble.dataset.betterldBoostBusy = 'true';
+      bubble.setAttribute('aria-busy', 'true');
+      try {
+        await manageReplyTreeBoost(tree, post, boost, 'inspect', bubble.querySelector('.discourse-boosts__cooked'));
+      } finally {
+        delete bubble.dataset.betterldBoostBusy;
+        bubble.removeAttribute('aria-busy');
+      }
+    }
+  }
+
   function replyTreeBoostSection(tree, post) {
     const boosts = Array.isArray(post.boosts) ? post.boosts.filter((boost) => boost?.cooked) : [];
     const editing = tree.boostEditor?.postNumber === post.post_number;
@@ -4358,6 +4528,7 @@
     const list = createElement("div", "discourse-boosts__list");
     for (const boost of boosts) {
       const bubble = createElement("span", "discourse-boosts__bubble");
+      bubble.dataset.boostId = String(boost.id);
       const username = cleanText(boost.user?.username);
       const avatarPath = replyTreeAvatarPath(boost.user?.avatar_template);
       if (avatarPath) {
@@ -4385,6 +4556,18 @@
       const parsed = new DOMParser().parseFromString(boost.cooked, "text/html");
       cooked.append(...parsed.body.childNodes);
       bubble.append(cooked);
+      const toggle = (event) => {
+        if (event.target.closest('a, button, input, video, audio, iframe, summary')) return;
+        if (event.type === 'keydown') {
+          if (event.target !== cooked || !['Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+        }
+        toggleReplyBoostControls(tree, bubble, tree.posts.get(post.id),
+          tree.posts.get(post.id).boosts.find((entry) => entry.id === boost.id));
+      };
+      cooked.addEventListener('click', toggle);
+      cooked.addEventListener('keydown', toggle);
+      syncReplyBoostControls(tree, bubble, post, boost);
       list.append(bubble);
     }
     if (post.can_boost === true && !editing) {
@@ -4485,7 +4668,10 @@
         if (tails.size) tree.tailStates.set(number, tails);
         else tree.tailStates.delete(number);
       } else {
-        tree.branchStates.set(number, !replyBranchExpanded(tree, number));
+        const item = tree.content.querySelector(`[data-post-number="${number}"]`);
+        const hasReplies = Boolean(item.querySelector(':scope > .betterld-reply-tree__children'));
+        tree.branchStates.set(number, hasReplies && !tree.branchStates.has(number)
+          ? !replyBranchExpanded(tree, number) : tree.branchStates.get(number) === false);
       }
       // 主动收起的意图优先于当前阅读路径保留。
       tree.skipBranchAnchor = true;
@@ -4510,7 +4696,7 @@
       || card.querySelector('.betterld-reply-tree__avatar-wrap').firstElementChild;
     const actions = card.querySelector('.betterld-reply-tree__actions');
     const bounds = avatar.getBoundingClientRect();
-    const footer = (actions.firstElementChild || actions).getBoundingClientRect();
+    const footer = (actions.hidden ? card.querySelector('.betterld-reply-tree__state-notice') : actions.firstElementChild || actions).getBoundingClientRect();
     return { bottom: bounds.bottom, centerY: bounds.top + bounds.height / 2,
       toggleY: Math.max(bounds.bottom + 12, footer.top + footer.height / 2) };
   }
@@ -4522,31 +4708,49 @@
 
   function positionReplyBranchControls(tree) {
     if (state.replyTree !== tree || tree.contentContainer.hidden) return;
+    for (const item of tree.content.querySelectorAll('.betterld-reply-tree__item')) {
+      if (!item.querySelector(':scope > .betterld-reply-tree__tail-control[aria-expanded="false"]')) item.style.removeProperty('min-height');
+    }
     for (const button of tree.content.querySelectorAll('.betterld-reply-tree__collapse')) {
       const item = button.parentElement;
       if (!item.getClientRects().length) continue;
-      const anchor = replyBranchAnchor(item);
-      let y = anchor.toggleY;
-      const children = item.querySelector(':scope > .betterld-reply-tree__children');
-      const visible = [...children.children].filter((child) => !child.hidden);
-      if (!children.hidden && visible.length) {
-        const end = replyBranchAnchor(visible.at(-1)).centerY;
-        const min = anchor.bottom + 12;
-        const max = end - 12;
-        y = max <= min ? (anchor.bottom + end) / 2 : Math.min(Math.max(y, min), max);
+      const collapsed = button.getAttribute('aria-expanded') === 'false';
+      const cached = item.style.getPropertyValue('--betterld-branch-toggle-y');
+      if (!collapsed || !cached) {
+        const anchor = replyBranchAnchor(item);
+        const children = item.querySelector(':scope > .betterld-reply-tree__children');
+        const wasHidden = children?.hidden;
+        if (wasHidden) children.hidden = false;
+        const firstVisible = children && [...children.children].find((child) => !child.hidden);
+        if (!tree.tailStates.get(Number(item.dataset.postNumber))?.size || !cached) {
+          const y = firstVisible ? (anchor.centerY + replyBranchAnchor(firstVisible).centerY) / 2 : anchor.bottom + 12;
+          setReplyBranchCoordinate(item, '--betterld-branch-toggle-y', y - item.getBoundingClientRect().top);
+        }
+        if (wasHidden) children.hidden = true;
       }
-      setReplyBranchCoordinate(item, '--betterld-branch-toggle-y', y - item.getBoundingClientRect().top);
+      if (collapsed || !item.querySelector(':scope > .betterld-reply-tree__children:not([hidden])')) {
+        item.style.minHeight = `${parseFloat(item.style.getPropertyValue('--betterld-branch-toggle-y')) + button.offsetHeight / 2}px`;
+      }
     }
     for (const button of tree.content.querySelectorAll('.betterld-reply-tree__tail-control')) {
       const item = button.parentElement;
       if (!item.getClientRects().length) continue;
-      const current = replyBranchAnchor(item);
       const collapsed = button.getAttribute('aria-expanded') === 'false';
-      const next = item.nextElementSibling;
-      const y = collapsed ? current.toggleY : (current.centerY + replyBranchAnchor(next).centerY) / 2;
-      const relativeY = y - item.getBoundingClientRect().top;
-      setReplyBranchCoordinate(item, '--betterld-reply-tail-y', relativeY);
-      if (collapsed) setReplyBranchCoordinate(item, '--betterld-reply-trunk-end', Math.max(8, relativeY + 7));
+      const cached = item.style.getPropertyValue('--betterld-reply-tail-y');
+      if (!collapsed || !cached) {
+        const current = replyBranchAnchor(item);
+        const next = item.nextElementSibling;
+        const wasHidden = next.hidden;
+        if (wasHidden) next.hidden = false;
+        const y = (current.centerY + replyBranchAnchor(next).centerY) / 2;
+        setReplyBranchCoordinate(item, '--betterld-reply-tail-y', y - item.getBoundingClientRect().top);
+        if (wasHidden) next.hidden = true;
+      }
+      if (collapsed) {
+        const y = parseFloat(item.style.getPropertyValue('--betterld-reply-tail-y'));
+        item.style.minHeight = `${Math.max(parseFloat(item.style.minHeight) || 0, y + button.offsetHeight / 2)}px`;
+        if (collapsed) setReplyBranchCoordinate(item, '--betterld-reply-trunk-end', y + 7);
+      }
     }
   }
 
@@ -4565,7 +4769,6 @@
       let button = item.querySelector(':scope > .betterld-reply-tree__tail-control');
       if (!needsButton) {
         button?.remove();
-        item.style.removeProperty('--betterld-reply-tail-y');
         return;
       }
       if (!button) {
@@ -4586,7 +4789,34 @@
     });
   }
 
+  function syncReplyReadIndicator(card, read) {
+    if (typeof read !== 'boolean') return;
+    const head = card.querySelector('.betterld-reply-tree__head');
+    let indicator = head.querySelector('.betterld-reply-tree__read-state');
+    if (!indicator) {
+      indicator = createElement('span', 'betterld-reply-tree__read-state');
+      head.prepend(indicator);
+    }
+    indicator.classList.toggle('is-read', read);
+    indicator.title = read ? '已读' : '未读';
+    indicator.setAttribute('aria-label', indicator.title);
+  }
+
+  function syncReplyReadStates(tree, posts) {
+    for (const entry of posts) {
+      const post = tree.posts.get(entry.id);
+      if (!post || typeof entry.read !== 'boolean') continue;
+      post.read = entry.read;
+      // 切回时的新模型状态也覆盖尚未消费的旧增量，避免正文任务结束后倒灌旧圆点。
+      const pending = tree.pendingData?.posts.find((value) => value.id === entry.id);
+      if (pending) pending.read = entry.read;
+      const card = tree.content.querySelector(`[data-post-number="${post.post_number}"] > .betterld-reply-tree__card`);
+      if (card) syncReplyReadIndicator(card, entry.read);
+    }
+  }
+
   function renderReplyTree(tree) {
+    if (!tree.context) return;
     if (!pageActive()) {
       tree.renderPending = true;
       return;
@@ -4606,7 +4836,7 @@
     const anchorNumber = anchorCard?.parentElement.dataset.postNumber || "";
     const anchorTop = anchorCard?.getBoundingClientRect().top;
     const focusedBoostInput = document.activeElement?.closest?.(".betterld-reply-tree__boost-editor") ? document.activeElement : null;
-    closeReplyReactionPicker(tree);
+    const focusedReactionTrigger = tree.reactionPicker && document.activeElement === tree.reactionTrigger;
     // 摘要流中的回复沿已有祖先补作上下文，正文默认折叠但命中子树保持可见。
     const { posts, streamNumbers, contextNumbers, byNumber } = replyTreePostGraph(tree);
     if (!tree.skipBranchAnchor && anchorNumber && byNumber.has(Number(anchorNumber))) {
@@ -4652,7 +4882,9 @@
         tree.parentLoadingNumber === Number(post.reply_to_post_number), tree.parentErrors.get(Number(post.reply_to_post_number)),
         userMarksApi.find(state.userMarks, post.user_id)?.tag || "",
         tree.boostEditor?.postNumber === post.post_number,
-        isContextPost, isContextPost && tree.contextExpanded.has(post.post_number)]);
+        isContextPost, isContextPost && tree.contextExpanded.has(post.post_number),
+        tree.context?.currentUserId, tree.context?.canCreatePost,
+        replyTreePostIgnored(tree, post)]);
     };
     const changedAuthors = new Set();
     for (const [number, rendered] of previousPosts) {
@@ -4671,13 +4903,18 @@
       const signature = signatureFor(post);
       const editing = tree.boostEditor?.postNumber === post.post_number;
       const isContext = contextNumbers.has(post.post_number);
-      renderedPosts.set(post.post_number, { id: post.id, signature, cooked: post.cooked, boosts: post.boosts, canBoost: post.can_boost, editing });
+      const bodyState = replyTreeBodyState(post);
+      const ignoredAuthor = replyTreePostIgnored(tree, post);
+      renderedPosts.set(post.post_number, { id: post.id, signature, cooked: post.cooked, bodyState, ignoredAuthor, boostUserId: tree.context?.currentUserId, boosts: post.boosts, canBoost: post.can_boost, editing });
       if (existing && previous?.signature === signature) return syncChildren(existing, post);
       const item = existing || createElement("li", "betterld-reply-tree__item");
       item.dataset.postNumber = String(post.post_number);
       if (isContext) item.dataset.betterldContext = "true";
       else delete item.dataset.betterldContext;
-      const card = createElement("article", "betterld-reply-tree__card");
+      // 帖子身份挂在卡片上而不是 li 上：原站选文引用按最近的祖先识别楼层，挂在 li 会把引用的楼错认成祖先楼。
+      const card = createElement("article", "betterld-reply-tree__card boxed");
+      card.dataset.postId = String(post.id);
+      card.dataset.topicId = tree.topicId;
       const avatarWrap = createElement("div", "topic-avatar betterld-reply-tree__avatar-wrap");
       const avatar = createElement("img", "betterld-reply-tree__avatar");
       const avatarPath = replyTreeAvatarPath(post.avatar_template);
@@ -4687,6 +4924,7 @@
       const username = cleanText(post.username);
       const nickname = cleanText(post.name);
       const avatarHref = userProfileHref(username);
+      // 忽略列表来自原站 currentUser，正文宿主随忽略状态改变同步替换。
       const avatarLink = avatarHref ? createElement("a", "betterld-reply-tree__avatar-link trigger-user-card") : null;
       if (avatarLink) {
         avatarLink.href = avatarHref;
@@ -4782,17 +5020,21 @@
       // 分页、回应与作者变化保留未变正文及其混排、播放器、引用/剧透状态。
       const previousBody = existing?.firstElementChild.querySelector(".betterld-reply-tree__body");
       let cooked = previousBody?.querySelector(":scope > .betterld-reply-tree__cooked");
-      if (!cooked || previous.cooked !== post.cooked) {
+      if (!cooked || previous.cooked !== post.cooked || previous.bodyState !== bodyState || previous.ignoredAuthor !== ignoredAuthor) {
         cooked = createElement("div", "betterld-reply-tree__cooked");
-        cooked.dataset.betterldCookedId = crypto.randomUUID();
-        const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
-        cooked.append(...parsed.body.childNodes);
+        // 被忽略的作者不解析原站正文，避免旧缓存正文泄露；隐藏/删除楼显示的是服务端自己的占位正文。
+        if (!ignoredAuthor && !post.cooked_hidden && typeof post.cooked === 'string') {
+          cooked.dataset.betterldCookedId = crypto.randomUUID();
+          const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
+          cooked.append(...parsed.body.childNodes);
+        }
       }
       body.append(head);
+      syncReplyReadIndicator(body, post.read);
       let contextToggle = null;
       if (isContext) {
         const expanded = tree.contextExpanded.has(post.post_number);
-        cooked.hidden = !expanded;
+        cooked.hidden = !expanded || ignoredAuthor;
         contextToggle = createElement("button", "betterld-reply-tree__context-toggle", expanded ? "收起上下文正文" : "展开上下文正文");
         contextToggle.type = "button";
         contextToggle.setAttribute("aria-expanded", String(expanded));
@@ -4803,8 +5045,19 @@
         });
         body.append(contextToggle);
       } else {
-        cooked.hidden = false;
+        cooked.hidden = ignoredAuthor;
       }
+      // 隐藏、删除与忽略都是原站给出的合法状态：正文位显示状态与可恢复入口，不留旧缓存正文。
+      const stateNotice = ignoredAuthor
+        ? createElement("p", "betterld-reply-tree__state-notice", `已忽略 ${nickname || username}：按你的站点设置隐藏正文。`)
+        : bodyState === "hidden"
+          ? createElement("p", "betterld-reply-tree__state-notice", "此楼已被站点隐藏，正文需要站点权限才能读取。")
+          : null;
+      const stateAction = ignoredAuthor
+        ? replyTreeActionButton('显示此条忽略回复', 'eye', () => revealReplyTreeIgnoredPost(tree, post, stateAction), 'betterld-reply-tree__state-action')
+        : bodyState === "hidden" && post.can_see_hidden_post === true
+          ? replyTreeActionButton("读取被隐藏的正文", "eye", () => revealReplyTreeHiddenBody(tree, post, stateAction), "betterld-reply-tree__state-action")
+          : null;
       const actions = createElement("div", "betterld-reply-tree__actions");
       actions.setAttribute("role", "group");
       actions.setAttribute("aria-label", `#${post.post_number} 帖子操作`);
@@ -4892,7 +5145,15 @@
           openReplyReactionPicker(tree, post, like, true);
         }
       });
-      actions.append(like);
+      // 点赞入口按原站模型投影显示：只有明确不可用时才隐藏或禁用，缺字段不误禁；
+      // 未登录时点击会唤出登录，登录后的真实权限仍由桥在执行前核对。
+      if (post.showLike !== false) {
+        if (post.canToggleLike === false) {
+          like.disabled = true;
+          like.title = "当前不允许更改回应";
+        }
+        actions.append(like);
+      }
       const copy = replyTreeActionButton("复制此帖链接", "link", async () => {
         try {
           await copyText(new URL(post.post_url || topicReplyUrl(tree.topicId, post.post_number), location.origin).href);
@@ -4903,21 +5164,34 @@
       });
       actions.append(copy);
       // 原站同一帖子只会有其中一个 rocket 触发器：没有 boost 时在帖子操作菜单里，已有 boost 时在列表末尾。
-      if (post.can_boost !== false && !post.boosts?.length) {
+      // 只有 can_boost 明确为真才给入口：未知状态不显示，也不由客户端猜测。
+      if (post.can_boost === true && !post.boosts?.length) {
         actions.append(replyTreeActionButton("Boost 此帖", "rocket", () => openReplyTreeBoostEditor(tree, post)));
       }
       const more = replyTreeActionButton("更多帖子操作", "ellipsis", () => openReplyTreeMore(tree, post, more), "betterld-reply-tree__action--more");
       const nativeMenu = previousBody?.querySelector(":scope > .betterld-reply-tree__native-menu");
-      more.setAttribute("aria-expanded", String(Boolean(nativeMenu && !nativeMenu.hidden)));
-      if (nativeMenu) more.setAttribute("aria-controls", nativeMenu.id);
+      if (ignoredAuthor || post.cooked_hidden) nativeMenu?.remove();
+      more.setAttribute("aria-expanded", String(Boolean(nativeMenu?.isConnected && !nativeMenu.hidden)));
+      if (nativeMenu?.isConnected) more.setAttribute("aria-controls", nativeMenu.id);
       actions.append(more);
       const reply = replyTreeActionButton(`回复 #${post.post_number}`, "reply", () => openReplyTreeComposer(tree, post), "betterld-reply-tree__action--reply");
       reply.append(createElement("span", "betterld-reply-tree__action-label", "回复"));
+      // 回复入口按主题权限显示：不允许回复时明确禁用并说明，不假装可用。
+      if (tree.context?.currentUserId && tree.context.canCreatePost === false) {
+        reply.disabled = true;
+        reply.title = "当前主题不允许回复";
+        reply.setAttribute("aria-label", "当前主题不允许回复");
+      }
       actions.append(reply);
+      if (stateNotice) body.append(stateNotice);
+      if (stateAction) body.append(stateAction);
+      // 被忽略的作者不给帖子操作入口，回复归属仍留在树里。
       body.append(actions);
-      const boostsChanged = !previous || JSON.stringify(previous.boosts) !== JSON.stringify(post.boosts)
-        || previous.canBoost !== post.can_boost || previous.editing !== editing;
-      const boosts = boostsChanged ? replyTreeBoostSection(tree, post) : null;
+      actions.hidden = ignoredAuthor;
+      const boostsChanged = !previous || JSON.stringify(previous.boosts?.map(({ id, cooked, user }) => ({ id, cooked, user }))) !== JSON.stringify(post.boosts?.map(({ id, cooked, user }) => ({ id, cooked, user })))
+        || previous.canBoost !== post.can_boost || previous.editing !== editing || previous.ignoredAuthor !== ignoredAuthor || previous.bodyState !== bodyState
+        || previous.boostUserId !== tree.context?.currentUserId;
+      const boosts = boostsChanged && !ignoredAuthor && !post.cooked_hidden ? replyTreeBoostSection(tree, post) : null;
       if (existing) {
         existing.firstElementChild.firstElementChild.replaceWith(avatarWrap);
         previousBody.firstElementChild.replaceWith(head);
@@ -4930,13 +5204,19 @@
           if (previousToggle) previousToggle.replaceWith(contextToggle);
           else previousBody.insertBefore(contextToggle, cooked);
         } else previousToggle?.remove();
-        previousBody.querySelector(":scope > .betterld-reply-tree__actions").replaceWith(actions);
+        previousBody.querySelector(":scope > .betterld-reply-tree__state-notice")?.remove();
+        previousBody.querySelector(":scope > .betterld-reply-tree__state-action")?.remove();
+        if (stateNotice) previousBody.insertBefore(stateNotice, cooked);
+        if (stateAction) previousBody.insertBefore(stateAction, cooked);
+        const previousActions = previousBody.querySelector(":scope > .betterld-reply-tree__actions");
+        if (previousActions) previousActions.replaceWith(actions);
+        else previousBody.append(actions);
         if (boostsChanged) {
           previousBody.querySelector(":scope > .betterld-reply-tree__boosts")?.remove();
           if (boosts) previousBody.append(boosts);
         }
       } else {
-        body.insertBefore(cooked, actions);
+        body.insertBefore(cooked, stateNotice || actions);
         if (boosts) body.append(boosts);
         card.append(avatarWrap, body);
         item.append(card);
@@ -4944,15 +5224,24 @@
       return syncChildren(item, post);
     }
     function syncChildren(item, post) {
+      for (const bubble of item.querySelectorAll(':scope > .betterld-reply-tree__card .discourse-boosts__bubble')) {
+        const boost = post.boosts?.find((entry) => String(entry.id) === bubble.dataset.boostId);
+        if (boost) syncReplyBoostControls(tree, bubble, post, boost);
+      }
       const replies = children.get(post.post_number) || [];
+      if (!replies.length) tree.branchStates.delete(post.post_number);
+
       if (replies.length) {
         let button = item.querySelector(":scope > .betterld-reply-tree__collapse");
         let branch = item.querySelector(":scope > .betterld-reply-tree__children");
         if (!button) {
           button = createElement("button", "betterld-reply-tree__collapse");
           button.type = "button";
+          item.append(button);
+        }
+        if (!branch) {
           branch = createElement("ol", "betterld-reply-tree__list betterld-reply-tree__children");
-          item.append(button, branch);
+          item.append(branch);
         }
         if (item.dataset.branchHighlight && tree.highlightedBranch !== post.post_number) delete item.dataset.branchHighlight;
         const expanded = replyBranchExpanded(tree, post.post_number);
@@ -4997,13 +5286,13 @@
         }
       } else {
         delete item.dataset.branchHighlight;
-        item.querySelector(":scope > .betterld-reply-tree__collapse")?.remove();
+        item.querySelector(':scope > .betterld-reply-tree__collapse')?.remove();
+        item.style.removeProperty('--betterld-branch-toggle-y');
         item.querySelector(":scope > .betterld-reply-tree__children")?.remove();
         const card = item.querySelector(':scope > .betterld-reply-tree__card');
         tree.branchLayoutObserver.unobserve(card);
         tree.branchLayoutObserver.unobserve(card.querySelector('.betterld-reply-tree__actions'));
         card.querySelectorAll(':scope > .betterld-reply-tree__line-hit').forEach((hit) => hit.remove());
-        item.style.removeProperty('--betterld-branch-toggle-y');
       }
       return item;
     }
@@ -5023,6 +5312,8 @@
       tree.branchLayoutObserver.observe(card.querySelector('.betterld-reply-tree__actions'));
     }
     positionReplyBranchControls(tree);
+    syncReplyReactionPopover(tree);
+    if (focusedReactionTrigger && tree.reactionTrigger) tree.reactionTrigger.focus({ preventScroll: true });
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
     const myPosts = currentUserId ? posts.filter((post) => !contextNumbers.has(post.post_number) && post.user_id === currentUserId) : [];
     tree.mine.replaceChildren(...myPosts.map((post) => {
@@ -5036,6 +5327,13 @@
     if (myPosts.length) tree.mine.prepend(createElement("span", "betterld-reply-tree__mine-label", `我的楼层（已加载 ${myPosts.length}）`));
     tree.renderedPosts = renderedPosts;
     if (tree.bridgeReady) {
+      const unregistered = [...byNumber.values()].filter((post) => !tree.registeredPostIds.has(post.id));
+      if (unregistered.length) {
+        document.dispatchEvent(new CustomEvent("betterld:reply-register-posts", {
+          detail: JSON.stringify({ topicId: tree.topicId, posts: unregistered })
+        }));
+
+      }
       const bodies = [...tree.content.querySelectorAll("[data-betterld-cooked-id]")]
         .filter((element) => !element.dataset.betterldCookedMounted)
         .map((element) => ({ id: element.dataset.betterldCookedId, post: element.betterldCookedPost || byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
@@ -5408,14 +5706,48 @@
     tree.more.textContent = "重试加载回复";
   }
 
+  function replyTreePostIgnored(tree, post) {
+    return Boolean(post.username && tree.context?.ignoredUsernames?.includes(post.username)
+      && !tree.context?.revealedIgnoredIds?.includes(String(post.id)));
+  }
+
+  async function revealReplyTreeIgnoredPost(tree, post, button) {
+    button.disabled = true;
+    try {
+      let updated;
+      if (typeof post.cooked !== 'string' || !post.cooked.trim()) {
+        const data = await requestTopicResponse(`/t/${tree.topicId}/posts.json?post_ids[]=${post.id}`, () => state.replyTree === tree && topicIdFromPath() === tree.topicId);
+        updated = data?.post_stream?.posts?.find((entry) => entry.id === post.id);
+        if (!updated || updated.post_number !== post.post_number || !replyTreeBodyState(updated)) throw new Error('站点未返回该忽略回复');
+      }
+      const result = await requestReplyTreeAction(tree, post, 'ignore-reveal', { updated });
+      if (state.replyTree !== tree) return;
+      mergeReplyTreePost(tree, result.post);
+    } catch (error) {
+      if (state.replyTree === tree) tree.status.textContent = `显示忽略回复失败：${error.message}`;
+      button.disabled = false;
+    }
+  }
+
+  // 正文状态：隐藏、删除与忽略作者都是原站给出的合法状态，不是“正文缺失”。
+  // 合并、父楼补读、分页与实时同步共用这一处判定，普通空正文仍然算缺口。
+  function replyTreeBodyState(post) {
+    if (post.cooked_hidden) return "hidden";
+    if (post.deleted_post_placeholder || post.deleted_at || post.user_deleted) return "deleted";
+    if (typeof post.cooked === "string" && post.cooked.trim()) return "ready";
+    return "";
+  }
+
   // 树内正文的唯一写入点：只接受属于本主题且带真实正文的帖子。
   // overwrite=false 用于 HTTP 补读：已有正文的楼层不覆盖，原站模型同步才是权威更新。
   function mergeReplyTreePost(tree, post, { overwrite = true } = {}) {
     if (!Number.isInteger(post?.id) || !Number.isInteger(post?.post_number)) return false;
     if (post.topic_id !== undefined && String(post.topic_id) !== tree.topicId) return false;
-    if (typeof post.cooked !== "string" || !post.cooked.trim()) return false;
+    const bodyState = replyTreeBodyState(post);
+    if (!bodyState && !replyTreePostIgnored(tree, post)) return false;
     const previous = tree.posts.get(post.id);
-    const cached = typeof previous?.cooked === "string" && Boolean(previous.cooked.trim());
+    // 真实状态优先：楼层在服务端变成隐藏/删除时，即使 overwrite=false 也要替掉缓存正文。
+    const cached = replyTreeBodyState(previous || {}) && (bodyState === 'ready' || !bodyState);
     if (cached && !overwrite) {
       tree.loaded.add(post.id);
       return false;
@@ -5577,7 +5909,7 @@
       const bounds = card.getBoundingClientRect();
       if (bounds.bottom <= headerHeight || bounds.top >= innerHeight) continue;
       let child = byNumber.get(Number(card.parentElement.dataset.postNumber));
-      while (child) {
+      while (child && !replyTreePostIgnored(tree, child)) {
         const number = Number(child.reply_to_post_number);
         if (!(number > 1 && number < child.post_number)) break;
         const parent = byNumber.get(number);
@@ -5645,9 +5977,10 @@
       if (posts.some((post) => !Number.isInteger(post.id) || !Number.isInteger(post.post_number)
         || (post.topic_id !== undefined && String(post.topic_id) !== tree.topicId))) throw new Error("父楼数据不属于当前主题");
       const parent = posts.find((post) => post.post_number === gap.number);
-      if (typeof parent?.cooked !== "string" || !parent.cooked.trim()) throw new Error(`父楼 #${gap.number} 不存在或不可读取`);
+      // 隐藏/删除的父楼也是合法状态：照样合并，由卡片显示状态与可恢复入口。
+      if (!parent || (!replyTreeBodyState(parent) && !replyTreePostIgnored(tree, parent))) throw new Error(`父楼 #${gap.number} 不存在或不可读取`);
       mergeReplyUserBadges(tree, data.user_badges);
-      cacheReplyParentPage(tree, posts.filter((post) => typeof post.cooked === "string" && post.cooked.trim()), gap.number);
+      cacheReplyParentPage(tree, posts.filter((post) => Boolean(replyTreeBodyState(post)) || replyTreePostIgnored(tree, post)), gap.number);
       tree.parentRetryNumber = 0;
       clearReplyTreeWait(tree);
       tree.status.textContent = "";
@@ -5736,7 +6069,9 @@
     const postNumber = Number(visible?.parentElement.dataset.postNumber) || 1;
     const postId = [...tree.posts.values()].find((post) => post.post_number === postNumber)?.id;
     // visible 为假时不能拿默认的首帖当阅读锚点，否则首帖会错误改变正文窗口边界。
-    return { postNumber, postId, visible: Boolean(visible) };
+    const bounds = visible?.getBoundingClientRect();
+    const ratio = bounds ? Math.max(0, Math.min(1, (headerHeight - bounds.top) / bounds.height)) : 0;
+    return { postNumber, postId, ratio, visible: Boolean(visible) };
   }
 
   // 实时同步只合并原站模型与流；正文由阅读窗口按需续载，不在这里自己发请求。
@@ -5751,6 +6086,9 @@
       return;
     }
     if (typeof data.ownerUsername === "string" && data.ownerUsername) tree.ownerUsername = data.ownerUsername;
+    // 权限与忽略列表以桥的原站投影为唯一来源；桥没给时保持未知，不在这里推断。
+    const contextChanged = Boolean(data.context && JSON.stringify(tree.context) !== JSON.stringify(data.context));
+    if (data.context) tree.context = data.context;
     if (tree.filterBusy) return;
     const currentUrlFilters = topicStreamFiltersFromUrl();
     if (tree.filterTransition && topicFilterStateKey(tree.filterTransition) === topicFilterStateKey(currentUrlFilters)) tree.filterTransition = null;
@@ -5775,7 +6113,7 @@
     tree.stream = data.stream;
     const streamIds = new Set(tree.stream);
     const badgesChanged = mergeReplyUserBadges(tree, data.user_badges);
-    let changed = streamChanged || badgesChanged;
+    let changed = streamChanged || badgesChanged || contextChanged;
     // 摘要与作者筛选下，流内的楼层只是筛选结果；未命中的已加载楼层继续作为父上下文保留。
     const filteredStream = tree.topReplies || tree.userFilters.length > 0;
     for (const [id] of tree.posts) {
@@ -5787,7 +6125,7 @@
       }
     }
     for (const post of data.posts) {
-      if (!streamIds.has(post.id) || !post.cooked) continue;
+      if ((!streamIds.has(post.id) && !tree.orphanContextIds.has(post.id)) || (!replyTreeBodyState(post) && !replyTreePostIgnored(tree, post))) continue;
       const previous = tree.posts.get(post.id);
       if (previous && Object.keys(post).every((key) => JSON.stringify(previous[key]) === JSON.stringify(post[key]))) continue;
       if (mergeReplyTreePost(tree, post)) changed = true;
@@ -5824,7 +6162,7 @@
     if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "跳转请求已被新的跳转取代");
     const post = replyTreePostByTarget(tree, record.postNumber, record.postId);
     if ([...tree.posts.values()].some((entry) => entry.post_number === 1)
-      && tree.stream.length && post && typeof post.cooked === "string" && post.cooked.trim()) {
+      && tree.stream.length && post && (Boolean(replyTreeBodyState(post)) || replyTreePostIgnored(tree, post))) {
       applyReplyTreeJump(tree, record, post, "");
       return;
     }
@@ -5959,6 +6297,12 @@
     syncReplyBookmark(tree, post, data.bookmarked, true);
   });
 
+  document.addEventListener('betterld:reply-posts-registered', (event) => {
+    const { topicId, postIds } = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (tree?.topicId === topicId) for (const id of postIds) tree.registeredPostIds.add(id);
+  });
+
   document.addEventListener('betterld:reply-data', (event) => {
     const data = JSON.parse(event.detail);
     const tree = state.replyTree;
@@ -5967,6 +6311,8 @@
       tree.status.textContent = `回复实时同步失败：${data.error}`;
       return;
     }
+    // 已读元状态不依赖正文任务或树的可见性，避免增量被隐藏视图提前消费。
+    syncReplyReadStates(tree, data.posts);
     // 忙碌/隐藏期间多个增量批次合并，后到的批次只覆盖同一楼，不能丢掉之前的其他楼。
     const posts = new Map((tree.pendingData?.posts || []).map((post) => [post.id, post]));
     for (const post of data.posts) posts.set(post.id, post);
@@ -6056,6 +6402,25 @@
       : "";
   }
 
+  document.addEventListener('betterld:reply-reading-status', (event) => {
+    const { topicId, error } = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (tree?.topicId !== topicId) return;
+    if (error) tree.status.textContent = error;
+    else if (tree.status.textContent.startsWith('阅读登记失败（')) tree.status.textContent = '';
+  });
+
+  document.addEventListener('betterld:reply-read-state', (event) => {
+    const { topicId, posts, error } = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (tree?.topicId !== topicId) return;
+    if (error) {
+      tree.status.textContent = `已读状态同步失败：${error}`;
+      return;
+    }
+    syncReplyReadStates(tree, posts);
+  });
+
   // 返回树视图：与 showNativeReply 互为反向操作，供原帖/树入口与筛选状态变化共用。
   function showReplyTree(tree) {
     sessionStorage.removeItem(config.topicReadingViewStorageKey);
@@ -6064,6 +6429,9 @@
     tree.toggle.textContent = "原帖回复";
     tree.contentContainer.hidden = false;
     syncReplyTreeFilterBar(tree);
+    if (tree.bridgeReady) document.dispatchEvent(new CustomEvent('betterld:reply-read-state-request', {
+      detail: JSON.stringify({ topicId: tree.topicId })
+    }));
     if (tree.posts.size) renderReplyTree(tree);
     maybeLoadMoreReplyTree(tree);
   }
@@ -6078,6 +6446,8 @@
     }
     // 状态变化后旧流属于另一种筛选：丢掉已加载楼层按新筛选重读；首次建立面板沿用同筛选的快照流。
     if (tree.filterViewKey !== null) {
+      closeReplyReactionPicker(tree);
+      tree.boostExpanded.clear();
       tree.stream = [];
       tree.loaded.clear();
       tree.posts.clear();
@@ -6218,6 +6588,7 @@
       document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
       state.replyTree.panel.remove();
       document.dispatchEvent(new CustomEvent('betterld:timeline-reset'));
+      document.dispatchEvent(new CustomEvent('betterld:reply-reading-release'));
       state.replyTree = null;
     }
     if (!topicId) {
@@ -6306,6 +6677,7 @@
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
     const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    tree.boostExpanded = new Set();
     tree.orphanContextIds = previous?.orphanContextIds || new Set();
     tree.parentErrors = previous?.parentErrors || new Map();
     tree.parentLoadingNumber = 0;
@@ -6320,6 +6692,7 @@
     tree.statusTimer = 0;
     tree.compensating = false;
     tree.skipAnchorRestore = false;
+    tree.registeredPostIds = new Set();
     tree.bodyLoadBlocked = false;
     tree.bodyLoadScrollTop = pageScrollTop();
     bindReplyBranchInteraction(tree);
@@ -6376,13 +6749,21 @@
     const tree = state.replyTree;
     if (!pageActive() || !tree) return;
     const active = !tree.contentContainer.hidden;
+    const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     const current = active ? replyTreeCurrentPost(tree) : null;
     // 当前阅读楼成为正文窗口锚点：滚动到哪里，续载就从哪里往后取；无可见楼时不改边界。
     if (current?.postId && current.visible) tree.anchorId = current.postId;
     // 楼层上报依赖原站桥接，本地锚点更新不依赖。
     if (tree.bridgeReady) {
+      const visiblePostIds = active ? [...tree.content.querySelectorAll('.betterld-reply-tree__card')].flatMap((card) => {
+        const post = tree.posts.get(Number(card.dataset.postId));
+        const body = card.querySelector(':scope > .betterld-reply-tree__body > .betterld-reply-tree__cooked');
+        if (!post || replyTreePostIgnored(tree, post) || post.cooked_hidden || !post.cooked?.trim() || !body?.getClientRects().length) return [];
+        const bounds = body.getBoundingClientRect();
+        return bounds.bottom > headerHeight && bounds.top < innerHeight ? [post.id] : [];
+      }) : [];
       document.dispatchEvent(new CustomEvent("betterld:reply-position", {
-        detail: JSON.stringify({ topicId: tree.topicId, ...(current || {}), active, timeoutMs: config.pageRefreshTimeoutMs })
+        detail: JSON.stringify({ topicId: tree.topicId, ...(current || {}), visiblePostIds, active, timeoutMs: config.pageRefreshTimeoutMs })
       }));
     }
     // 树展开或重建后可见楼层可能变化，阅读楼层跟着核对一次。
@@ -6715,6 +7096,7 @@
   }
 
   function pausePageWork() {
+    document.dispatchEvent(new CustomEvent('betterld:reply-reading-release'));
     for (const key of ["routeTimer", "dataTimer"]) {
       clearInterval(state[key]);
       state[key] = 0;

@@ -10,9 +10,66 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
-  const boostFields = ["id", "cooked", "can_delete", "can_flag"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
+
+  // 树内的正文、操作、回复与 Boost 共用原站 identityMap：树已登记而原站尚未载入的楼层在这里创建并 storePost，
+  // 之后一律用 findLoadedPost 取同一模型，既不重复 HTTP find，也不让旧载荷新建一份覆盖新模型。
+  const treeRegisteredPostIds = new Set();
+  const treeRevealedIgnoredIds = new Set();
+  let treeRegisteredTopicId = '';
+
+  function treePostAttributes(topic, data) {
+    // 桥接投影包含 getter-only 权限值；模型只接收帖子字段，权限由原站自行计算。
+    return {
+      ...Object.fromEntries([...postFields, "boosts"].filter((key) => key in data).map((key) => [key, data[key]])),
+      topic_id: topic.id,
+      topic
+    };
+  }
+
+  function createTreePost(owner, topic, data) {
+    const post = topic.postStream.storePost(owner.lookup("service:store").createRecord("post", treePostAttributes(topic, data)));
+    treeRegisteredPostIds.add(String(post.id));
+    return post;
+  }
+
+  function registerTreePosts(owner, topic, posts) {
+    if (treeRegisteredTopicId !== String(topic.id)) {
+      treeRegisteredTopicId = String(topic.id);
+      treeRegisteredPostIds.clear();
+      treeRevealedIgnoredIds.clear();
+    }
+    for (const data of posts || []) {
+      if (!Number.isInteger(data?.id) || !Number.isInteger(data.post_number) || (data.topic_id !== undefined && String(data.topic_id) !== String(topic.id))) throw new Error('楼层身份与当前主题不匹配');
+      treeRegisteredPostIds.add(String(data.id));
+      if (!topic.postStream.findLoadedPost(data.id)) createTreePost(owner, topic, data);
+    }
+  }
+
+  // 嵌入的 Boost 正文不是帖子，保持独立模型，不登记进 identityMap。
+  // ownsPost 只表示组件自己创建、必须自己销毁的模型：已登记进 identityMap 的楼层由原站管理，释放时不销毁。
+  function resolveTreePost(owner, topic, data) {
+    if (data.embeddedPost) {
+      return { post: owner.factoryFor("model:post").create(treePostAttributes(topic, data)), ownsPost: true };
+    }
+    const loaded = topic.postStream.findLoadedPost(data.id);
+    treeRegisteredPostIds.add(String(data.id));
+    if (loaded) return { post: loaded, ownsPost: false };
+    return { post: createTreePost(owner, topic, data), ownsPost: false };
+  }
+
+  // 权限与忽略列表只来自原站模型：桥一次投影给内容脚本，内容脚本不自己推断登录与发帖权限。
+  function replyTreeContext(owner, topic) {
+    const currentUser = owner.lookup("service:current-user");
+    return {
+      currentUserId: currentUser?.id ?? null,
+      canCreatePost: Boolean(topic.details?.can_create_post),
+      ignoredUsernames: [...(currentUser?.ignored_users || [])],
+      revealedIgnoredIds: [...treeRevealedIgnoredIds]
+    };
+  }
 
   function jumpReply(postNumber, postId, requestId) {
     document.dispatchEvent(new CustomEvent("betterld:reply-jump", {
@@ -484,7 +541,12 @@
     const topic = owner.lookup("controller:topic")?.model;
     if (String(topic?.id) !== topicId) return;
     const Component = window.require("@ember/component");
-    const Native = window.require("discourse/components/post/cooked-html").default;
+    const NativeCooked = window.require("discourse/components/post/cooked-html").default;
+    class Native extends NativeCooked {
+      get isIgnored() {
+        return !treeRevealedIgnoredIds.has(String(this.args.post.id)) && super.isIgnored;
+      }
+    }
     const Container = window.require("discourse/components/render-glimmer-container").default;
     const curry = window.require("ember-curry-component").default;
     const join = window.require("@ember/runloop").join;
@@ -506,14 +568,13 @@
             throw error;
           }
         }
-        const loaded = topic.postStream.posts.find((post) => String(post.id) === String(body.post.id));
-        ownsPost = body.post.embeddedPost || !loaded || loaded.cooked !== body.post.cooked;
-        post = ownsPost ? owner.factoryFor("model:post").create({ ...body.post, topic_id: topic.id, topic }) : loaded;
+        // 正文统一走 identityMap：已登记的楼层复用原站模型，旧载荷不再新建一份覆盖它。
+        ({ post, ownsPost } = resolveTreePost(owner, topic, body.post));
         const Host = Component.default.extend({
           layout: Component.getComponentTemplate(Container),
           renderGlimmer: { _registrations: [{
             element,
-            component: curry(Native, { post, streamElement: true, className: "cooked", embeddedPost: body.post.embeddedPost, selectionBarrier: false }, owner),
+            component: curry(Native, { post, streamElement: true, className: body.post.embeddedPost ? "betterld-embedded-cooked" : "cooked", embeddedPost: body.post.embeddedPost, selectionBarrier: Boolean(body.post.embeddedPost) }, owner),
             data: {}
           }] }
         });
@@ -543,6 +604,21 @@
     }
   });
 
+  // 注册先于挂载同步执行：树内所有楼层进同一个 identityMap，后续正文/操作/回复/Boost 共用同一模型。
+  document.addEventListener("betterld:reply-register-posts", (event) => {
+    const { topicId, posts } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const topic = owner.lookup("controller:topic")?.model;
+      if (String(topic?.id) !== topicId) throw new Error('主题已切换，楼层尚未登记');
+      registerTreePosts(owner, topic, posts);
+      document.dispatchEvent(new CustomEvent('betterld:reply-posts-registered', { detail: JSON.stringify({ topicId, postIds: posts.map((post) => post.id) }) }));
+      queueMicrotask(() => document.dispatchEvent(new CustomEvent('betterld:reply-sync', { detail: JSON.stringify({ topicId }) })));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent('betterld:reply-data', { detail: JSON.stringify({ topicId, error: error.message }) }));
+    }
+  });
+
   document.addEventListener("betterld:reply-menu-mount", (event) => {
     const { id, topicId, post: data } = JSON.parse(event.detail);
     let host;
@@ -557,9 +633,8 @@
       if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
       const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(id)}"]`);
       if (!element) throw new Error("帖子操作入口已移除");
-      const loaded = topic.postStream.posts.find((entry) => String(entry.id) === String(data.id));
-      ownsPost = !loaded;
-      post = loaded || window.require("discourse/models/post").default.create({ ...data, topic_id: topic.id, topic, store: owner.lookup("service:store") });
+      // 操作菜单同样走 identityMap：树已登记的楼层用同一模型，不再新建或 HTTP 补读。
+      ({ post, ownsPost } = resolveTreePost(owner, topic, data));
       const Native = window.require("discourse/components/post/menu").default;
       // 已在树操作栏提供的动作保留一份；其余顺序、权限与插件注册交给原站。
       const existingActions = new Set(["like", "copyLink", "reply", "replies", "showMore", "discourse-reactions-actions", "discourse-boosts-action"]);
@@ -773,10 +848,20 @@
       : post.user?.status === undefined ? post.user_status ?? null : post.user.status;
   }
 
+  // 原站模型上的 computed 投影：HTTP 载荷里没有这两个字段，只有在模型上取值，
+  // 树内的点赞入口才不会因为字段缺失而全部禁用。
+  function postComputedValues(post) {
+    return {
+      user_status: postSyncStatus(post),
+      showLike: post.showLike === undefined ? null : Boolean(post.showLike),
+      canToggleLike: post.canToggleLike === undefined ? null : Boolean(post.canToggleLike)
+    };
+  }
+
   function snapshotPost(post) {
     const valueSnapshot = (value) => value && typeof value === "object" ? JSON.stringify(value) : value;
     const fields = postFields.map((key) => valueSnapshot(post[key]));
-    fields.push(valueSnapshot(postSyncStatus(post)));
+    fields.push(...Object.values(postComputedValues(post)).map(valueSnapshot));
     fields.push(JSON.stringify(post.boosts?.map((boost) => [
       ...boostFields.map((key) => boost[key]), ...boostUserFields.map((key) => boost.user?.[key])
     ])));
@@ -786,7 +871,7 @@
   function postSyncValues(post) {
     return {
       ...Object.fromEntries(postFields.map((key) => [key, post[key]])),
-      user_status: postSyncStatus(post),
+      ...postComputedValues(post),
       boosts: post.boosts?.map((boost) => ({
         ...Object.fromEntries(boostFields.map((key) => [key, boost[key]])),
         user: Object.fromEntries(boostUserFields.map((key) => [key, boost.user?.[key]]))
@@ -804,12 +889,23 @@
         replyTopicId = "";
         replySignature = "";
         replyPostSnapshots.clear();
+        treeRegisteredPostIds.clear();
+        treeRevealedIgnoredIds.clear();
+        treeRegisteredTopicId = '';
+        releaseTreeReading();
         resetFloorTimeline();
         return;
       }
       if (replyTopicId !== topicId) {
         replySignature = "";
         replyPostSnapshots.clear();
+        // 内容脚本可能已为新主题登记，不因首个同步再清一次。
+        if (treeRegisteredTopicId !== topicId) {
+          treeRegisteredPostIds.clear();
+          treeRevealedIgnoredIds.clear();
+          treeRegisteredTopicId = topicId;
+        }
+        releaseTreeReading();
       }
       replyTopicId = topicId;
       const stream = topic.postStream;
@@ -821,6 +917,12 @@
           posts.set(String(entry.post.id), entry.post);
         }
       }
+      // 树登记的楼层不在 posts/stream 里（storePost 只登记 identityMap），按 id 取回同一模型。
+      for (const id of treeRegisteredPostIds) {
+        if (posts.has(id)) continue;
+        const post = stream.findLoadedPost(id);
+        if (post) posts.set(id, post);
+      }
       const changedPosts = [];
       const snapshots = new Map();
       for (const [id, post] of posts) {
@@ -831,7 +933,7 @@
         const previous = replyPostSnapshots.get(id);
         if (!previous || snapshot.some((value, index) => value !== previous[index])) changedPosts.push(postSyncValues(post));
       }
-      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges };
+      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges, context: replyTreeContext(owner, topic) };
       const signature = JSON.stringify(data);
       if (signature !== replySignature || changedPosts.length) {
         document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ ...data, posts: changedPosts }) }));
@@ -846,14 +948,114 @@
     }
   });
 
+  document.addEventListener('betterld:reply-read-state-request', (event) => {
+    const { topicId } = JSON.parse(event.detail);
+    try {
+      const owner = window.require('discourse/lib/get-owner').getOwnerWithFallback();
+      const topic = owner.lookup('controller:topic').model;
+      if (String(topic?.id) !== topicId) throw new Error('当前主题与已读同步请求不一致');
+      const posts = new Map(topic.postStream.posts.map((post) => [String(post.id), post]));
+      if (treeRegisteredTopicId === topicId) {
+        for (const id of treeRegisteredPostIds) {
+          if (posts.has(id)) continue;
+          const post = topic.postStream.findLoadedPost(id);
+          if (post) posts.set(id, post);
+        }
+      }
+      document.dispatchEvent(new CustomEvent('betterld:reply-read-state', {
+        detail: JSON.stringify({ topicId, posts: [...posts.values()].map((post) => ({ id: post.id, read: post.read })) })
+      }));
+    } catch (error) {
+      document.dispatchEvent(new CustomEvent('betterld:reply-read-state', {
+        detail: JSON.stringify({ topicId, error: error.message || '原站已读状态读取失败' })
+      }));
+    }
+  });
+
+  let treeReading = null;
+
+  function releaseTreeReading() {
+    if (!treeReading) return;
+    const { service, original, wrapped, appEvents, onTimings, onFailure, jquery } = treeReading;
+    if (service.setOnscreen === wrapped) {
+      original.call(service, [], []);
+      service.setOnscreen = original;
+    }
+    appEvents.off('topic:timings-sent', onTimings);
+    jquery(document).off('ajaxError.betterldReading', onFailure);
+    treeReading = null;
+  }
+
+  function trackTreeReading(owner, topic, visiblePostIds) {
+    const service = owner.lookup('service:screen-track');
+    if (treeReading && (treeReading.service !== service || treeReading.topicId !== String(topic.id))) releaseTreeReading();
+    if (!treeReading) {
+      const original = service.setOnscreen;
+      const appEvents = owner.lookup('service:app-events');
+      const reading = { service, original, appEvents, topicId: String(topic.id), onScreen: [], readOnScreen: [] };
+      reading.wrapped = function (onscreen, readOnscreen) {
+        const active = !document.hidden && String(owner.lookup('controller:topic').model?.id) === reading.topicId
+          && document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]');
+        return original.call(this, active ? reading.onScreen : onscreen, active ? reading.readOnScreen : readOnscreen);
+      };
+      reading.jquery = window.require('jquery').default;
+      reading.onFailure = (_event, xhr, request) => {
+        if (new URL(request.url, location.href).pathname !== '/topics/timings') return;
+        const requestTopicId = typeof request.data === 'string' ? new URLSearchParams(request.data).get('topic_id') : request.data?.topic_id;
+        if (String(requestTopicId) !== reading.topicId || String(owner.lookup('controller:topic').model?.id) !== reading.topicId) return;
+        const errors = xhr.responseJSON?.errors;
+        const message = Array.isArray(errors) ? errors.join('；') : xhr.responseJSON?.error || xhr.statusText || '网络请求失败';
+        document.dispatchEvent(new CustomEvent('betterld:reply-reading-status', {
+          detail: JSON.stringify({ topicId: reading.topicId, error: `阅读登记失败（HTTP ${xhr.status}）：${message}；等待原站恢复` })
+        }));
+      };
+      reading.onTimings = (data) => {
+        if (String(data.topic_id) !== reading.topicId || String(owner.lookup('controller:topic').model?.id) !== reading.topicId) return;
+        document.dispatchEvent(new CustomEvent('betterld:reply-reading-status', { detail: JSON.stringify({ topicId: reading.topicId, error: '' }) }));
+        const numbers = new Set(Object.keys(data.timings).map(Number));
+        for (const id of treeRegisteredPostIds) {
+          const post = topic.postStream.findLoadedPost(id);
+          if (post && numbers.has(post.post_number)) post.set('read', true);
+        }
+        document.dispatchEvent(new CustomEvent('betterld:reply-sync', { detail: JSON.stringify({ topicId: reading.topicId }) }));
+      };
+      service.setOnscreen = reading.wrapped;
+      appEvents.on('topic:timings-sent', reading.onTimings);
+      reading.jquery(document).on('ajaxError.betterldReading', reading.onFailure);
+      treeReading = reading;
+    }
+    const ignored = owner.lookup('service:current-user')?.ignored_users || [];
+    const posts = [...new Set(visiblePostIds)].map((id) => topic.postStream.findLoadedPost(id))
+      .filter((post) => post && !post.cooked_hidden && typeof post.cooked === 'string' && post.cooked.trim()
+        && (!ignored.includes(post.username) || treeRevealedIgnoredIds.has(String(post.id))));
+    treeReading.onScreen = posts.map((post) => post.post_number);
+    treeReading.readOnScreen = posts.filter((post) => post.read).map((post) => post.post_number);
+    treeReading.original.call(service, treeReading.onScreen, treeReading.readOnScreen);
+  }
+
+  document.addEventListener('betterld:reply-reading-release', releaseTreeReading);
+  window.addEventListener('pagehide', releaseTreeReading);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) releaseTreeReading();
+  });
+
   document.addEventListener("betterld:reply-position", (event) => {
-    if (document.hidden) return;
-    const { topicId, postNumber, active, timeoutMs } = JSON.parse(event.detail);
+    const { topicId, postNumber, postId, ratio, visiblePostIds = [], active, timeoutMs } = JSON.parse(event.detail);
     try {
       const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
       const controller = owner.lookup("controller:topic");
       const topic = controller.model;
-      if (String(topic?.id) !== topicId) return;
+      if (String(topic?.id) !== topicId || !active || document.hidden) {
+        releaseTreeReading();
+        if (String(topic?.id) !== topicId) return;
+      } else {
+        trackTreeReading(owner, topic, visiblePostIds);
+        const post = topic.postStream.findLoadedPost(postId);
+        if (post && visiblePostIds.includes(post.id) && topic.postStream.stream.includes(post.id)) {
+          if (String(controller.currentPostId) !== String(post.id)) controller.currentPostChanged({ post });
+          controller.currentPostScrolled({ percent: Number(ratio) || 0 });
+        }
+      }
       syncFloorTimeline(topic, Number(active ? postNumber : controller.currentPostNumber), active, timeoutMs);
     } catch (error) {
       console.error("[betterLD] floor timeline sync failed", error);
@@ -877,7 +1079,9 @@
       const topic = controller.model;
       if (String(topic?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新回复");
       if (!topic.details.can_create_post) throw new Error("当前主题不允许回复");
-      const post = topic.postStream.findLoadedPost(postId) || await owner.lookup("service:store").find("post", postId);
+      // 树登记的楼层已在原站 identityMap 里，不再另发一次 HTTP find。
+      const post = topic.postStream.findLoadedPost(postId);
+      if (!post) throw new Error("目标楼层尚未登记，请重试");
       if (String(controller.model?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新回复");
       if (Number(post.topic_id) !== Number(topicId)) throw new Error("回复目标不属于当前主题");
       post.set("topic", topic);
@@ -902,9 +1106,10 @@
       if (String(topic?.id) !== topicId) throw new Error("主题已切换，请在当前主题重新 Boost");
       const currentUser = owner.lookup("service:current-user");
       if (!currentUser) throw new Error("请登录后使用 Boost");
-      const post = topic.postStream.findLoadedPost(postId) || await owner.lookup("service:store").find("post", postId);
+      // 树登记的楼层已在原站 identityMap 里，不再另发一次 HTTP find。
+      const post = topic.postStream.findLoadedPost(postId);
       if (!post) throw new Error("目标楼层尚未载入，请重试");
-      if (post.can_boost === false) throw new Error("这层已经 Boost 过了");
+      if (post.can_boost !== true) throw new Error("当前楼层不允许 Boost");
       post.set("topic", topic);
       // 插件模块不在核心模块命名空间，直接走原站的 ajax（带 CSRF）调同一接口，并按插件自己的方式写回模型。
       const { ajax } = window.require("discourse/lib/ajax");
@@ -930,6 +1135,89 @@
     document.dispatchEvent(new CustomEvent("betterld:reply-boosted", {
       detail: JSON.stringify({ id, error, boost })
     }));
+  });
+
+  document.addEventListener('betterld:reply-action', async (event) => {
+    const { id, topicId, postId, action, boostId, permissions, cooked, updated } = JSON.parse(event.detail);
+    let result = {};
+    try {
+      const owner = window.require('discourse/lib/get-owner').getOwnerWithFallback();
+      const controller = owner.lookup('controller:topic');
+      const topic = controller.model;
+      const post = topic?.postStream.findLoadedPost(postId);
+      const assertTopic = () => {
+        if (String(controller.model?.id) !== topicId || Number(post?.topic_id) !== Number(topicId)) throw new Error('目标楼层不属于当前主题');
+      };
+      assertTopic();
+      if (action === 'reveal') {
+        if (!post.can_see_hidden_post || typeof cooked !== 'string' || !cooked.trim()) throw new Error('隐藏正文权限或响应无效');
+        post.setProperties({ cooked, cooked_hidden: false });
+      } else if (action === 'like-check') {
+        if (!owner.lookup('service:current-user') || post.showLike === false || post.canToggleLike === false) throw new Error('当前不允许更改回应');
+      } else if (action === 'reaction-update') {
+        if (Number(updated?.id) !== Number(post.id) || Number(updated.post_number) !== post.post_number) throw new Error('回应结果楼层不匹配');
+        post.setProperties(Object.fromEntries(['reactions', 'reaction_users_count', 'current_user_reaction', 'actions_summary'].filter((key) => key in updated).map((key) => [key, updated[key]])));
+      } else if (action === 'ignore-reveal') {
+        const ignored = owner.lookup('service:current-user')?.ignored_users || [];
+        if (!ignored.includes(post.username)) throw new Error('当前楼层不处于忽略状态');
+        if (updated) {
+          if (Number(updated.id) !== Number(post.id) || updated.post_number !== post.post_number || (updated.topic_id !== undefined && Number(updated.topic_id) !== Number(topicId))) throw new Error('忽略回复响应身份不匹配');
+          post.setProperties(Object.fromEntries(postFields.filter((key) => key in updated).map((key) => [key, updated[key]])));
+        }
+        if (!post.cooked_hidden && !post.deleted_post_placeholder && !post.deleted_at && !post.user_deleted && (typeof post.cooked !== 'string' || !post.cooked.trim())) throw new Error('该忽略回复的正文尚未载入');
+        treeRevealedIgnoredIds.add(String(post.id));
+      } else {
+        const currentUser = owner.lookup('service:current-user');
+        if (!currentUser) throw new Error('请登录后管理 Boost');
+        const boost = post.boosts?.find((entry) => Number(entry.id) === Number(boostId));
+        if (!boost) throw new Error('这条 Boost 已不存在');
+        if (permissions) Object.assign(boost, {
+          can_delete: permissions.can_delete, can_flag: permissions.can_flag,
+          available_flags: permissions.available_flags, user_flag_status: permissions.user_flag_status
+        });
+        if (action === 'boost-delete') {
+          if (boost.can_delete !== true) throw new Error('当前无权删除这条 Boost');
+          const own = Number(boost.user?.id) === Number(currentUser.id);
+          if (!own) {
+            document.dispatchEvent(new CustomEvent('betterld:reply-action-wait', { detail: JSON.stringify({ id, waiting: true }) }));
+            try {
+              const confirmed = await owner.lookup('service:dialog').yesNoConfirm({
+                message: window.require('discourse-i18n').i18n('discourse_boosts.confirm_delete_boost')
+              });
+              if (!confirmed) result.cancelled = true;
+            } finally {
+              document.dispatchEvent(new CustomEvent('betterld:reply-action-wait', { detail: JSON.stringify({ id, waiting: false }) }));
+            }
+          }
+          if (!result.cancelled) {
+            assertTopic();
+            if (boost.can_delete !== true || !post.boosts?.some((entry) => Number(entry.id) === Number(boost.id))) throw new Error('Boost状态已改变，请重试');
+            await window.require('discourse/lib/ajax').ajax(`/discourse-boosts/boosts/${boost.id}`, { type: 'DELETE' });
+            assertTopic();
+            post.set('boosts', (post.boosts || []).filter((entry) => Number(entry.id) !== Number(boost.id)));
+            if (own) post.set('can_boost', true);
+          }
+        } else if (action === 'boost-flag') {
+          if (boost.can_flag !== true || !Array.isArray(boost.available_flags)) throw new Error('当前无权举报这条 Boost或举报选项不可用');
+          const moduleName = Object.keys(window.require.entries).find((name) => name.endsWith('/lib/boost-flag'));
+          if (!moduleName) throw new Error('原站 Boost 举报组件不可用');
+          const FlagTarget = window.require(moduleName).default;
+          const flagTarget = new FlagTarget(owner);
+          flagTarget.boostId = boost.id;
+          flagTarget.availableFlags = boost.available_flags;
+          owner.lookup('service:modal').show(window.require('discourse/components/modal/flag').default, {
+            model: { flagTarget, flagModel: { ...boost, user_id: boost.user.id, username: boost.user.username }, setHidden: () => {} }
+          });
+        } else if (action !== 'boost-inspect') throw new Error('不支持的树内操作');
+        // 嵌套 Boost 对象不是 tracked；更新数组让所有原站宿主收到权限变化。
+        post.set('boosts', [...(post.boosts || [])]);
+      }
+      result.post = postSyncValues(post);
+      queueMicrotask(() => document.dispatchEvent(new CustomEvent('betterld:reply-sync', { detail: JSON.stringify({ topicId }) })));
+    } catch (error) {
+      result.error = error.message || '原站操作失败';
+    }
+    document.dispatchEvent(new CustomEvent('betterld:reply-action-result', { detail: JSON.stringify({ id, ...result }) }));
   });
 
   // 当前列表路由的主题数据就在站点自己的模型里（服务端预载、无限滚动、客户端路由取回的都在），

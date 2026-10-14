@@ -4015,8 +4015,56 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   cursor: pointer;
 }
 
+/* 隐藏/删除/忽略是原站给出的合法状态：正文位只显示状态说明与可恢复入口，不展示缓存正文。 */
+.betterld-reply-tree__state-notice {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.14);
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.betterld-reply-tree__state-action {
+  margin-top: 8px;
+}
+
+.betterld-reply-tree__actions[hidden] {
+  display: none;
+}
+
+.betterld-reply-tree__read-state {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0.75em;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--betterld-primary);
+  opacity: 1;
+  transition: opacity 240ms ease-out, visibility 0s;
+}
+
+.betterld-reply-tree__read-state.is-read {
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s, 240ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .betterld-reply-tree__read-state {
+    transition: none;
+  }
+}
+
 .betterld-reply-tree__item[data-betterld-context="true"] > .betterld-reply-tree__card {
   border-color: rgb(var(--betterld-outline-rgb) / 0.22);
+}
+
+.betterld-reply-tree__mine[hidden] {
+  display: none;
 }
 
 .betterld-reply-tree__mine {
@@ -4079,7 +4127,7 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 }
 
 .betterld-reply-tree__item {
-  /* 每楼由自身操作栏定位，未测量的隐藏楼不继承祖先坐标。 */
+  /* 每楼独立保存收放坐标，隐藏楼不继承祖先坐标。 */
   --betterld-branch-toggle-y: initial;
   --betterld-reply-tail-y: initial;
   --betterld-reply-trunk-end: initial;
@@ -4131,6 +4179,8 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 }
 
 .betterld-reply-tree__head {
+  position: relative;
+  padding-inline-end: 18px;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -4612,7 +4662,7 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   padding-left: 24px;
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__collapse) > .betterld-reply-tree__card::after {
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children) > .betterld-reply-tree__card::after {
   content: "";
   position: absolute;
   top: 36px;
@@ -4634,6 +4684,15 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 }
 
 .betterld-reply-tree__children[hidden] { display: none; }
+
+.betterld-reply-tree__boosts .discourse-boosts__cooked[role="button"] {
+  cursor: pointer;
+}
+
+.betterld-reply-tree__boosts .discourse-boosts__cooked[role="button"]:focus-visible {
+  outline: 2px solid var(--betterld-primary);
+  outline-offset: 2px;
+}
 
 .betterld-reply-tree__children > .betterld-reply-tree__item::after {
   content: "";
