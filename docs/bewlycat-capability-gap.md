@@ -33,7 +33,7 @@
 | B1 页面内列表布局切换 | `enable_grid_layout_switcher` | 浮动操作栏新增 `layout` 项（`actionRailItems`），点击按 `settingsEnums.topicListLayoutMode` 循环「阅读卡 → 原生列表」，只写 `topicListLayoutMode` 这一个权威取值 |
 | B2 卡片标签显隐 | `show_video_card_video_tag` | `showTopicTags`（默认开），只隐藏阅读卡上的标签行 |
 | B3 统计与活动时间细分 | `show_video_card_publish_time` / `show_video_card_view_count` / `show_video_card_like_count` | `showTopicMeta` 仍是总开关，新增 `showTopicActivityTime` / `showTopicReplies` / `showTopicLikes` / `showTopicViews`；元信息行拆成回复数与活动时间两段（`data-betterld-meta-part`），统计项带 `data-betterld-stat`，全部按根 dataset 由 CSS 显隐，不新增请求 |
-| B4 已看标记 | `show_video_watched_badge` | `showTopicWatchedState`（默认开）+ 本机浏览记录（`visitedTopicStorageKey`：访问 `/t/{slug}/{id}` 时记下主题 id），卡片出现「已看」徽标 |
+| B4 已看标记 | `show_video_watched_badge` | `showTopicWatchedState`（默认开）；现行实现读取原站已有主题模型的 `visited` 或 `last_read_post_number > 0`，未知时隐藏。独立本机浏览历史已移除，以原站「已读」列表替代 |
 | B5 搜索历史复用 | `enable_search_history` | `searchHistoryPanelEnabled`：站内搜索框聚焦时列出本机历史，点条目回填（页面带搜索表单时直接提交）、单条删除、清空全部 |
 | B6 版本更新提醒 | `enable_version_reminder` | 关于页「检查更新」按钮：只在点击时经后台 service worker 取 GitHub Releases 最新 tag 与本地版本号比对，只提示、不自动更新、不轮询 |
 | B7 链接打开方式细分 | `top_bar_link_opening_behavior` / `search_bar_link_opening_behavior` | `navigationOpenMode` / `searchOpenMode` 补 `background`、`currentTabIfHomepage`、`currentTabIfNotHomepage`；取值解析只在 `linkOpenBehavior` 一处，后台标签页经后台 service worker 的 `open-link` 消息创建 |

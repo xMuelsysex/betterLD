@@ -6,14 +6,11 @@
   const config = globalThis.BETTERLD_CONFIG;
   const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
   const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
-  const historyApi = globalThis.BETTERLD_HISTORY_STORE;
-  const groups = { later: "稍后再看", favorites: "收藏", history: "浏览历史" };
-  const tabOrder = ["later", "favorites", "history"];
+  const groups = { later: "稍后再看", favorites: "收藏" };
+  const tabOrder = ["later", "favorites"];
   let library = libraryStore.empty();
-  let history = historyApi.empty();
   let ready = false;
   let errorMessage = "";
-  let historyError = "";
   let activeGroup = "later";
   let query = "";
   let folderFilter = "*";
@@ -24,7 +21,6 @@
   let toolbar;
   let searchInput;
   let folderFilterSelect;
-  let clearHistory;
   let folderManager;
   let items;
   let list;
@@ -34,9 +30,10 @@
   let fabPosition = null;
   let drag = null;
   let suppressClick = false;
-  let historyPending = false;
   const pending = new Set();
   const failedBookmarks = new Map();
+  const topicMetadata = new Map();
+  let currentMetadataId;
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -71,20 +68,6 @@
     render();
   }
 
-  // 浏览历史与收藏库共用一个面板但数据互相独立；这里只读取，写入交给后台串行队列。
-  async function readHistory() {
-    try {
-      const stored = await api.storage.local.get(config.visitedTopicStorageKey);
-      history = historyApi.read(stored[config.visitedTopicStorageKey]);
-      historyError = "";
-    } catch (error) {
-      history = historyApi.empty();
-      historyError = `浏览历史读取失败：${error.message}`;
-      console.error("[betterLD] history read failed", error);
-    }
-    render();
-  }
-
   function send(message) {
     if (globalThis.browser) return api.runtime.sendMessage(message);
     return new Promise((resolve, reject) => {
@@ -102,7 +85,7 @@
     pending.add(key);
     syncButtons();
     try {
-      const response = await send({ type: "library-toggle", group, topic, remove });
+      const response = await send({ type: "library-toggle", group, topic: { ...topic, ...topicMetadata.get(String(topic.id)) }, remove });
       if (!response?.ok) throw new Error(response?.error || "收藏写入没有返回结果");
       await readLibrary();
       return ready;
@@ -348,9 +331,6 @@
   }
 
   function emptyMessage() {
-    if (activeGroup === "history") {
-      return history.records.length ? "没有匹配的浏览记录，试试清空搜索词。" : "还没有浏览记录。";
-    }
     if (!library[activeGroup].length) {
       return activeGroup === "later"
         ? "点击主题旁的「稍后再看」即可添加。"
@@ -366,17 +346,7 @@
         return false;
       }
       return !keyword || item.title.toLowerCase().includes(keyword);
-    });
-  }
-
-  function historyLabel(record) {
-    return record.title || `主题 #${record.id}`;
-  }
-
-  function visibleHistory() {
-    const keyword = query.trim().toLowerCase();
-    return historyApi.sortRecords(history.records).filter((record) => !keyword
-      || [historyLabel(record), record.category?.name || "", ...(record.tags || [])].join(" ").toLowerCase().includes(keyword));
+    }).sort((a, b) => b.savedAt - a.savedAt);
   }
 
   function folderSignatureOf() {
@@ -384,17 +354,14 @@
   }
 
   function renderToolbar() {
-    // 读取失败时保留工具条：清空入口是非法数据唯一的恢复路径，不能随错误一起隐藏。
-    if (activeGroup !== "history" && !ready) {
+    if (!ready) {
       toolbar.hidden = true;
       return;
     }
     toolbar.hidden = false;
     if (searchInput.value !== query) searchInput.value = query;
-    searchInput.placeholder = activeGroup === "history" ? "搜索标题、分类或标签" : "搜索标题";
+    searchInput.placeholder = "搜索标题";
     folderFilterSelect.hidden = activeGroup !== "favorites";
-    clearHistory.hidden = activeGroup !== "history";
-    clearHistory.disabled = historyPending || (!history.records.length && !historyError);
     const signature = folderSignatureOf();
     if (folderFilterSelect.dataset.signature !== signature) {
       folderFilterSelect.dataset.signature = signature;
@@ -509,31 +476,11 @@
     }
   }
 
-  async function historyCommand(message, errorLabel) {
-    if (historyPending) return false;
-    historyPending = true;
-    render();
-    try {
-      const response = await send(message);
-      if (!response?.ok) throw new Error(response?.error || "浏览历史操作失败");
-      await readHistory();
-      return true;
-    } catch (error) {
-      historyError = `${errorLabel}：${error.message}`;
-      console.error("[betterLD] history command failed", error);
-      render();
-      return false;
-    } finally {
-      historyPending = false;
-      render();
-    }
-  }
-
   function topicFloorHref(record) {
     return `${location.origin}/t/topic/${record.id}${record.postNumber === undefined ? "" : `/${record.postNumber}`}`;
   }
 
-  // 标题与最近阅读楼层都用整页跳转打开深链：原站路由会拦截站内点击，完整加载才能可靠定位楼层。
+  // 收藏标题与楼层链接都整页加载深链，确保原站可靠定位收藏楼层。
   function deepLink(element, record) {
     element.href = topicFloorHref(record);
     element.addEventListener("click", (event) => {
@@ -544,11 +491,7 @@
     });
   }
 
-  function historyRow(record) {
-    const label = historyLabel(record);
-    const row = element("div", "betterld-library-item");
-    const link = element("a", "betterld-library-link", label);
-    deepLink(link, record);
+  function appendItemDetails(row, record, topic) {
     const meta = element("p", "betterld-library-meta");
     const author = element("span", "betterld-library-author");
     if (record.authorAvatar) {
@@ -562,44 +505,48 @@
     }
     author.append(element("span", "", record.author === undefined ? "发帖人未知" : `@${record.author}`));
     meta.append(author, " · ",
-      element("span", "", record.visitedAt === undefined ? "日期未知" : new Date(record.visitedAt).toLocaleString()));
-    if (record.postNumber !== undefined) {
-      const floor = element("a", "betterld-library-floor", `最近阅读 #${record.postNumber} 楼`);
-      deepLink(floor, record);
+      element("span", "", new Date(topic.savedAt).toLocaleString()));
+    if (topic.postNumber !== undefined) {
+      const floor = element("a", "betterld-library-floor", `收藏楼层 #${topic.postNumber} 楼`);
+      deepLink(floor, topic);
       meta.append(" · ", floor);
     }
-    const taxonomy = element("div", "betterld-library-history-taxonomy");
-    taxonomy.append(element("span", "betterld-library-history-category", record.category?.name || (record.category === null ? "未分类" : "分类未知")));
-    for (const tag of record.tags || []) taxonomy.append(element("span", "betterld-library-history-tag", `#${tag}`));
-    if (record.tags === undefined) taxonomy.append(element("span", "betterld-library-history-unknown", "标签未知"));
-    const controls = element("div", "betterld-library-item__controls");
-    const remove = element("button", "betterld-library-remove", "移除");
-    remove.type = "button";
-    remove.disabled = historyPending;
-    remove.setAttribute("aria-label", `从浏览历史移除：${label}`);
-    remove.addEventListener("click", () => historyCommand({ type: "history-remove", id: record.id }, "移除浏览记录失败"));
-    controls.append(remove);
-    row.append(link, taxonomy, meta, controls);
-    return row;
+    const taxonomy = element("div", "betterld-library-taxonomy");
+    taxonomy.append(element("span", "betterld-library-category", record.category?.name || (record.category === null ? "未分类" : "分类未知")));
+    for (const tag of record.tags || []) taxonomy.append(element("span", "betterld-library-tag", `#${tag}`));
+    if (record.tags === undefined) taxonomy.append(element("span", "betterld-library-unknown", "标签未知"));
+    row.append(taxonomy, meta);
+  }
+
+  function appendDatedRows(records, createRow) {
+    let previousGroup = null;
+    for (const record of records) {
+      const group = new Date(record.savedAt).toLocaleDateString();
+      if (group !== previousGroup) {
+        items.append(element("h3", "betterld-library-date", group));
+        previousGroup = group;
+      }
+      items.append(createRow(record));
+    }
   }
 
   function render() {
     if (!panel) return;
-    status.textContent = [errorMessage, historyError].filter(Boolean).join(" · ");
+    status.textContent = errorMessage;
     status.hidden = !status.textContent;
-    status.dataset.error = String(Boolean(errorMessage || historyError));
+    status.dataset.error = String(Boolean(errorMessage));
     for (const tab of tabs.children) {
       const active = tab.dataset.group === activeGroup;
       tab.setAttribute("aria-selected", String(active));
       tab.tabIndex = active ? 0 : -1;
-      const count = tab.dataset.group === "history" ? history.records.length : library[tab.dataset.group].length;
+      const count = library[tab.dataset.group].length;
       setText(tab, `${groups[tab.dataset.group]} ${count}`);
     }
     list.setAttribute("aria-labelledby", `betterld-library-tab-${activeGroup}`);
     renderToolbar();
     renderFolders();
     items.replaceChildren();
-    if (activeGroup !== "history" && failedBookmarks.size) {
+    if (failedBookmarks.size) {
       const retry = element("button", "betterld-library-save", "重试同步楼层书签");
       retry.type = "button";
       retry.addEventListener("click", () => {
@@ -607,29 +554,11 @@
       });
       items.append(retry);
     }
-    if (activeGroup === "history" ? Boolean(historyError) : !ready) {
-      const retry = element("button", "betterld-library-save", activeGroup === "history" ? "重试读取浏览历史" : "重试读取收藏库");
+    if (!ready) {
+      const retry = element("button", "betterld-library-save", "重试读取收藏库");
       retry.type = "button";
-      retry.addEventListener("click", activeGroup === "history" ? readHistory : readLibrary);
+      retry.addEventListener("click", readLibrary);
       items.append(retry);
-      positionPanel();
-      return;
-    }
-    if (activeGroup === "history") {
-      const records = visibleHistory();
-      if (!records.length) items.append(element("p", "betterld-library-empty", emptyMessage()));
-      else {
-        let previousGroup = null;
-        for (const record of records) {
-          const date = record.visitedAt === undefined ? null : new Date(record.visitedAt);
-          const group = date ? date.toLocaleDateString() : "日期未知";
-          if (group !== previousGroup) {
-            items.append(element("h3", "betterld-library-history-date", group));
-            previousGroup = group;
-          }
-          items.append(historyRow(record));
-        }
-      }
       positionPanel();
       return;
     }
@@ -639,17 +568,12 @@
       positionPanel();
       return;
     }
-    for (const topic of visible) {
+    appendDatedRows(visible, (topic) => {
       const row = element("div", "betterld-library-item");
-      const label = topic.postNumber === undefined ? topic.title : `${topic.title} · #${topic.postNumber} 楼`;
-      const link = element("a", "betterld-library-link", label);
-      link.href = topic.href;
-      link.addEventListener("click", (event) => {
-        if (topic.postNumber === undefined || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        event.stopPropagation();
-        location.assign(entry.href(topic));
-      });
+      const link = element("a", "betterld-library-link", topic.title);
+      deepLink(link, topic);
+      row.append(link);
+      appendItemDetails(row, { ...topic, ...topicMetadata.get(topic.id) }, topic);
       const controls = element("div", "betterld-library-item__controls");
       if (activeGroup === "favorites") {
         const move = element("select", "betterld-library-move");
@@ -671,9 +595,9 @@
       const group = activeGroup;
       remove.addEventListener("click", () => change(group, topic, true));
       controls.append(remove);
-      row.append(link, controls);
-      items.append(row);
-    }
+      row.append(controls);
+      return row;
+    });
     positionPanel();
   }
 
@@ -683,7 +607,7 @@
     fab = element("button", "betterld-library-fab");
     fab.type = "button";
     fab.append(icon());
-    fab.setAttribute("aria-label", "打开收藏库：稍后再看、收藏与浏览历史；可拖动，Alt 加方向键移动");
+    fab.setAttribute("aria-label", "打开收藏库：稍后再看与收藏；可拖动，Alt 加方向键移动");
     fab.title = "点击打开收藏库，拖动改变位置；Alt + 方向键移动";
     fab.setAttribute("aria-expanded", "false");
     fab.setAttribute("aria-controls", "betterld-topic-library");
@@ -701,7 +625,7 @@
     header.append(title, close);
     tabs = element("div", "betterld-library-tabs");
     tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "收藏与历史分类");
+    tabs.setAttribute("aria-label", "收藏分类");
     for (const group of tabOrder) {
       const tab = element("button", "betterld-library-tab", groups[group]);
       tab.type = "button";
@@ -739,18 +663,7 @@
       folderFilter = folderFilterSelect.value;
       render();
     });
-    clearHistory = element("button", "betterld-library-clear", "清空历史");
-    clearHistory.type = "button";
-    clearHistory.hidden = true;
-    clearHistory.addEventListener("click", () => {
-      // 数据读不出来时条数为 0，只能靠错误文案说明这次清空会丢掉什么。
-      const detail = historyError
-        ? `浏览历史当前无法读取（${historyError}），清空会删除本机上保存的全部历史与已看标记。`
-        : `清空全部浏览历史（${history.records.length} 条）？已看标记会一起移除，收藏库不受影响。`;
-      if (!globalThis.confirm(detail)) return;
-      historyCommand({ type: "history-clear" }, "清空浏览历史失败");
-    });
-    toolbar.append(searchInput, folderFilterSelect, clearHistory);
+    toolbar.append(searchInput, folderFilterSelect);
     list = element("div", "betterld-library-list");
     list.id = "betterld-library-list";
     list.setAttribute("role", "tabpanel");
@@ -787,9 +700,27 @@
       const host = row.querySelector(".betterld-topic-row__actions");
       const id = row.dataset.topicId;
       const title = row.querySelector("a.title, a.search-link")?.textContent.trim();
-      if (host && id && title) attachButton(host, "later", { id, title, href: `${location.origin}/t/topic/${id}` });
+      if (host && id && title) {
+        const categoryName = row.querySelector(".badge-category__name")?.textContent.trim();
+        const categoryId = row.querySelector("[data-category-id]")?.dataset.categoryId;
+        const author = row.dataset.filterAuthor;
+        const avatar = row.querySelector(".betterld-topic-row__avatar img")?.src;
+        const metadata = {
+          ...(author ? { author } : {}), ...(avatar ? { authorAvatar: avatar } : {}),
+          ...(categoryName && categoryId ? { category: { id: categoryId, name: categoryName } } : {}),
+          tags: [...row.querySelectorAll(".discourse-tag")].map(tag => tag.dataset.tagName || tag.textContent.trim()).filter(Boolean)
+        };
+        topicMetadata.set(id, { ...topicMetadata.get(id), ...metadata });
+        attachButton(host, "later", { id, title, href: `${location.origin}/t/topic/${id}` });
+      }
     }
     syncTopicButton();
+    const activeIds = new Set([
+      ...library.later.map((topic) => topic.id), ...library.favorites.map((topic) => topic.id),
+      ...[...document.querySelectorAll(".betterld-topic-row, .betterld-search-result")].map((row) => row.dataset.topicId),
+      currentMetadataId
+    ]);
+    for (const id of topicMetadata.keys()) if (!activeIds.has(id)) topicMetadata.delete(id);
     syncButtons();
   }
 
@@ -831,13 +762,21 @@
     queueBookmark(JSON.parse(event.detail));
   });
 
-  globalThis.BETTERLD_LIBRARY = Object.freeze({ sync });
+  function updateMetadata(records) {
+    for (const record of records) {
+      const id = String(record.id);
+      const metadata = libraryStore.metadataFields(record);
+      currentMetadataId = id;
+      topicMetadata.set(id, { ...topicMetadata.get(id), ...metadata });
+    }
+    render();
+  }
+
+  globalThis.BETTERLD_LIBRARY = Object.freeze({ sync, updateMetadata });
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (Object.hasOwn(changes, config.libraryStorageKey)) readLibrary();
-    if (Object.hasOwn(changes, config.visitedTopicStorageKey)) readHistory();
     if (fab && Object.hasOwn(changes, config.libraryPositionStorageKey)) readFabPosition();
   });
   readLibrary();
-  readHistory();
 })();

@@ -846,7 +846,7 @@
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     topicListAppearance: "Topic list appearance", topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
     topicFilterEnabled: "Enable topic filter",topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", libraryWebdavUrl: "Library backup WebDAV URL", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
-    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync", userMarksEnabled: "Enable user marks", visitedHistoryEnabled: "Record browsing history", replyTreeNameMode: "Reply author name"
+    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync", userMarksEnabled: "Enable user marks", replyTreeNameMode: "Reply author name"
   };
 
   const staticTranslations = {
@@ -899,8 +899,6 @@
     "导入设置": "Import settings",
     "导出筛选规则": "Export filter rules",
     "导入筛选规则": "Import filter rules",
-    "浏览历史位置": "Browsing history location",
-    "在右下角收藏库的「浏览历史」中查看记录。": "View your browsing history in the library panel at the bottom right.",
     "收藏库文件": "Library file",
     "导出收藏库": "Export library",
     "导入收藏库": "Import library",
@@ -1080,10 +1078,9 @@
     { key: "showTopicViews", type: "toggle", label: "显示浏览数", help: "控制原生主题列表的对应统计。", dependsOn: ["showTopicMeta", true] },
     { key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "不改变原站未读语义。" },
     { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
-    { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看记录只保存在本机浏览记录里，不写服务端已读状态。" },
+    { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看状态读取原站已有主题模型的访问或阅读位置，不单独记录浏览历史。" },
     { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "只影响主题页树状回复；默认与原站一样同时显示昵称和用户名。" },
     { key: "userMarksEnabled", type: "toggle", label: "启用用户标记", help: "在作者名旁显示本机私人短标签，并在原站用户卡片里提供标签与备注编辑。" },
-    { key: "visitedHistoryEnabled", type: "toggle", label: "记录浏览历史", help: "记录浏览过的主题与阅读位置，并标记已看；关闭后保留已有记录，可在收藏库中删除。" },
     { key: "mediaBlockAutoplay", type: "toggle", label: "阻止视频自动播放", help: "阻止正文与回复中的视频自动播放，仍可手动播放；部分外部播放器不支持。" },
     { key: "staticAvatarsEnabled", type: "toggle", label: "头像动图静态化", help: "把动态头像换成静态头像；没有静态版本时保留原图。" },
     { key: "topicSortMode", type: "select", label: "话题排序方式", help: "按最近活动或发布时间排序；切换后重新加载列表。" },

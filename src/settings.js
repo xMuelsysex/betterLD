@@ -89,7 +89,6 @@
     "userMarksEnabled",
     "mediaBlockAutoplay",
     "staticAvatarsEnabled",
-    "visitedHistoryEnabled",
     "removeChinesePunctuationIndent",
     "customCssEnabled",
     "showTopicAvatar",

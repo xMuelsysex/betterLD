@@ -1427,6 +1427,8 @@
         topics: entries.map((topic) => ({
           id: String(topic.id),
           creator: topic.creator?.username || "",
+          visited: topic.visited === true,
+          last_read_post_number: numberOrNull(topic.last_read_post_number),
           // 列表与详情推荐模型都带创建者身份；没有 id 时留 null，消费端再退回 posters[0]。
           creator_id: numberOrNull(topic.creator_id ?? topic.creator?.id),
           creator_avatar_template: stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate),

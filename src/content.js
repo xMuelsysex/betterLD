@@ -13,7 +13,6 @@
   const normalizeSettings = settingsApi?.normalizeSettings;
   const markdownApi = globalThis.BETTERLD_MARKDOWN;
   const userMarksApi = globalThis.BETTERLD_USER_MARKS;
-  const historyApi = globalThis.BETTERLD_HISTORY_STORE;
   const mediaApi = globalThis.BETTERLD_MEDIA;
 
   // 站点自己的前端请求带这两个指纹头；只带 Accept 时 Cloudflare 会对 *.json 返回 403 质询
@@ -23,7 +22,7 @@
     "Discourse-Present": "true"
   });
 
-  if (!config || !settingsApi || typeof normalizeSettings !== "function" || typeof markdownApi?.render !== "function" || !userMarksApi?.normalize || !historyApi?.read || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
+  if (!config || !settingsApi || typeof normalizeSettings !== "function" || typeof markdownApi?.render !== "function" || !userMarksApi?.normalize || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
     console.error("[betterLD] content script could not initialize: extension API is unavailable");
     return;
   }
@@ -92,15 +91,6 @@
     filterBinHost: null,
     filterBinOpen: false,
     filterSignature: "",
-    visitedTopics: new Set(),
-    historyVisitId: "",
-    historyVisitAt: 0,
-    historyTitle: "",
-    historyMetadata: null,
-    historyMetadataSignature: "",
-    historyFloor: null,
-    historyTimer: 0,
-    historyRequestSeq: 0,
     searchHistoryPanel: null,
     listRefreshAt: 0,
     toastTimer: 0,
@@ -120,7 +110,7 @@
     userCardMountedKey: ""
   };
 
-  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.topicRequestCooldownStorageKey, config.visitedTopicStorageKey]) {
+  function storageGet(keys = [config.storageKey, config.wallpaperLocalStorageKey, config.wallpaperRemoteCacheKey, config.topicRequestCooldownStorageKey]) {
     const storageKeys = keys;
     if (firefoxApi) {
       return api.storage.local.get(storageKeys);
@@ -737,162 +727,6 @@
   function topicIdFromPath(pathname = location.pathname) {
     const match = pathname.match(/^\/t\/(?:(\d+)|[^/]+\/(\d+))(?:\/|$)/);
     return match?.[1] || match?.[2] || "";
-  }
-
-  // 读取或写入失败都直接显示在页面上并留诊断日志，不静默当成空数据。
-  function reportHistoryFailure(action, error) {
-    console.error(`[betterLD] history ${action} failed`, error);
-    showActionStatus(`浏览历史${action}失败：${error.message}`, "error");
-  }
-
-  // 已看标记与浏览历史共用同一个存储键；这里只持有 ID 投影，整库快照只由 storage.onChanged 刷新。
-  function readHistoryRecords(value) {
-    try {
-      const history = historyApi.read(value);
-      state.visitedTopics = historyApi.idSet(history.records);
-    } catch (error) {
-      state.visitedTopics = new Set();
-      console.error("[betterLD] history storage invalid; keeping the original data", error);
-      showActionStatus(`浏览历史读取失败：${error.message}`, "error");
-    }
-  }
-
-  // 同一主题可能存在多次在途请求：只有最新一次的响应能改本地状态，过期响应直接丢弃。
-  // 整库快照只由 storage.onChanged 刷新，这里只确认本次访问的时间戳并补标题与楼层。
-  function sendHistory(message) {
-    const request = ++state.historyRequestSeq;
-    sendRuntimeMessage(message).then((response) => {
-      if (!response?.ok) throw new Error(response?.error || "浏览历史写入没有返回结果");
-      // 迟到的响应可能属于已经切走的主题或更早的一次访问。
-      if (request !== state.historyRequestSeq) return;
-      if (message.id !== state.historyVisitId || message.id !== topicIdFromPath()) return;
-      // 后台按最新设置或已被覆盖的访问拒绝写入：退回未记录状态等下一次补写，不动本地已看标记与全局历史。
-      if (response.skipped) {
-        if (message.type === "history-update") {
-          if (message.title !== undefined) state.historyTitle = "";
-          if (message.postNumber !== undefined) state.historyFloor = null;
-          if (message.category !== undefined || message.tags !== undefined || message.author !== undefined || message.authorAvatar !== undefined) state.historyMetadataSignature = "";
-        }
-        return;
-      }
-      // 设置里关掉阅读历史后，迟到的确认不能把记录重新带回本地状态。
-      if (!historyEnabled()) return;
-      if (message.type === "history-update" && message.visitedAt !== state.historyVisitAt) return;
-      if (message.type === "history-visit") {
-        state.historyVisitAt = response.history.records.find((record) => record.id === message.id)?.visitedAt ?? 0;
-      }
-      // 访问确认前不能补标题与楼层，拿到确认后立刻补一次。
-      syncHistoryTitle();
-      syncHistoryFloor();
-      syncHistoryMetadata();
-    }).catch((error) => {
-      if (message.id === state.historyVisitId && (message.category !== undefined || message.tags !== undefined || message.author !== undefined || message.authorAvatar !== undefined)) {
-        state.historyMetadataSignature = "";
-      }
-      reportHistoryFailure("保存", error);
-    });
-  }
-
-  function currentTopicTitle(id) {
-    const title = document.querySelector(`#topic-title h1[data-topic-id="${id}"] .fancy-title`)?.textContent;
-    if (title) return cleanText(title);
-    return state.replyTree?.topicId === id ? state.replyTree.title || "" : "";
-  }
-
-  // 阅读楼层只取当前可见的树卡片或原站楼层，并用主题身份限定；页面刚打开、正文尚未渲染时返回 null，不用 1 伪造位置。
-  function readingPostNumber() {
-    const id = topicIdFromPath();
-    if (!id) return null;
-    const headerHeight = document.querySelector(".d-header")?.offsetHeight || 0;
-    const onScreen = (bounds) => bounds.top < innerHeight && bounds.bottom > headerHeight;
-    const tree = state.replyTree;
-    if (tree?.topicId === id && !tree.contentContainer.hidden) {
-      for (const card of tree.content.querySelectorAll(".betterld-reply-tree__card")) {
-        // 只有上下文节点自身不算命中楼；它下面的命中子树仍算阅读位置。
-        if (card.parentElement.hasAttribute("data-betterld-context") || !card.getClientRects().length) continue;
-        const bounds = card.getBoundingClientRect();
-        if (!onScreen(bounds)) continue;
-        const number = Number(card.parentElement.dataset.postNumber);
-        return Number.isSafeInteger(number) && number > 0 ? number : null;
-      }
-      return null;
-    }
-    for (const article of document.querySelectorAll(`#topic[data-topic-id="${id}"] .post-stream article[id^='post_']`)) {
-      if (!article.getClientRects().length) continue;
-      if (!onScreen(article.getBoundingClientRect())) continue;
-      const number = Number(article.id.slice("post_".length));
-      return Number.isSafeInteger(number) && number > 0 ? number : null;
-    }
-    return null;
-  }
-
-  function historyEnabled() {
-    return state.settingsResolved && state.currentSettings.visitedHistoryEnabled;
-  }
-
-  // 已看记录与浏览历史都写本机存储：实际访问在路由变化或页面恢复可见时记录，列表轮询不会走到这里。
-  function recordVisitedTopic() {
-    const id = topicIdFromPath();
-    state.historyVisitId = id;
-    state.historyVisitAt = 0;
-    state.historyTitle = "";
-    state.historyFloor = null;
-    state.historyMetadataSignature = "";
-    if (state.historyMetadata?.id !== id) state.historyMetadata = null;
-    if (!id || !historyEnabled()) return;
-    const title = currentTopicTitle(id);
-    const postNumber = readingPostNumber();
-    state.historyTitle = title;
-    state.historyFloor = postNumber;
-    sendHistory({
-      type: "history-visit",
-      id,
-      ...(title ? { title } : {}),
-      ...(postNumber === null ? {} : { postNumber })
-    });
-  }
-
-  // 标题晚于首次访问装载时补上，不改访问时间；访问还没确认时不动快照，等确认后再补。
-  function syncHistoryTitle() {
-    const id = state.historyVisitId;
-    if (!id || id !== topicIdFromPath() || !historyEnabled() || !state.historyVisitAt) return;
-    const title = currentTopicTitle(id);
-    if (!title || title === state.historyTitle) return;
-    state.historyTitle = title;
-    sendHistory({ type: "history-update", id, title, visitedAt: state.historyVisitAt });
-  }
-
-  function syncHistoryMetadata() {
-    const metadata = state.historyMetadata;
-    const id = state.historyVisitId;
-    if (!metadata || metadata.id !== id || id !== topicIdFromPath() || !historyEnabled() || !state.historyVisitAt) return;
-    const { author, category, tags } = metadata;
-    const authorAvatar = topicAvatarUrl(metadata.author_avatar_template, 48) || undefined;
-    if (author === undefined && authorAvatar === undefined && category === undefined && tags === undefined) return;
-    const signature = JSON.stringify({ author, authorAvatar, category, tags });
-    if (signature === state.historyMetadataSignature) return;
-    state.historyMetadataSignature = signature;
-    sendHistory({ type: "history-update", id, visitedAt: state.historyVisitAt,
-      ...(author === undefined ? {} : { author }), ...(authorAvatar === undefined ? {} : { authorAvatar }),
-      ...(category === undefined ? {} : { category }), ...(tags === undefined ? {} : { tags }) });
-  }
-
-  function scheduleHistoryFloor() {
-    if (!pageActive() || state.historyTimer) return;
-    state.historyTimer = window.setTimeout(() => {
-      state.historyTimer = 0;
-      syncHistoryFloor();
-    }, config.syncDebounceMs);
-  }
-
-  // 路由切换或停止记录后不再写入旧主题的延迟楼层；楼层变化只更新楼层，不动访问时间。
-  function syncHistoryFloor() {
-    const id = state.historyVisitId;
-    if (!id || id !== topicIdFromPath() || !historyEnabled() || !state.historyVisitAt) return;
-    const postNumber = readingPostNumber();
-    if (postNumber === null || postNumber === state.historyFloor) return;
-    state.historyFloor = postNumber;
-    sendHistory({ type: "history-update", id, postNumber, visitedAt: state.historyVisitAt });
   }
 
   // 只由 checkRoute 的轮询调用：启动时会先拿默认设置跑一遍，那时不能动 URL
@@ -2742,6 +2576,7 @@
       const seen = new Set();
       return {
         id: String(topic.id),
+        watched: topic.visited === true || Number(topic.last_read_post_number) > 0,
         authorId: Number(topic.creator_id) || Number(posters[0]?.user_id) || 0,
         authorAvatar: String(topic.creator_avatar_template || users.get(posters[0]?.user_id)?.avatar_template || ""),
         author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
@@ -2894,10 +2729,16 @@
   }
 
   function applyTopicListMetadataToAll() {
-    document.querySelectorAll(".betterld-topic-row").forEach(applyTopicListMetadata);
+    document.querySelectorAll(".betterld-topic-row").forEach((row) => {
+      applyTopicListMetadata(row);
+      const badge = row.querySelector('[data-betterld-badge="watched"]');
+      if (badge) badge.hidden = !state.topicListMetadata.get(row.dataset.topicId)?.watched;
+    });
     document.querySelectorAll(".betterld-search-result").forEach((row) => {
       const metadata = state.topicListMetadata.get(row.dataset.topicId);
       if (metadata) setTopicStats(row, metadata.stats);
+      const badge = row.querySelector('[data-betterld-badge="watched"]');
+      if (badge) badge.hidden = !metadata?.watched;
     });
   }
 
@@ -2916,8 +2757,9 @@
     }
     if (`${location.pathname}${location.search}` !== route) return;
     if (payload.current_topic?.id === topicIdFromPath()) {
-      state.historyMetadata = payload.current_topic;
-      syncHistoryMetadata();
+      const metadata = payload.current_topic;
+      const authorAvatar = topicAvatarUrl(metadata.author_avatar_template, 48) || undefined;
+      globalThis.BETTERLD_LIBRARY.updateMetadata([{ ...metadata, authorAvatar }]);
     }
     if (state.currentSettings.topicListAppearance !== "material") return;
     const entries = topicListEntries(payload);
@@ -3632,7 +3474,7 @@
     if (status.textContent !== statusText) status.textContent = statusText;
     status.hidden = !statusText;
     const watched = main.querySelector('[data-betterld-badge="watched"]');
-    const unwatched = !state.visitedTopics.has(topic.id);
+    const unwatched = !state.topicListMetadata.get(topic.id)?.watched;
     if (watched.hidden !== unwatched) watched.hidden = unwatched;
     applyTopicListMetadata(row);
     applyCardFilter(row);
@@ -3732,7 +3574,7 @@
     const metadata = state.topicListMetadata.get(topic.id);
     if (metadata) setTopicStats(row, metadata.stats);
     const watched = main.querySelector('[data-betterld-badge="watched"]');
-    const unwatched = !state.visitedTopics.has(topic.id);
+    const unwatched = !state.topicListMetadata.get(topic.id)?.watched;
     if (watched.hidden !== unwatched) watched.hidden = unwatched;
     applyCardFilter(row);
   }
@@ -3759,7 +3601,6 @@
       syncHomepage();
       syncSearchLoadMore(state.currentSettings, isSearchPage());
       syncReplyTree();
-      syncHistoryTitle();
     }, config.syncDebounceMs);
   }
 
@@ -6874,7 +6715,6 @@
       }));
     }
     // 树展开或重建后可见楼层可能变化，阅读楼层跟着核对一次。
-    scheduleHistoryFloor();
   }
 
   function scheduleReplyPosition() {
@@ -6900,8 +6740,6 @@
     const id = topicIdFromPath();
     // 同一主题内的楼层与锚点变化只更新阅读楼层，不重复记为一次新访问。
     const sameTopic = Boolean(id) && id === topicIdFromPath(previousPathname);
-    if (sameTopic) scheduleHistoryFloor();
-    else recordVisitedTopic();
     updateRouteState();
     scheduleSync();
     return !sameTopic;
@@ -7210,10 +7048,8 @@
     }
     clearTimeout(state.syncTimer);
     clearTimeout(state.positionTimer);
-    clearTimeout(state.historyTimer);
     state.syncTimer = 0;
     state.positionTimer = 0;
-    state.historyTimer = 0;
     cancelAnimationFrame(state.filterBinFrame);
     state.filterBinFrame = 0;
     if (state.replyTree) {
@@ -7226,8 +7062,7 @@
     if (!pageActive()) return;
     if (!state.routeTimer) state.routeTimer = window.setInterval(checkRoute, config.routePollMs);
     if (!state.dataTimer) state.dataTimer = window.setInterval(syncPageData, config.pageDataSyncMs);
-    // checkRoute 已经记录过路由切换的访问时不再重记，避免恢复可见时双写。
-    if (!checkRoute()) recordVisitedTopic();
+    checkRoute();
     scheduleSync();
     if (state.replyTree) {
       const tree = state.replyTree;
@@ -7291,7 +7126,6 @@
         && typeof stored[config.wallpaperRemoteCacheKey] === "object"
         ? stored[config.wallpaperRemoteCacheKey]
         : null;
-      readHistoryRecords(stored[config.visitedTopicStorageKey]);
       // 站点限速按 IP 计，上一个页面撞上冷却时新页面要接着等，不能重新起一轮突发请求
       const storedCooldown = Number(stored[config.topicRequestCooldownStorageKey]);
       if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) {
@@ -7301,7 +7135,6 @@
       const activeSettings = await getActiveSettings(stored[config.storageKey]);
       applyVisualSettings(activeSettings);
       state.settingsResolved = true;
-      recordVisitedTopic();
       readUserMarks().catch((error) => console.error("[betterLD] user marks read failed", error));
       scheduleSync();
     })
@@ -7311,7 +7144,6 @@
       console.error("[betterLD] settings load failed; using defaults", error);
       applyVisualSettings(config.settingsDefaults, { forceFallback: true });
       state.settingsResolved = true;
-      recordVisitedTopic();
     });
 
   api.storage.onChanged.addListener((changes, areaName) => {
@@ -7336,19 +7168,11 @@
         applyVisualSettings(state.currentSettings);
       }
     }
-    if (changes[config.visitedTopicStorageKey]) {
-      readHistoryRecords(changes[config.visitedTopicStorageKey].newValue);
-      scheduleSync();
-    }
     if (changes[config.userMarksStorageKey]) {
       readUserMarks().catch((error) => console.error("[betterLD] user marks reload failed", error));
     }
     if (changes[config.storageKey]) {
       const localSettings = normalizeSettings(changes[config.storageKey].newValue);
-      // 设置里刚打开阅读历史时，当前页面按一次实际访问补记。
-      if (!normalizeSettings(changes[config.storageKey].oldValue).visitedHistoryEnabled && localSettings.visitedHistoryEnabled) {
-        recordVisitedTopic();
-      }
       if (!localSettings.syncEnabled || state.activeStorageArea === "local" || !state.currentSettings.syncEnabled) {
         getActiveSettings(localSettings)
           .then((activeSettings) => {
@@ -7449,7 +7273,6 @@
       updateReplyTreeMore(tree);
     }
     scheduleReplyPosition();
-    scheduleHistoryFloor();
   }, { passive: true });
   window.addEventListener("resize", () => {
     resizeTopicDrawer();

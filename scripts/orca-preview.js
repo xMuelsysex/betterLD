@@ -587,7 +587,6 @@ function buildInjection(port) {
   runScript(await sourceText("src/library-entry.js"));
   runScript(await sourceText("src/user-marks.js"));
   runScript(await sourceText("src/library-store.js"));
-  runScript(await sourceText("src/history-store.js"));
   runScript(await sourceText("src/offline-assets.js"));
   runScript(await sourceText("src/share-image.js"));
   runScript(await sourceText("src/topic-library.js"));

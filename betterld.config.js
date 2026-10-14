@@ -202,9 +202,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     })
   }),
   listRefreshScrollTopWindowMs: 10000,
-  visitedTopicStorageKey: "betterld.visited-topics",
-  visitedTopicMaxEntries: 500,
-  visitedHistoryTitleMaxLength: 200,
   versionCheckUrl: "https://api.github.com/repos/xMuelsysex/betterLD/releases/latest",
   topicCardMotion: Object.freeze({
     durationMs: 200,
@@ -494,12 +491,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
           keys: ["replyTreeNameMode"]
         },
         {
-          id: "history",
-          title: "阅读历史",
-          description: "记录实际访问过的主题、标题、最近阅读楼层与时间；关闭后停止记录新的已看标记与历史，已有数据保留。",
-          keys: ["visitedHistoryEnabled"]
-        },
-        {
           id: "userMarks",
           title: "用户标记",
           description: "给用户加本机私人标签与备注；标签显示在作者名旁，备注只在用户卡片与这里可见。",
@@ -736,7 +727,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     userMarksEnabled: true,
     mediaBlockAutoplay: false,
     staticAvatarsEnabled: false,
-    visitedHistoryEnabled: true,
     topicSortMode: "activity",
     topicCardContextMenuConfig: [
       { key: "openCurrentTab", visible: true, order: 0 },

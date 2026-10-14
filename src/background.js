@@ -6,7 +6,6 @@
     if (!globalThis.BETTERLD_LIBRARY_ENTRY) importScripts("library-entry.js");
     if (!globalThis.BETTERLD_LIBRARY_STORE) importScripts("library-store.js");
     if (!globalThis.BETTERLD_USER_MARKS) importScripts("user-marks.js");
-    if (!globalThis.BETTERLD_HISTORY_STORE) importScripts("history-store.js");
     if (!globalThis.BETTERLD_STICKER_STORE) importScripts("sticker-store.js");
     if (!globalThis.BETTERLD_STICKER_DB) importScripts("sticker-db.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
@@ -19,7 +18,6 @@
   const entry = globalThis.BETTERLD_LIBRARY_ENTRY;
   const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
   const userMarks = globalThis.BETTERLD_USER_MARKS;
-  const historyStore = globalThis.BETTERLD_HISTORY_STORE;
   const stickerStore = globalThis.BETTERLD_STICKER_STORE;
   const sticker = config.stickerLibrary;
   const stickerDb = globalThis.BETTERLD_STICKER_DB.createStickerDb(indexedDB);
@@ -319,7 +317,6 @@
 
   let libraryQueue = Promise.resolve();
   let userMarksQueue = Promise.resolve();
-  let historyQueue = Promise.resolve();
 
   async function readStoredLibrary() {
     const stored = await api.storage.local.get(config.libraryStorageKey);
@@ -419,79 +416,6 @@
     }
     return { ok: true, summary, library: await writeStoredLibrary(library) };
   }
-
-  // 浏览历史的所有读写都在同一条串行队列上：先读当前存储再写回完整对象，多标签页同时访问不会互相覆盖。
-  async function readStoredHistory() {
-    const stored = await api.storage.local.get(config.visitedTopicStorageKey);
-    return historyStore.read(stored[config.visitedTopicStorageKey]);
-  }
-
-  async function writeStoredHistory(history) {
-    await api.storage.local.set({ [config.visitedTopicStorageKey]: history });
-    return history;
-  }
-
-  // 是否记录只认最新设置：内容脚本的本地状态可能落后于另一个标签页里的开关。
-  async function historyRecordingEnabled() {
-    const stored = await api.storage.local.get(config.storageKey);
-    const value = stored[config.storageKey]?.visitedHistoryEnabled;
-    return typeof value === "boolean" ? value : config.settingsDefaults.visitedHistoryEnabled;
-  }
-
-  // 实际访问由内容脚本在路由变化或页面恢复可见时触发；时间戳只在后台取，初次与重访都更新。
-  async function recordHistoryVisit(message, sender) {
-    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
-    if (!(await historyRecordingEnabled())) {
-      return { ok: true, skipped: "浏览历史已关闭" };
-    }
-    const history = await readStoredHistory();
-    const records = historyStore.visit(history.records, {
-      id: message.id,
-      title: message.title,
-      author: message.author,
-      authorAvatar: message.authorAvatar,
-      category: message.category,
-      tags: message.tags,
-      postNumber: message.postNumber,
-      visitedAt: Date.now()
-    });
-    return { ok: true, history: await writeStoredHistory({ records }) };
-  }
-
-  // 楼层与标题的后续补足不改访问时间；只命中同一次实际访问，记录已删除或被新访问覆盖时不写入。
-  async function updateHistoryRecord(message, sender) {
-    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
-    if (!(await historyRecordingEnabled())) {
-      return { ok: true, skipped: "浏览历史已关闭" };
-    }
-    const history = await readStoredHistory();
-    const records = historyStore.update(history.records, { id: message.id, title: message.title, author: message.author, authorAvatar: message.authorAvatar, category: message.category, tags: message.tags, postNumber: message.postNumber, visitedAt: message.visitedAt });
-    if (records) return { ok: true, history: await writeStoredHistory({ records }) };
-    // 同值补写已经满足目标；只有访问身份过期才要求内容脚本重试，避免每次模型同步重复发送。
-    const current = history.records.find((record) => record.id === String(message.id));
-    if (current?.visitedAt === message.visitedAt) return { ok: true, history };
-    return { ok: true, skipped: "这次访问已被覆盖或已删除，记录未写入" };
-  }
-
-  // 删除与清空是用户主动动作，与记录开关无关。
-  async function removeHistoryRecord(message, sender) {
-    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
-    const history = await readStoredHistory();
-    const records = historyStore.remove(history.records, message.id);
-    return { ok: true, history: await writeStoredHistory({ records }) };
-  }
-
-  async function clearHistory(message, sender) {
-    if (!isTrustedSender(sender)) throw new Error("请求来源无效");
-    return { ok: true, history: await writeStoredHistory(historyStore.clear()) };
-  }
-
-  const historyHandlers = {
-    "history-visit": recordHistoryVisit,
-    "history-update": updateHistoryRecord,
-    "history-remove": removeHistoryRecord,
-    "history-clear": clearHistory
-  };
 
   const libraryHandlers = {
     "library-toggle": toggleLibrary,
@@ -940,13 +864,7 @@
       request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
     }
-    const historyHandler = historyHandlers[message?.type];
-    if (historyHandler) {
-      const request = historyQueue.then(() => historyHandler(message, sender));
-      historyQueue = request.then(() => undefined, () => undefined);
-      request.then(sendResponse).catch((error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
+
     if (message?.type === "open-topic-export-settings") {
       handleOpenTopicExportSettings(sender)
         .then(sendResponse)

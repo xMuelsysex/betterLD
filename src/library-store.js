@@ -20,6 +20,51 @@
     return prototype === Object.prototype || prototype === null;
   }
 
+  function authorField(value) {
+    if (typeof value !== "string") {
+      fail("收藏的发帖人格式异常，原数据保持不变");
+    }
+    return value.trim().slice(0, config.libraryTitleMaxLength) || undefined;
+  }
+
+  function authorAvatarField(value) {
+    if (typeof value !== "string") fail("收藏的头像格式异常，原数据保持不变");
+    if (!value.trim()) return undefined;
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) {
+      fail("收藏的头像地址无效，原数据保持不变");
+    }
+    return url.href;
+  }
+
+  function categoryField(value) {
+    if (value === null) return null;
+    if (!isPlainObject(value) || typeof value.name !== "string" || !value.name.trim()) {
+      fail("收藏的分类格式异常，原数据保持不变");
+    }
+    const id = String(value.id);
+    if (!/^[1-9]\d*$/.test(id)) fail("收藏的分类 ID 无效");
+    return { id, name: [...value.name.trim()].slice(0, config.libraryTitleMaxLength).join("") };
+  }
+
+  function tagsField(value) {
+    if (!Array.isArray(value) || value.some((tag) => typeof tag !== "string" || !tag.trim())) {
+      fail("收藏的标签格式异常，原数据保持不变");
+    }
+    return [...new Set(value.map((tag) => [...tag.trim()].slice(0, config.libraryTitleMaxLength).join("")))];
+  }
+
+  function metadataFields(record) {
+    const author = record.author === undefined ? undefined : authorField(record.author);
+    const authorAvatar = record.authorAvatar === undefined ? undefined : authorAvatarField(record.authorAvatar);
+    return {
+      ...(author === undefined ? {} : { author }),
+      ...(authorAvatar === undefined ? {} : { authorAvatar }),
+      ...(record.category === undefined ? {} : { category: categoryField(record.category) }),
+      ...(record.tags === undefined ? {} : { tags: tagsField(record.tags) })
+    };
+  }
+
   function empty() {
     return { schemaVersion: config.librarySchemaVersion, later: [], favorites: [], folders: [] };
   }
@@ -82,6 +127,7 @@
     }
     return {
       id: String(item.id),
+      ...metadataFields(item),
       ...(item.postNumber === undefined ? {} : { postNumber: item.postNumber }),
       title: item.title.trim().slice(0, config.libraryTitleMaxLength),
       href: entry.href(item),
@@ -159,6 +205,7 @@
   function record(topic) {
     return {
       id: String(topic.id),
+      ...metadataFields(topic),
       ...(topic.postNumber === undefined ? {} : { postNumber: topic.postNumber }),
       title: topic.title.trim().slice(0, config.libraryTitleMaxLength),
       href: entry.href(topic),
@@ -303,6 +350,7 @@
 
   globalThis.BETTERLD_LIBRARY_STORE = Object.freeze({
     empty,
+    metadataFields,
     read,
     readImport,
     record,

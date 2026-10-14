@@ -29,7 +29,6 @@
       "src/library-entry.js",
       "src/library-store.js",
       "src/user-marks.js",
-      "src/history-store.js",
       "src/sticker-store.js",
       "src/sticker-db.js",
       "src/background.js"
@@ -50,7 +49,6 @@
         "src/library-entry.js",
         "src/library-store.js",
         "src/user-marks.js",
-        "src/history-store.js",
         "src/sticker-store.js",
         "src/sticker-zip.js",
         "src/sticker-library.js",
@@ -91,8 +89,7 @@
         "src/settings.js",
         "src/library-entry.js",
         "src/library-store.js",
-        "src/user-marks.js",
-        "src/history-store.js"
+        "src/user-marks.js"
       ],
       "matches": [
         "https://linux.do/*",
