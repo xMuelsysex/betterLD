@@ -349,12 +349,12 @@
 
   function emptyMessage() {
     if (activeGroup === "history") {
-      return history.records.length ? "没有匹配的浏览记录，试试清空搜索词。" : "实际访问过的主题会记录在这里。";
+      return history.records.length ? "没有匹配的浏览记录，试试清空搜索词。" : "还没有浏览记录。";
     }
     if (!library[activeGroup].length) {
       return activeGroup === "later"
-        ? "在首页点击「稍后再看」，主题就会保存在这里。"
-        : "在帖子底部点击「收藏」，或在树状回复中添加书签，可保存主题或对应楼层。";
+        ? "点击主题旁的「稍后再看」即可添加。"
+        : "点击帖底「收藏」即可添加。";
     }
     return "没有匹配的收藏，试试清空搜索词或切换分组。";
   }
@@ -550,7 +550,19 @@
     const link = element("a", "betterld-library-link", label);
     deepLink(link, record);
     const meta = element("p", "betterld-library-meta");
-    meta.append(element("span", "", record.visitedAt === undefined ? "日期未知" : new Date(record.visitedAt).toLocaleString()));
+    const author = element("span", "betterld-library-author");
+    if (record.authorAvatar) {
+      const avatar = element("img", "betterld-library-avatar");
+      avatar.src = record.authorAvatar;
+      avatar.alt = "";
+      avatar.width = 24;
+      avatar.height = 24;
+      avatar.loading = "lazy";
+      author.append(avatar);
+    }
+    author.append(element("span", "", record.author === undefined ? "发帖人未知" : `@${record.author}`));
+    meta.append(author, " · ",
+      element("span", "", record.visitedAt === undefined ? "日期未知" : new Date(record.visitedAt).toLocaleString()));
     if (record.postNumber !== undefined) {
       const floor = element("a", "betterld-library-floor", `最近阅读 #${record.postNumber} 楼`);
       deepLink(floor, record);
@@ -573,8 +585,8 @@
 
   function render() {
     if (!panel) return;
-    status.textContent = [errorMessage, historyError].filter(Boolean).join(" · ")
-      || "本机保存 · 树内书签同步到收藏，移除本地收藏不影响原站书签";
+    status.textContent = [errorMessage, historyError].filter(Boolean).join(" · ");
+    status.hidden = !status.textContent;
     status.dataset.error = String(Boolean(errorMessage || historyError));
     for (const tab of tabs.children) {
       const active = tab.dataset.group === activeGroup;

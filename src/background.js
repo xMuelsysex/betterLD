@@ -448,6 +448,8 @@
     const records = historyStore.visit(history.records, {
       id: message.id,
       title: message.title,
+      author: message.author,
+      authorAvatar: message.authorAvatar,
       category: message.category,
       tags: message.tags,
       postNumber: message.postNumber,
@@ -463,7 +465,7 @@
       return { ok: true, skipped: "浏览历史已关闭" };
     }
     const history = await readStoredHistory();
-    const records = historyStore.update(history.records, { id: message.id, title: message.title, category: message.category, tags: message.tags, postNumber: message.postNumber, visitedAt: message.visitedAt });
+    const records = historyStore.update(history.records, { id: message.id, title: message.title, author: message.author, authorAvatar: message.authorAvatar, category: message.category, tags: message.tags, postNumber: message.postNumber, visitedAt: message.visitedAt });
     if (records) return { ok: true, history: await writeStoredHistory({ records }) };
     // 同值补写已经满足目标；只有访问身份过期才要求内容脚本重试，避免每次模型同步重复发送。
     const current = history.records.find((record) => record.id === String(message.id));

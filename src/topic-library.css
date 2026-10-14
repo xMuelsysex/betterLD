@@ -90,6 +90,8 @@
 .betterld-library-move { min-height: 32px; padding: 4px 8px; border: 1px solid rgb(var(--betterld-outline-rgb) / .35); border-radius: 999px; background: transparent; color: var(--betterld-on-surface-variant); font: inherit; font-size: 12px; }
 .betterld-library-item:last-child { border-bottom: 0; }
 .betterld-library-meta { flex: 1 1 100%; margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; line-height: 1.6; }
+.betterld-library-author { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.betterld-library-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; }
 .betterld-library-floor { color: var(--betterld-primary); text-decoration: none; }
 .betterld-library-floor:hover { text-decoration: underline; }
 .betterld-library-clear {
@@ -128,8 +130,13 @@
 .betterld-library-save[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--betterld-primary) 16%, transparent); }
 .betterld-library-topic-action[aria-pressed="true"] { --betterld-native-button-bg: color-mix(in srgb, var(--betterld-primary) 24%, rgb(var(--betterld-surface-container-rgb))); }
 .betterld-library-status { margin: 0; color: var(--betterld-on-surface-variant); font-size: 12px; line-height: 1.6; }
+.betterld-library-status[hidden] { display: none; }
 .betterld-library-status[data-error="true"] { color: var(--betterld-error); }
-:is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove, .betterld-library-clear):hover { filter: brightness(1.08); }
+:is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove, .betterld-library-clear):is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb))); }
+.betterld-library-fab:is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--betterld-primary) 90%, var(--betterld-on-primary)); }
+.betterld-library-tab[aria-selected="true"]:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--betterld-primary) 24%, transparent); }
+:is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove, .betterld-library-clear):active:not(:disabled) { background: color-mix(in srgb, var(--betterld-primary) 20%, rgb(var(--betterld-surface-container-rgb))); }
+.betterld-library-fab:active:not(:disabled) { background: color-mix(in srgb, var(--betterld-primary) 84%, var(--betterld-on-primary)); }
 :is(.betterld-library-fab, .betterld-library-tab, .betterld-library-save, .betterld-library-remove, .betterld-library-clear, .betterld-library-link, .betterld-library-floor):focus-visible { outline: 3px solid var(--betterld-primary); outline-offset: 3px; }
 :is(.betterld-library-save, .betterld-library-remove, .betterld-library-clear):disabled { opacity: .5; cursor: progress; }
 :is(.betterld-library-search, .betterld-library-filter, .betterld-library-folder-name, .betterld-library-move):focus-visible { outline: 3px solid var(--betterld-primary); outline-offset: 2px; }

@@ -2819,12 +2819,6 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   font-size: 18px;
 }
 
-.betterld-topic-empty__description {
-  max-width: 520px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .betterld-topic-empty__button {
   min-height: 40px;
   margin-top: 6px;
@@ -3840,16 +3834,18 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 }
 
 .betterld-floor-timeline {
+  --betterld-floor-track-height: 300px;
+  --betterld-floor-handle-height: 34px;
   position: relative;
-  height: 300px;
-  padding-inline-start: 4px;
+  margin-top: .5em;
+  margin-inline-start: .5em;
   color: var(--betterld-on-surface);
 }
 
-.betterld-floor-timeline input[type="range"] {
+.betterld-floor-timeline > input[type="range"] {
   writing-mode: vertical-lr;
   direction: ltr;
-  width: 20px;
+  width: 8px;
   height: 100%;
   margin: 0;
   accent-color: var(--betterld-primary);
@@ -3864,23 +3860,27 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 .betterld-floor-timeline__label {
   position: absolute;
-  inset-inline-start: 32px;
-  top: calc(var(--betterld-floor-progress) * (100% - 24px));
-  line-height: 24px;
+  inset-inline-start: 16px;
+  top: calc(var(--betterld-floor-progress) * (var(--betterld-floor-track-height) - var(--betterld-floor-handle-height)));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: var(--betterld-floor-handle-height);
+  margin: 0;
+  line-height: 17px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  pointer-events: none;
-  text-shadow: 0 0 2px rgb(var(--betterld-surface-rgb)), 0 1px 3px rgb(var(--betterld-surface-rgb));
 }
 
 .betterld-floor-timeline__status {
-  position: absolute;
-  inset-inline-start: 32px;
-  bottom: 0;
-  max-width: 220px;
+  width: 100%;
+  max-width: min(180px, calc(100vw - 32px));
+  color: var(--betterld-on-surface-variant);
   font-size: 12px;
-  margin: 0;
+  margin: 8px 0 0;
 }
+
+.betterld-floor-timeline__status:empty { display: none; }
 
 /* 回复关系由 Discourse 的 reply_to_post_number 提供；竖干与弧线仅属于树状阅读视图。 */
 .betterld-reply-tree {
@@ -3893,7 +3893,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   color: var(--betterld-on-surface);
 }
 
-.betterld-reply-tree button {
+.betterld-reply-tree button:where(:not(.betterld-reply-tree__footer *)) {
   cursor: pointer;
   color: var(--betterld-on-surface);
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.4);
@@ -3957,7 +3957,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 }
 
 .betterld-reply-tree__filter--active {
-  background: rgb(var(--betterld-primary-rgb) / 0.18) !important;
+  background: color-mix(in srgb, var(--betterld-primary) 18%, transparent) !important;
   color: var(--betterld-primary);
 }
 
@@ -3993,7 +3993,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 .betterld-reply-tree__notice-action {
   padding: 4px 10px;
-  border: 1px solid rgb(var(--betterld-primary-rgb) / 0.4);
+  border: 1px solid color-mix(in srgb, var(--betterld-primary) 40%, transparent);
   border-radius: 999px;
   background: transparent;
   color: var(--betterld-primary);
@@ -4019,8 +4019,9 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 .betterld-reply-tree__state-notice {
   margin: 8px 0 0;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(127, 127, 127, 0.14);
+  border-radius: var(--betterld-radius-sm);
+  background: rgb(var(--betterld-surface-container-high-rgb));
+  color: var(--betterld-on-surface-variant);
   font-size: 0.85em;
   line-height: 1.5;
 }
@@ -4093,7 +4094,7 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   margin-inline-start: 6px;
   padding: 3px 8px;
   border-radius: var(--betterld-radius-sm);
-  background: rgb(var(--betterld-primary-rgb) / .14);
+  background: color-mix(in srgb, var(--betterld-primary) 14%, transparent);
   color: var(--betterld-primary);
   font-size: 12px;
   font-weight: 500;
@@ -4113,6 +4114,24 @@ textarea.betterld-user-marks__input { min-height: 60px; resize: vertical; }
 .betterld-user-marks__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__toggle, .betterld-user-marks__save, .betterld-user-marks__clear) { min-height: 40px; padding: 8px 16px; border-radius: var(--betterld-radius-sm) !important; font: inherit; font-size: 14px; }
 .betterld-user-marks__status { margin: 6px 0 0; font-size: 12px; color: var(--betterld-on-surface-variant); }
+
+.betterld-reply-tree__footer:empty { display: none; }
+body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom {
+  width: 100%;
+  max-width: none;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-map__contents {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
 .betterld-reply-tree__content {
   min-width: 0;
@@ -4303,8 +4322,7 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(var(--betterld-outline-rgb) / 0.24);
+  padding-top: 2px;
 }
 
 .betterld-reply-tree__native-menu {
@@ -5303,8 +5321,254 @@ body.betterld-shell .container.posts[data-betterld-reading-active="true"] .post_
 .betterld-topic-reading__toolbar .betterld-reply-tree__return-all { position: static; box-shadow: none; }
 .betterld-topic-reading__toolbar button:disabled { cursor: wait; opacity: .6; }
 .betterld-reply-tree__filter { min-height: 40px; font: inherit; font-size: 14px; color: var(--betterld-on-surface-variant); cursor: pointer; }
-.betterld-reply-tree__filter:hover { background: rgb(var(--betterld-primary-rgb) / .08) !important; }
-.betterld-reply-tree__filter[aria-pressed="true"] { background: rgb(var(--betterld-primary-rgb) / .18) !important; color: var(--betterld-primary); }
+.betterld-reply-tree__filter:hover { background: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important; }
+.betterld-reply-tree__filter[aria-pressed="true"] { background: color-mix(in srgb, var(--betterld-primary) 18%, transparent) !important; color: var(--betterld-primary); }
 .betterld-reply-tree__filter:focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 2px; }
 
 @media (max-width: 560px) { body.betterld-shell :has(> .betterld-topic-reading) { --betterld-reading-panel-padding: 12px; } .betterld-reply-tree__filters { display: flex; flex-wrap: wrap; margin-inline-start: 0; max-width: 100%; } .betterld-reply-tree__filter { flex: 1; padding-inline: 8px; } }
+
+/* 帖子控件共享状态层；正文组件继续由原站管理，仅归一局部材质。 */
+:is(.betterld-topic-reading, .betterld-reply-tree) :is(
+  .betterld-reply-tree__toggle, .betterld-reply-tree__more,
+  .betterld-reply-tree__notice-action, .betterld-reply-tree__context-toggle,
+  .betterld-reply-tree__users-more,
+  .betterld-reply-tree__mine-item
+):is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb)));
+  color: var(--betterld-primary);
+}
+:is(.betterld-topic-reading, .betterld-reply-tree) :is(
+  .betterld-reply-tree__toggle, .betterld-reply-tree__more,
+  .betterld-reply-tree__notice-action, .betterld-reply-tree__context-toggle,
+  .betterld-reply-tree__users-more,
+  .betterld-reply-tree__mine-item, .betterld-reply-tree__action
+):active:not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb)));
+}
+.betterld-reply-tree__filter:is(:hover, :focus-visible)[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--betterld-primary) 24%, transparent) !important;
+}
+.betterld-reply-tree__filter:active:not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 28%, transparent) !important;
+}
+.betterld-reply-tree .betterld-reply-tree__users-close { background: transparent; }
+.betterld-reply-tree .betterld-reply-tree__users-close:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+.betterld-reply-tree .betterld-reply-tree__users-close:active {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+}
+.betterld-reply-tree :is(.betterld-reply-tree__collapse, .betterld-reply-tree__tail-control):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-rgb)));
+}
+.betterld-reply-tree :is(.betterld-reply-tree__collapse, .betterld-reply-tree__tail-control):active {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-rgb)));
+}
+
+/* 垂直轨道沿用原生键盘/拖动语义，文本输入仅在提交时跳楼。 */
+.betterld-floor-timeline > input[type="range"] {
+  display: block;
+  height: var(--betterld-floor-track-height);
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/* 轨道盒与胶囊同宽，中央一像素细线与滑块保持同轴。 */
+.betterld-floor-timeline > input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(var(--betterld-primary), var(--betterld-primary)) center / 1px 100% no-repeat;
+}
+.betterld-floor-timeline > input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(var(--betterld-primary), var(--betterld-primary)) center / 1px 100% no-repeat;
+}
+.betterld-floor-timeline > input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 8px;
+  height: var(--betterld-floor-handle-height);
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--betterld-primary);
+}
+.betterld-floor-timeline > input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 8px;
+  height: var(--betterld-floor-handle-height);
+  border: 0;
+  border-radius: 999px;
+  background: var(--betterld-primary);
+}
+.betterld-floor-timeline > input[type="range"]:is(:hover, :focus-visible)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+}
+.betterld-floor-timeline > input[type="range"]:is(:hover, :focus-visible)::-moz-range-thumb {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+}
+.betterld-floor-timeline :disabled { opacity: .5; cursor: wait; }
+body.betterld-shell .betterld-floor-timeline__current {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.betterld-floor-timeline__current:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+body.betterld-shell .betterld-floor-timeline__number {
+  box-sizing: content-box;
+  width: auto;
+  max-width: min(16ch, calc(100vw - 100px));
+  min-width: 2ch;
+  height: 22px;
+  margin: 0;
+  padding: 0 2px;
+  border: 1px solid var(--betterld-primary);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  caret-color: var(--betterld-primary);
+  font: inherit;
+  line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+body.betterld-shell .betterld-floor-timeline__number[aria-invalid="true"] { border-color: var(--betterld-error); }
+.betterld-floor-timeline__label [hidden] { display: none !important; }
+.betterld-floor-timeline__counter { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+body.betterld-shell .topic-timeline .betterld-floor-timeline__date { color: var(--betterld-on-surface-variant) !important; font-weight: 400; text-shadow: none; -webkit-text-stroke: 0; }
+.betterld-floor-timeline__label :focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 1px; }
+.betterld-floor-timeline__label {
+  padding: 0;
+  background: transparent;
+  color: var(--betterld-on-surface);
+  text-shadow: none;
+}
+
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) :is(blockquote:not(.callout, .quote *), pre, details, aside.onebox, .poll) {
+  border-radius: var(--betterld-radius-sm);
+  border-color: rgb(var(--betterld-outline-rgb) / .3);
+  background-color: rgb(var(--betterld-surface-container-rgb) / .96);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) blockquote:not(.callout, .callout *, .quote *) {
+  border-inline-start-color: var(--betterld-primary);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) pre {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .3);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) details > summary {
+  border-radius: var(--betterld-radius-sm);
+  color: var(--betterld-primary);
+  cursor: pointer;
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) details > summary:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) table:not(.calendar *) {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .3);
+  border-radius: var(--betterld-radius-sm);
+  border-spacing: 0;
+  background: rgb(var(--betterld-surface-container-rgb) / .96);
+  color: var(--betterld-on-surface);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) table:not(.calendar *) :is(th, td) {
+  border-color: rgb(var(--betterld-outline-rgb) / .3);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) table:not(.calendar *) th {
+  background: rgb(var(--betterld-surface-container-high-rgb));
+  color: var(--betterld-on-surface);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) :is(.lightbox-wrapper, .lazy-video-container, .video-container) {
+  border-radius: var(--betterld-radius-sm);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) :is(.lightbox-wrapper img, .lazy-video-container iframe, .video-container video) {
+  border-radius: inherit;
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview) .poll .btn {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb)));
+  color: var(--betterld-primary);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview) .poll .btn:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 20%, rgb(var(--betterld-surface-container-rgb)));
+}
+
+/* 原生辅助区域只覆盖外壳，不重排原帖楼层、菜单或编辑器。 */
+body.betterld-shell :where(.topic-map, .topic-status-info, .post-notice, .composer-popup, .emoji-picker, .fk-d-tooltip__inner-content) {
+  background-color: rgb(var(--betterld-surface-container-rgb) / .96) !important;
+  color: var(--betterld-on-surface);
+  border-color: rgb(var(--betterld-outline-rgb) / .3) !important;
+  border-radius: var(--betterld-radius-md);
+  box-shadow: var(--betterld-shadow-level-1);
+}
+body.betterld-shell .small-action { color: var(--betterld-on-surface-variant); border-color: rgb(var(--betterld-outline-rgb) / .3); }
+body.betterld-shell :is(.fk-d-menu__inner-content, .select-kit-body) :is(.btn-flat, [role="menuitem"]):is(:hover, :focus-visible):not(:disabled, [aria-disabled="true"]) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important;
+}
+body.betterld-shell :is(.fk-d-menu__inner-content, .select-kit-body) :is(.btn-flat, [role="menuitem"]):active:not(:disabled, [aria-disabled="true"]) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 12%, transparent) !important;
+}
+
+@media (forced-colors: active) {
+  .betterld-floor-timeline__label, .betterld-reply-tree__state-notice {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+  .betterld-floor-timeline > input[type="range"] { appearance: auto; -webkit-appearance: auto; }
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) .codeblock-button-wrapper .btn {
+  background: rgb(var(--betterld-surface-container-high-rgb));
+  border-color: rgb(var(--betterld-outline-rgb) / .3);
+  border-radius: var(--betterld-radius-sm);
+  color: var(--betterld-on-surface-variant);
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) .codeblock-button-wrapper .btn:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-high-rgb)));
+}
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview) .poll :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--betterld-primary); }
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview) .poll .poll-option:hover {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+body.betterld-shell .betterld-reply-tree__user-title { color: var(--betterld-on-surface-variant); }
+body.betterld-shell .pswp { --pswp-bg: rgb(var(--betterld-surface-container-rgb)); --pswp-icon-color: var(--betterld-on-surface); --pswp-icon-color-secondary: rgb(var(--betterld-surface-container-rgb)); }
+body.betterld-shell .pswp__bg { background: var(--pswp-bg); }
+body.betterld-shell .pswp__counter { color: var(--betterld-on-surface); text-shadow: none; }
+body.betterld-shell :is(.pswp__top-bar, .pswp__caption) { background: rgb(var(--betterld-surface-container-rgb) / .96); color: var(--betterld-on-surface); }
+body.betterld-shell .pswp__caption__center { color: var(--betterld-on-surface-variant); }
+body.betterld-shell .pswp__button:is(:hover, :focus-visible) { background-color: color-mix(in srgb, var(--betterld-primary) 12%, transparent); border-radius: 999px; }
+/* 控制栏位于树外，显式复用树按钮基础材质。 */
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all) {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / .4);
+  border-radius: 999px;
+  background: rgb(var(--betterld-surface-container-rgb) / .8);
+  color: var(--betterld-on-surface);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all):is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb)));
+  color: var(--betterld-primary);
+}
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all):active:not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb)));
+}
+.betterld-topic-reading__toolbar button:focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 2px; }
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) table:not(.calendar *) thead tr:first-child th:first-child { border-start-start-radius: var(--betterld-radius-sm); }
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) table:not(.calendar *) thead tr:first-child th:last-child { border-start-end-radius: var(--betterld-radius-sm); }
+body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) :is(.callout, video, audio, iframe) { border-radius: var(--betterld-radius-sm); }

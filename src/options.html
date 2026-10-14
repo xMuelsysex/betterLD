@@ -92,7 +92,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">浏览历史位置</p>
-                      <p class="settings-group-card__desc">访问过的主题会记录在右下角收藏库的「浏览历史」标签里，可搜索标题、跳转最近阅读楼层、单条移除或清空。</p>
+                      <p class="settings-group-card__desc">在右下角收藏库的「浏览历史」中查看记录。</p>
                     </div>
                   </section>
 
@@ -281,7 +281,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">WebDAV 收藏备份</p>
-                      <p class="settings-group-card__desc">使用上面的账号与密码，把收藏库（稍后再看、收藏与分组）单独写入「收藏备份 WebDAV 地址」；该地址不能与规则备份地址相同，避免互相覆盖。</p>
+                      <p class="settings-group-card__desc">使用上面的账号与密码。收藏与规则备份须使用不同地址，避免互相覆盖。</p>
                       <p class="settings-inline-note">WebDAV 单次上传上限：<span id="library-webdav-limit"></span>。超出时上传会失败并保留远端文件。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
@@ -329,7 +329,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">收藏库文件</p>
-                      <p class="settings-group-card__desc">导出稍后再看、收藏与分组；不包含 WebDAV 凭据、收藏入口位置、设置或浏览历史。导入先校验并预览摘要，确认后追加去重，重复条目保留本地分组。</p>
+                      <p class="settings-group-card__desc">备份稍后再看、收藏与分组，不含账号密码、设置或浏览历史。导入会追加新条目，保留已有分组。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="export-library" class="settings-button settings-button--tonal" type="button">导出收藏库</button>
@@ -353,7 +353,7 @@
                     <div data-fields="sticker"></div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">表情库文件</p>
-                      <p class="settings-group-card__desc">导出整库图片本体、名称与分组；导入按内容追加，内容相同的图片跳过并保留已有名称与分组，不覆盖现有表情。</p>
+                      <p class="settings-group-card__desc">备份图片、名称与分组；导入时跳过重复图片，保留已有表情。</p>
                       <p class="settings-inline-note" id="sticker-library-summary"></p>
                       <details id="sticker-library-details" hidden>
                         <summary class="settings-inline-note">逐项失败原因</summary>

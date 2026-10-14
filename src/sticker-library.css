@@ -304,3 +304,20 @@
   .betterld-sticker-toast { background: Canvas; color: CanvasText; border: 1px solid ButtonText; }
   .betterld-sticker-chip[aria-selected="true"] { outline: 2px solid Highlight; }
 }
+
+/* 操作、分组与图片共用主题状态层，选择态保留更强底色。 */
+:is(.betterld-sticker-trigger, .betterld-sticker-button, .betterld-sticker-chip, .betterld-sticker-tile__main):is(:hover, :focus-visible):not(:disabled) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+:is(.betterld-sticker-trigger, .betterld-sticker-button, .betterld-sticker-chip, .betterld-sticker-tile__main):active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+}
+:is(.betterld-sticker-chip[aria-selected="true"], .betterld-sticker-button[aria-pressed="true"]):is(:hover, :focus-visible) {
+  background-color: color-mix(in srgb, var(--betterld-primary) 24%, transparent);
+}
+.betterld-sticker-button--danger:is(:hover, :focus-visible):not(:disabled) {
+  background-color: color-mix(in srgb, var(--betterld-error) 8%, transparent);
+}
+.betterld-sticker-button--danger:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--betterld-error) 12%, transparent);
+}

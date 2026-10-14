@@ -771,7 +771,7 @@
         if (message.type === "history-update") {
           if (message.title !== undefined) state.historyTitle = "";
           if (message.postNumber !== undefined) state.historyFloor = null;
-          if (message.category !== undefined || message.tags !== undefined) state.historyMetadataSignature = "";
+          if (message.category !== undefined || message.tags !== undefined || message.author !== undefined || message.authorAvatar !== undefined) state.historyMetadataSignature = "";
         }
         return;
       }
@@ -786,7 +786,7 @@
       syncHistoryFloor();
       syncHistoryMetadata();
     }).catch((error) => {
-      if (message.id === state.historyVisitId && (message.category !== undefined || message.tags !== undefined)) {
+      if (message.id === state.historyVisitId && (message.category !== undefined || message.tags !== undefined || message.author !== undefined || message.authorAvatar !== undefined)) {
         state.historyMetadataSignature = "";
       }
       reportHistoryFailure("保存", error);
@@ -866,12 +866,14 @@
     const metadata = state.historyMetadata;
     const id = state.historyVisitId;
     if (!metadata || metadata.id !== id || id !== topicIdFromPath() || !historyEnabled() || !state.historyVisitAt) return;
-    const { category, tags } = metadata;
-    if (category === undefined && tags === undefined) return;
-    const signature = JSON.stringify({ category, tags });
+    const { author, category, tags } = metadata;
+    const authorAvatar = topicAvatarUrl(metadata.author_avatar_template, 48) || undefined;
+    if (author === undefined && authorAvatar === undefined && category === undefined && tags === undefined) return;
+    const signature = JSON.stringify({ author, authorAvatar, category, tags });
     if (signature === state.historyMetadataSignature) return;
     state.historyMetadataSignature = signature;
     sendHistory({ type: "history-update", id, visitedAt: state.historyVisitAt,
+      ...(author === undefined ? {} : { author }), ...(authorAvatar === undefined ? {} : { authorAvatar }),
       ...(category === undefined ? {} : { category }), ...(tags === undefined ? {} : { tags }) });
   }
 
@@ -3320,11 +3322,10 @@
       empty = createElement("section", "betterld-topic-empty");
       empty.setAttribute("role", "status");
       const title = createElement("strong", "betterld-topic-empty__title", "没有符合过滤条件的主题");
-      const description = createElement("span", "betterld-topic-empty__description", "过滤只影响本页显示，不改变站点搜索结果与分页。");
       const button = createElement("button", "betterld-topic-empty__button", "关闭主题过滤");
       button.type = "button";
       button.addEventListener("click", disableTopicFilter);
-      empty.append(title, description, button);
+      empty.append(title, button);
       grid.append(empty);
     }
     grid.dataset.betterldFilterEmpty = "true";
@@ -4694,11 +4695,8 @@
     const card = item.querySelector(':scope > .betterld-reply-tree__card');
     const avatar = card.querySelector('.betterld-reply-tree__avatar-wrap :is(img, .betterld-reply-tree__avatar)')
       || card.querySelector('.betterld-reply-tree__avatar-wrap').firstElementChild;
-    const actions = card.querySelector('.betterld-reply-tree__actions');
     const bounds = avatar.getBoundingClientRect();
-    const footer = (actions.hidden ? card.querySelector('.betterld-reply-tree__state-notice') : actions.firstElementChild || actions).getBoundingClientRect();
-    return { bottom: bounds.bottom, centerY: bounds.top + bounds.height / 2,
-      toggleY: Math.max(bounds.bottom + 12, footer.top + footer.height / 2) };
+    return { bottom: bounds.bottom, centerY: bounds.top + bounds.height / 2 };
   }
 
   function setReplyBranchCoordinate(item, property, y) {
@@ -4706,51 +4704,94 @@
     if (item.style.getPropertyValue(property) !== value) item.style.setProperty(property, value);
   }
 
+  function replyBranchLayoutChanged(tree, item) {
+    const card = item.querySelector(':scope > .betterld-reply-tree__card');
+    const bounds = card.getBoundingClientRect();
+    const anchor = replyBranchAnchor(item);
+    const layout = `${bounds.width}:${bounds.height}:${anchor.centerY - bounds.top}`;
+    const previous = tree.branchLayouts.get(card);
+    tree.branchLayouts.set(card, layout);
+    return previous !== undefined ? previous !== layout
+      : Boolean(item.style.getPropertyValue('--betterld-branch-toggle-y') || item.style.getPropertyValue('--betterld-reply-tail-y'));
+  }
+
+  function invalidateReplyBranchLayout(tree, item) {
+    for (let owner = item; owner; owner = owner.parentElement.closest('.betterld-reply-tree__item')) {
+      tree.branchDirty.add(owner);
+      if (owner.previousElementSibling) tree.branchDirty.add(owner.previousElementSibling);
+    }
+  }
+
+  function setReplyBranchSpace(item, bottom) {
+    if (!bottom) {
+      item.style.removeProperty('min-height');
+      return;
+    }
+    const style = getComputedStyle(item);
+    const inset = style.boxSizing === 'border-box' ? 0
+      : parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    const value = `${Math.max(0, bottom - inset)}px`;
+    if (item.style.minHeight !== value) item.style.minHeight = value;
+  }
+
   function positionReplyBranchControls(tree) {
     if (state.replyTree !== tree || tree.contentContainer.hidden) return;
-    for (const item of tree.content.querySelectorAll('.betterld-reply-tree__item')) {
-      if (!item.querySelector(':scope > .betterld-reply-tree__tail-control[aria-expanded="false"]')) item.style.removeProperty('min-height');
+    const items = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].filter((item) => item.getClientRects().length);
+    for (const item of items) {
+      // 隐藏正文的原生挂载由 DOM 通知失效；可见尺寸变化继续使用几何签名。
+      if (replyBranchLayoutChanged(tree, item)) invalidateReplyBranchLayout(tree, item);
     }
-    for (const button of tree.content.querySelectorAll('.betterld-reply-tree__collapse')) {
-      const item = button.parentElement;
-      if (!item.getClientRects().length) continue;
-      const collapsed = button.getAttribute('aria-expanded') === 'false';
-      const cached = item.style.getPropertyValue('--betterld-branch-toggle-y');
-      if (!collapsed || !cached) {
-        const anchor = replyBranchAnchor(item);
-        const children = item.querySelector(':scope > .betterld-reply-tree__children');
-        const wasHidden = children?.hidden;
-        if (wasHidden) children.hidden = false;
-        const firstVisible = children && [...children.children].find((child) => !child.hidden);
-        if (!tree.tailStates.get(Number(item.dataset.postNumber))?.size || !cached) {
-          const y = firstVisible ? (anchor.centerY + replyBranchAnchor(firstVisible).centerY) / 2 : anchor.bottom + 12;
-          setReplyBranchCoordinate(item, '--betterld-branch-toggle-y', y - item.getBoundingClientRect().top);
+    // 先同步后代占位，再测祖先后续入口；旧 tail 占位不能参与自身中点计算。
+    for (const item of items.reverse()) {
+      const button = item.querySelector(':scope > .betterld-reply-tree__collapse');
+      const tail = item.querySelector(':scope > .betterld-reply-tree__tail-control');
+      const refresh = tree.branchDirty.has(item);
+      let bottom = 0;
+      setReplyBranchSpace(item, 0);
+      if (button) {
+        const collapsed = button.getAttribute('aria-expanded') === 'false';
+        const cached = item.style.getPropertyValue('--betterld-branch-toggle-y');
+        const preserve = collapsed || tree.tailStates.get(Number(item.dataset.postNumber))?.size;
+        if (!preserve || !cached || refresh) {
+          const anchor = replyBranchAnchor(item);
+          const children = item.querySelector(':scope > .betterld-reply-tree__children');
+          const wasHidden = children.hidden;
+          try {
+            children.hidden = false;
+            const firstVisible = [...children.children].find((child) => !child.hidden);
+            const y = firstVisible ? (anchor.centerY + replyBranchAnchor(firstVisible).centerY) / 2 : anchor.bottom + button.offsetHeight / 2;
+            setReplyBranchCoordinate(item, '--betterld-branch-toggle-y', y - item.getBoundingClientRect().top);
+            if (firstVisible && !tree.branchLayouts.has(firstVisible.querySelector(':scope > .betterld-reply-tree__card'))) replyBranchLayoutChanged(tree, firstVisible);
+          } finally {
+            children.hidden = wasHidden;
+          }
         }
-        if (wasHidden) children.hidden = true;
+        if (collapsed) bottom = parseFloat(item.style.getPropertyValue('--betterld-branch-toggle-y')) + button.offsetHeight / 2;
       }
-      if (collapsed || !item.querySelector(':scope > .betterld-reply-tree__children:not([hidden])')) {
-        item.style.minHeight = `${parseFloat(item.style.getPropertyValue('--betterld-branch-toggle-y')) + button.offsetHeight / 2}px`;
+      setReplyBranchSpace(item, bottom);
+      if (tail) {
+        const collapsed = tail.getAttribute('aria-expanded') === 'false';
+        const cached = item.style.getPropertyValue('--betterld-reply-tail-y');
+        if (!collapsed || !cached || refresh) {
+          const next = item.nextElementSibling;
+          const wasHidden = next.hidden;
+          try {
+            next.hidden = false;
+            const y = (replyBranchAnchor(item).centerY + replyBranchAnchor(next).centerY) / 2;
+            setReplyBranchCoordinate(item, '--betterld-reply-tail-y', y - item.getBoundingClientRect().top);
+            if (!tree.branchLayouts.has(next.querySelector(':scope > .betterld-reply-tree__card'))) replyBranchLayoutChanged(tree, next);
+          } finally {
+            next.hidden = wasHidden;
+          }
+        }
+        if (collapsed) {
+          const y = parseFloat(item.style.getPropertyValue('--betterld-reply-tail-y'));
+          bottom = Math.max(bottom, y + tail.offsetHeight / 2);
+          setReplyBranchCoordinate(item, '--betterld-reply-trunk-end', y + tail.firstElementChild.offsetHeight / 2);
+        }
       }
-    }
-    for (const button of tree.content.querySelectorAll('.betterld-reply-tree__tail-control')) {
-      const item = button.parentElement;
-      if (!item.getClientRects().length) continue;
-      const collapsed = button.getAttribute('aria-expanded') === 'false';
-      const cached = item.style.getPropertyValue('--betterld-reply-tail-y');
-      if (!collapsed || !cached) {
-        const current = replyBranchAnchor(item);
-        const next = item.nextElementSibling;
-        const wasHidden = next.hidden;
-        if (wasHidden) next.hidden = false;
-        const y = (current.centerY + replyBranchAnchor(next).centerY) / 2;
-        setReplyBranchCoordinate(item, '--betterld-reply-tail-y', y - item.getBoundingClientRect().top);
-        if (wasHidden) next.hidden = true;
-      }
-      if (collapsed) {
-        const y = parseFloat(item.style.getPropertyValue('--betterld-reply-tail-y'));
-        item.style.minHeight = `${Math.max(parseFloat(item.style.minHeight) || 0, y + button.offsetHeight / 2)}px`;
-        if (collapsed) setReplyBranchCoordinate(item, '--betterld-reply-trunk-end', y + 7);
-      }
+      setReplyBranchSpace(item, bottom);
+      tree.branchDirty.delete(item);
     }
   }
 
@@ -6356,9 +6397,42 @@
     return tree.ownerUsername || preloadedReplyTopic(tree.topicId)?.details?.created_by?.username || "";
   }
 
+  function restoreReplyTreeTopicMap(tree) {
+    if (!tree.topicMap) return;
+    // 原生节点由原站维护；还原后再释放树底板，不克隆控件或丢失事件。
+    const { element, marker } = tree.topicMap;
+    const replacement = tree.topicContainer.querySelector(".topic-map.--bottom:not(.betterld-reply-tree__footer *)");
+    if (element.isConnected && marker.isConnected && !replacement) marker.replaceWith(element);
+    else {
+      element.remove();
+      marker.remove();
+    }
+    tree.topicMap = null;
+  }
+
+  function syncReplyTreeTopicMap(tree) {
+    const map = tree.topicContainer.querySelector(".topic-map.--bottom:not(.betterld-reply-tree__footer *)");
+    // 原站替换整个统计节点时丢弃旧挂载，不把过期控件还原成第二份。
+    if (tree.topicMap && (map || !tree.topicMap.marker.isConnected || !tree.topicMap.element.isConnected)) {
+      tree.topicMap.element.remove();
+      tree.topicMap.marker.remove();
+      tree.topicMap = null;
+    }
+    if (tree.contentContainer.hidden) {
+      restoreReplyTreeTopicMap(tree);
+      return;
+    }
+    if (!map) return;
+    const marker = document.createComment("betterLD topic-map original position");
+    map.before(marker);
+    tree.topicMap = { element: map, marker };
+    tree.footer.append(map);
+  }
+
   function syncReplyTreeFilterBar(tree) {
     // 原站筛选会拆掉旧流；保留旧底板引用供重建清理，不把它改写成 null。
     if (!tree.streamElement.isConnected) return;
+    syncReplyTreeTopicMap(tree);
     // 底板只包住回复区，原站时间轴和普通原帖容器不参与阅读材质。
     const container = tree.streamElement.parentElement;
     if (container !== tree.readingPanelContainer) {
@@ -6576,6 +6650,9 @@
       }
       state.replyTree.observer.disconnect();
     state.replyTree.branchLayoutObserver.disconnect();
+      state.replyTree.branchContentObserver.disconnect();
+      state.replyTree.content.removeEventListener('load', state.replyTree.branchMediaLoad, true);
+      state.replyTree.content.removeEventListener('loadedmetadata', state.replyTree.branchMediaLoad, true);
       clearInterval(state.replyTree.relativeTimeTimer);
       stopReplyTreeStatusTimer(state.replyTree);
       cancelReplyTreeTasks(state.replyTree);
@@ -6586,6 +6663,7 @@
       state.replyTree.readingPanelContainer.classList.remove("betterld-reading-panel");
       state.replyTree.topicContainer.removeAttribute("data-betterld-reading-active");
       document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
+      restoreReplyTreeTopicMap(state.replyTree);
       state.replyTree.panel.remove();
       document.dispatchEvent(new CustomEvent('betterld:timeline-reset'));
       document.dispatchEvent(new CustomEvent('betterld:reply-reading-release'));
@@ -6673,10 +6751,11 @@
     content.append(replies, status, sentinel, moreButton);
     const toolbar = createElement("div", "betterld-topic-reading__toolbar");
     toolbar.append(filters, toggle, returnAll);
-    panel.append(toolbar, range, filterStatus, notice, mine, content);
+    const footer = createElement("div", "betterld-reply-tree__footer");
+    panel.append(toolbar, range, filterStatus, notice, mine, content, footer);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     tree.boostExpanded = new Set();
     tree.orphanContextIds = previous?.orphanContextIds || new Set();
     tree.parentErrors = previous?.parentErrors || new Map();
@@ -6696,7 +6775,35 @@
     tree.bodyLoadBlocked = false;
     tree.bodyLoadScrollTop = pageScrollTop();
     bindReplyBranchInteraction(tree);
+    tree.branchLayouts = new WeakMap();
+    tree.branchDirty = new WeakSet();
     tree.branchLayoutObserver = new ResizeObserver(() => positionReplyBranchControls(tree));
+    const branchContentSelector = '.betterld-reply-tree__cooked, .betterld-reply-tree__boosts, .betterld-reply-tree__head, .betterld-reply-tree__avatar-wrap';
+    tree.branchContentObserver = new MutationObserver((records) => {
+      let changed = false;
+      for (const record of records) {
+        const element = record.target instanceof Element ? record.target : record.target.parentElement;
+        // 同批正文替换可能已移除此前修改过的文本；由替换的 childList 记录处理。
+        if (!element || !tree.content.contains(element)) continue;
+        const replacesContent = record.type === 'childList' && element.closest('.betterld-reply-tree__card')
+          && [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && node.matches(branchContentSelector));
+        if (!element.closest(branchContentSelector) && !replacesContent) continue;
+        invalidateReplyBranchLayout(tree, element.closest('.betterld-reply-tree__item'));
+        changed = true;
+      }
+      if (changed) positionReplyBranchControls(tree);
+    });
+    tree.branchContentObserver.observe(tree.content, {
+      childList: true, characterData: true, subtree: true,
+      attributes: true, attributeFilter: ['class', 'style', 'hidden', 'width', 'height', 'src']
+    });
+    tree.branchMediaLoad = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest(branchContentSelector)) return;
+      invalidateReplyBranchLayout(tree, event.target.closest('.betterld-reply-tree__item'));
+      positionReplyBranchControls(tree);
+    };
+    tree.content.addEventListener('load', tree.branchMediaLoad, true);
+    tree.content.addEventListener('loadedmetadata', tree.branchMediaLoad, true);
     tree.observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) maybeLoadMoreReplyTree(tree);
     }, { rootMargin: `0px 0px ${config.replyTreeLoadAheadPx}px 0px` });
@@ -7255,7 +7362,7 @@
     }
   });
 
-  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
+  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
   function ownedNode(node) {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return Boolean(element?.closest("[data-betterld-owned], .betterld-topic-row__info, .betterld-topic-empty"));

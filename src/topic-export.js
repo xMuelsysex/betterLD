@@ -248,7 +248,7 @@
     refs.htmlResourceField.hidden = !isHtml;
     refs.note.textContent = isHtml
       ? (refs.htmlResourceSelect.value === "offline" ? OFFLINE_ASSET_NOTE : REMOTE_ASSET_NOTE)
-      : isImage ? "生成主帖、全部回复、已加载回复或指定楼层的排版图卡，预览后逐页下载 PNG；超长内容自动拆页。全部回复按无筛选的完整楼层流读取，数量不一致时明确失败；已加载回复只排版页面里已有的楼层。视频与外部播放器保留媒体链接，折叠和剧透保持隐藏。图片与头像复用离线资源授权，读取失败明确报出。" : MARKDOWN_ASSET_NOTE;
+      : isImage ? "预览后下载 PNG，超长内容自动拆页。视频保留链接，折叠内容与剧透保持隐藏；图片和头像需要资源访问权限。" : MARKDOWN_ASSET_NOTE;
     refs.error.textContent = "";
     refs.progress.textContent = "";
     refs.permissionButton.hidden = true;

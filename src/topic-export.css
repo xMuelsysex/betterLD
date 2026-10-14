@@ -182,8 +182,17 @@
   cursor: progress;
 }
 
-.betterld-export-button:hover:not(:disabled) {
-  filter: brightness(1.08);
+.betterld-export-button:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 8%, transparent);
+}
+.betterld-export-button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
+}
+.betterld-export-button--primary:is(:hover, :focus-visible):not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 90%, var(--betterld-on-primary));
+}
+.betterld-export-button--primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--betterld-primary) 84%, var(--betterld-on-primary));
 }
 
 @media (max-width: 560px) {

@@ -55,7 +55,7 @@
 - **Rules/Invariants**：壳层页面里站点自带的页面级底板（`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`）必须透明，壁纸与遮罩在该区域可见。
 - **Rules/Invariants**：壳层页面里站点的纯白表面一律换成两种 betterLD 材质面之一，不再保留站点自己的白底：站点内容卡片（原生主题表行、`.badge-card`、`.latest-topic-list-item`、`.user-main .details`、分类盒子 `.category-box`、标签面板、用户页 `.user-main`）用 `surface-rgb / 0.56` + 模糊 + betterLD 描边/圆角/阴影；浮层与输入控件（`.user-card/.group-card/.category-card`、`.select-kit-body`、`.fk-d-menu__inner-content`、`.d-modal__container`、`#dialog-holder .dialog-content`、`#reply-control`、搜索框、导航行的类别/标签下拉 header）用 `surface-container-rgb / 0.96（搜索框 0.82）`；站点标签胶囊 `a.discourse-tag.box` 沿用卡片标签写法（`surface-container-rgb / 0.58` + 999px 圆角 + betterLD 描边），不用站点的 `--primary-low` 灰底。新增站点组件时沿用这两种写法，不引入第三种白底。
 - **Rules/Invariants**：站点自己的二级导航条（用户页 `.user-navigation .nav-pills`、私信页 `.messages-nav`）与主题列表导航共用同一套胶囊规则（选择器组写在一处，不复制声明）；站点按钮 `.btn-default`/`.btn-primary`/`.btn-danger` 统一为 betterLD 形态，只改背景、描边、圆角与文字色，保持原几何尺寸，`.btn-icon`/`.btn-flat`/`.btn-transparent` 不受影响。
-- **Rules/Invariants**：站点用 `var(--d-content-background)` / `var(--secondary)` 画的整页底板都算壳层要处理的对象，已知清单：`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`、`.list-controls`、`.search-container`、`.user-main`、`.user-content`、`.body-page`（静态文档页）、`#main-outlet.not-found-container`（404）、`.show-badge`（徽章详情）、`.login-fullpage`、`.container.group`（群组页）、`.latest-topic-list-item`、`.user-stream-item`、`.follow-stream-item`、`.badge-card`。聊天页（`.full-page-chat`、`.chat-message-container`、`.c-navbar-container`、`.chat-pinned-bar`、`.chat-channel-status`）与 AI 机器人输入区同样处理。第三方组件（如 `/upcoming-events` 的日历）与帖子正文内容元素（blockquote、代码块）保留自身观感。
+- **Rules/Invariants**：站点用 `var(--d-content-background)` / `var(--secondary)` 画的整页底板都算壳层要处理的对象，已知清单：`#main-outlet`、`#main-outlet > :is(.regular, .container)`、`#main-outlet > * > .container`、`#list-area`、`#header-list-area`、`.list-controls`、`.search-container`、`.user-main`、`.user-content`、`.body-page`（静态文档页）、`#main-outlet.not-found-container`（404）、`.show-badge`（徽章详情）、`.login-fullpage`、`.container.group`（群组页）、`.latest-topic-list-item`、`.user-stream-item`、`.follow-stream-item`、`.badge-card`。聊天页（`.full-page-chat`、`.chat-message-container`、`.c-navbar-container`、`.chat-pinned-bar`、`.chat-channel-status`）与 AI 机器人输入区同样处理。第三方组件（如 `/upcoming-events` 的日历）保留自身观感；帖子正文的引用、代码块、表格、折叠块、链接预览、投票和媒体容器共用 Material 3 表面与控件状态层，保留原站正文语义、代码高亮、callout 类型色和媒体/插件交互。
 - **Rules/Invariants**：主题列表所在容器（`#list-area` 与分类页的 `#header-list-area`）不保留站点自带的不透明灰色底板，壁纸与遮罩在该区域可见；列表区域内的站点组件（如分类盒子 `.category-box`）改用与 `.category-heading` 同一套 betterLD 半透明材质面，不用自己的不透明底色。
 - **Rules/Invariants**：原站编辑器、通用弹窗/对话框/Toast、偏好表单和 select-kit、聊天容器/输入、AI 会话输入、徽章详情/登录注册/关注流复用这两种材质。只改变容器和控件观感，保持原尺寸、布局、焦点/禁用/错误/选中语义，不重建表单或改提交行为；普通按钮不覆盖组合按钮与帖子正文/预览/日历内的控件。
 - **Rules/Invariants**：通知列表头像旁的类型角标保留原站 SVG，使用高对比 Material 3 圆角方形表面；未读为主色填充/on-primary，已读为实色表面/on-surface，图标显式继承填充颜色。只改视觉，不变通知类型、链接及原站已读行为。
@@ -154,10 +154,16 @@
 - **Definition**：原站 Header 里站点 Logo（`#site-logo`）的显隐、描边与发光。
 - **Rules/Invariants**：只改 `#site-logo` 自身（在这个站上它就是一个 `<img>`）的显隐与滤镜，不重建 Header 结构，也不影响其余 Header 内容。
 
+### Topic Floor Navigation
+- **Definition**：帖子右侧实际楼号轨道与自由输入入口，原帖和树共用原站最高楼号。
+- **Rules/Invariants**：外观以主人提供的原站时间轴参考图为准：细竖线、短胶囊滑块、无底板的当前楼号／总楼数、顶部日期与当前楼层日期；颜色跟随主题；楼号旁日期来自该楼层的真实发布时间，沿用原站本地日期格式，缺少对应楼层数据时隐藏，不用估算日期或其他楼层日期代替，不建立额外日期请求。拖动滑块连续跟手移动，楼层较少时也不按整数楼号逐格吸附；轨道按总楼数等分区间，分界线归较小楼号：8 层楼时恰好 1/8 为第 1 楼、超过 1/8 为第 2 楼，最顶端为第 1 楼、最底端为最后一楼。拖动只预览，松手后才跳转目标楼层；拖动期间不因楼号跨区间而停顿或吸附。
+- **Rules/Invariants**：点击当前楼号原位打开输入，Enter 提交、Escape 取消；不提供独立输入栏或跳转按钮。输入只接受去除首尾空白后的 ASCII 正整数及安全整数，范围为 1–最高楼号，拒绝空值、非数字、小数、负数、指数、零、越界与非安全整数，不截断或夹取，非法值不触发跳转。缺失／不可访问的合法楼层沿原跳转流程明确报错。
+- **Rules/Invariants**：编辑及尚未提交的输入不被阅读同步覆盖，失焦不提交；跳转中禁用重复操作，结束恢复实际楼号。总楼数随原站模型更新，限流冷却、超时与失败沿原有状态提示。
+
 ### Topic Reply Tree
 - **Definition**：主题详情页按父子关系组织多级回复的默认视图，父回复包含子回复，沿头像绘制可折叠的竖干与弧线分支。
 - **Rules/Invariants**：树状正文取代按时间排列的帖子流，不同时显示两份；未加载父帖的回复标明归属，加载后回归父帖。竖线止于最后一条可见子回复，没有可见子回复则不留尾线。滚动接近当前阅读段末尾自动加载后续回复；跳楼后从目标附近续读，前段缺口通过「加载前面的回复」补齐。失败保留内容并提供重试，冷却等待单独显示。作者名称默认同时显示昵称和用户名，也可只显示一种；头像和作者名称打开原站用户卡片。每条回复可查看回应、点赞、复制链接、使用 Boost、更多操作与回复；点击点赞、长按选择原站开放的其他回应，两者均以原站结果为准；已选中某个回应时，再次点击该按钮取消当前回应，切换其他回应仍走选择器。楼内已有的 Boost 按原站形态显示在操作栏下方（沿用原站 `discourse-boosts` 类名与样式，无 Boost 时整块不渲染）；原站同一楼只会有一个 Boost 入口：没有 Boost 时在操作栏，已有 Boost 时在列表末尾。点击入口不会再切回原站视图，而是直接在该楼下方展开原站同款编辑器（当前用户头像 + 文本域 + 提交/取消，尺寸与素材继承原站插件 CSS），回车提交、Escape 或取消关闭；提交走原站 Boost 创建接口，成功后该楼立即出现新气泡且入口收为列表末尾。「更多帖子操作」在树内原位展开原站 `PostMenu`，举报、书签、翻译、编辑/删除及插件操作的顺序、权限和对话框由原站组件与动作管理，不切回原帖；已在树操作栏提供的回应/复制/Boost/回复只保留一份。再次点击收起，增量同步保留菜单宿主与开合状态，卸载释放组件和独立模型。
-- **Rules/Invariants**：楼层正文与楼内 Boost 内容按原站 cooked 原样呈现：服务端能下发的任何内容都不在树里被单独剔除或改写（含 B 站等 iframe 播放器、object/embed 嵌入、内联矢量图、表单、帖子自带样式，以及 data:/blob: 资源），避免出现「原站可见、树里消失」；显示的尺寸与行为同样以原站为准。
+- **Rules/Invariants**：楼层正文与楼内 Boost 内容按原站 cooked 原样呈现：服务端能下发的任何内容都不在树里被单独剔除或改写（含 B 站等 iframe 播放器、object/embed 嵌入、内联矢量图、表单、帖子自带样式，以及 data:/blob: 资源），避免出现「原站可见、树里消失」；显示的尺寸与行为同样以原站为准，代码/表格/折叠/预览/投票、普通块引用与媒体容器的局部材质共用帖子正文 Material 3 规则；帖子引用的标题、引用正文与嵌套引用保持原站外观，原帖楼层和作者栏不额外套卡片。树楼层操作栏上方不绘制分隔横线，并缩短正文与操作栏间的留白。帖底浏览量、赞、链接、参与用户等原站主题统计，在树模式下位于树阅读大底板的下部，共用一块底板；切回原帖恢复原站位置和外观，原生统计入口与用户卡交互保持可用。
 - **Rules/Invariants**：树楼层与 Boost 正文统一由主世界复用原站 `PostCookedHtml`（通过 `render-glimmer-container` / `ember-curry-component` 在 Ember runloop 挂载），不另维护客户端增强规则。YouTube/Vimeo/TikTok惰性播放器、上传视频、引用嵌套、callout/剧透/hashtag、代码复制/全屏/高亮、图片灯箱及原站注册的投票/图表/公式等装饰均使用原站组件与当前设置；实际播放受原服务可达性约束。补载楼层与原站已加载楼层使用同一帖子身份，正文、帖子操作、选文引用与有权限快速编辑共用原站模型；补载不改变原帖列表顺序或原站分页范围。Boost 正文保持独立身份，选中 Boost 文字不能冒充所在楼层的正文引用。
 - **Rules/Invariants**：正文宿主按唯一 cooked ID 追踪，新节点替换时即时释放旧宿主，断开时销毁组件及其装饰器；原帖客户端折叠/引用展开行为为唯一来源，废弃自建限高折叠参数与旧高亮桥接。挂载失败就地显示原站增强失败原因与返回原帖提示，不伪装成功。
 - **Rules/Invariants**：分页、实时同步、回应与作者信息更新按楼层原位合并，未变 cooked 保留已连接的正文节点及客户端混排、引用/剧透展开、播放器状态；仅正文实际编辑时替换正文。回应选择器／回应人名单在无关更新后保留同一弹层与分页状态，按楼层重绑定当前触发按钮；目标不可见、消失、禁用或切换视图时关闭。作者订阅按变化楼层释放，离开话题或换树才全部释放。
@@ -177,7 +183,7 @@
 - **Rules/Invariants**：悬停一组连线时，该组全部可见连线使用当前主题色；高亮该组的父分支及后续同级控件，其他父组的加减按钮保持原态。点击竖干或该组任意弧线，与点击所属父楼的加减按钮等效；后续同级控件独立控制剩余同级回复，保留控件之前及所在楼层的完整正文和操作；悬停时所属父组连线仍整组高亮。
 - **Rules/Invariants**：主帖为根，直接回复主帖的楼层为第一层。初始仅显示主帖与第一层回复，其后各层默认收起；展开某楼只显示下一层，更深层保持各自折叠状态。
 - **Rules/Invariants**：仅有下级回复的父楼提供子分支收放按钮；无下级回复的叶子楼不创建自身收放按钮及头像下方子分支竖线，旧本体折叠状态清除。同级主干与弧线保持。默认与主动收起均只隐藏下级回复，不折叠父楼本体。另在同一长竖线上相邻同级回复头像中心之间的中点提供「收起后续」控件，保留前面的同级回复及其状态，收放此点之后的同级回复；叶子楼之后存在同级回复时仍可出现该父组的后续入口。
-- **Rules/Invariants**：区分两类位置：子分支按钮位于父头像与首条直接子回复头像中心的中点，未首次展开的子树临时测量后恢复隐藏。平级后续按钮位于相邻同级头像中心的中点。两类符号独立缓存节点相对坐标，收起时沿用收起前位置，不跳回操作栏；保留足够点击区空间与线终点。展开及可见正文尺寸变化重新测量，临时隐藏不清缓存。
+- **Rules/Invariants**：区分两类位置：子分支按钮位于父头像与首条直接子回复头像中心的中点，未首次展开的子树临时测量后恢复隐藏。平级后续按钮位于相邻同级头像中心的中点。两类符号独立缓存节点相对坐标，单纯收起时沿用收起前位置，不跳回操作栏；保留足够点击区空间与线终点。展开及可见正文尺寸变化重新测量，收起态也响应正文尺寸变化；初次隐藏正文的原生挂载、作者内容更新及媒体加载同样使所属分支定位失效，重新测量后才复用缓存，不能依赖用户首次展开触发修正。后代尺寸变化同步影响祖先的后续同级入口。占位按两类入口所需空间合并并允许缩小，旧占位不参与新中点测量，临时隐藏不清缓存。
 - **Rules/Invariants**：主动跳楼只展开通往目标的必要祖先，使目标可见；目标正文保持可见，同级其他分支及目标自己的下级保持各自收放状态。补齐缺失父楼并重连时，保留当前所读回复可见及其阅读位置，仅展开必要祖先，其余新补分支默认收起。
 - **Rules/Invariants**：用户子分支及后续同级收放选择在当前帖子会话内保留，分页、实时更新、补父重连与原帖／树切换沿用选择；刷新或重新进入帖子恢复默认第一层，不跨刷新记忆。
 
@@ -196,8 +202,8 @@
 - **Rules/Invariants**：树连接线依赖 item/card 的 position:relative、card flex/36px头像、list零缩进及item底间距；恢复/调整材质时保留这些几何基座，折叠分支保留按钮上方的父干，隐藏按钮下方子分支，深层树在面板内横向滚动。
 
 ### Browsing History
-- **Definition**：收藏库「浏览历史」展示本机访问记录，按本地日期分组，包含标题、分类、标签、访问时间与最近阅读楼层；搜索同时匹配标题、分类与标签。
-- **Rules/Invariants**：与已看标记共用 visitedTopicStorageKey，由 history-store 统一读写；分类为 {id,name} 或 null，标签为字符串数组，undefined 表示未知。元信息只消费原站当前主题模型，不依赖列表美化开关或推荐主题，也不补逐主题请求；晚到数据按同次 visitedAt 补写，空 tags 与 null 分类可清除旧值。旧记录继续保留，显示未知并在重新访问时补齐。
+- **Definition**：收藏库「浏览历史」展示本机访问记录，按本地日期分组，包含标题、发帖人、分类、标签、访问时间与最近阅读楼层；搜索同时匹配标题、分类与标签。
+- **Rules/Invariants**：与已看标记共用 visitedTopicStorageKey，由 history-store 统一读写；发帖人 author 为原站主题 details.created_by.username，authorAvatar 为原站头像模板经已有CDN解析后的HTTPS地址，以24px圆头像配用户名显示；缺失时保留已有值，远程头像不属于离线归档；分类为 {id,name} 或 null，标签为字符串数组，undefined 表示未知。元信息只消费原站当前主题模型，不依赖列表美化开关或推荐主题，也不补逐主题请求；晚到数据按同次 visitedAt 补写，空 tags 与 null 分类可清除旧值。旧记录继续保留，显示未知并在重新访问时补齐。
 
 ### Private User Marks
 - **Definition**：作者名旁短标签与用户卡/设置页私人备注，使用现有 Material 3 圆角、字段、按钮及表面 Token。
@@ -221,7 +227,7 @@
 
 ### Local Topic Library
 - **Definition**：右下角 Material 3 入口，按「稍后再看」「收藏」分类保存主题及收藏楼层；首页行提供稍后再看，帖子底部原生操作栏提供收藏，与分享、添加为书签、举报、标记为未读、指定、回复同排；标题处不留收藏按钮，原站操作保持原顺序与行为。
-- **Rules/Invariants**：`libraryStorageKey` 对应的 storage.local 是唯一数据源，与浏览器同步设置独立，树内原站书签成功保存/取消时单向镜像到本地收藏（仅当前已加载楼层，不批量读取账户历史书签）；后台串行处理跨标签增删，成功写入后更新 UI，失败保留原数据并显示错误。`src/library-entry.js` 是条目校验、键与链接的唯一规则：旧主题收藏无 `postNumber`，楼层收藏带正整数 `postNumber`，按主题 ID + 楼号去重，主题收藏与各楼并存；后台保留 `/t/topic/{id}/{postNumber}`。面板显示楼号，普通点击完整页面导航并复用原站/树已有深链定位，修饰键保持浏览器链接行为。原站书签事件来自 `app-events` 的 `bookmarks:changed` 成功态并随菜单宿主释放订阅，不以按钮点击判定；加载的已书签楼也导入，失败就地显示并可重试。面板可打开或移除主题/楼层，本地移除不操作原站书签，其他标签监听同一存储；插件预览内保留主题收藏，浮动入口只在顶层渲染。入口默认右下角，可指针拖动或 Alt + 方向键移动；位置以视口比例保存在 `libraryPositionStorageKey` 的本机存储，刷新恢复并随视口变化约束到可见范围，面板跟随入口且保留视口边距，拖动不触发打开动作。
+- **Rules/Invariants**：`libraryStorageKey` 对应的 storage.local 是唯一数据源，与浏览器同步设置独立，树内原站书签成功保存/取消时单向镜像到本地收藏（仅当前已加载楼层，不批量读取账户历史书签）；后台串行处理跨标签增删，成功写入后更新 UI，失败保留原数据并显示错误。`src/library-entry.js` 是条目校验、键与链接的唯一规则：旧主题收藏无 `postNumber`，楼层收藏带正整数 `postNumber`，按主题 ID + 楼号去重，主题收藏与各楼并存；后台保留 `/t/topic/{id}/{postNumber}`。面板显示楼号，普通点击完整页面导航并复用原站/树已有深链定位，修饰键保持浏览器链接行为。正常面板不显示常驻实现说明，状态栏仅在出错时出现，空状态保留简短操作指引。原站书签事件来自 `app-events` 的 `bookmarks:changed` 成功态并随菜单宿主释放订阅，不以按钮点击判定；加载的已书签楼也导入，失败就地显示并可重试。面板可打开或移除主题/楼层，本地移除不操作原站书签，其他标签监听同一存储；插件预览内保留主题收藏，浮动入口只在顶层渲染。入口默认右下角，可指针拖动或 Alt + 方向键移动；位置以视口比例保存在 `libraryPositionStorageKey` 的本机存储，刷新恢复并随视口变化约束到可见范围，面板跟随入口且保留视口边距，拖动不触发打开动作。
 
 ### Browser DoH Location
 - **Definition**：高级 → 浏览器网络提供 Chrome 安全 DNS / Firefox 基于 HTTPS 的 DNS 的现有设置定位。

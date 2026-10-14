@@ -276,7 +276,7 @@
     actions.append(importButton, manageButton, settings, fileInput);
     const guide = element("details", "betterld-sticker-guide");
     guide.append(element("summary", "", "如何导入 Telegram 表情包？"));
-    guide.append(element("p", "", "在 Telegram 下载 Bot 或本地工具中获取图片／ZIP，再点击导入。TGS 和视频需先在外部转换为 GIF 或 WebP；公共 Bot 的可用性由服务方决定。"));
+    guide.append(element("p", "", "获取图片或 ZIP 后点击导入；TGS 和视频需先转换为 GIF 或 WebP。"));
     for (const entry of sticker.acquisitionLinks) {
       const link = element("a", "", entry.label);
       link.href = entry.url;

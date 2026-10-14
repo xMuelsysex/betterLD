@@ -85,13 +85,50 @@
     floorTimeline = null;
   }
 
-  function renderFloorTimeline(timeline, floor) {
+  function renderFloorTotal(timeline) {
+    const total = `/ ${timeline.lastFloor}`;
+    if (timeline.total.textContent !== total) timeline.total.textContent = total;
+    timeline.numberInput.size = Math.max(String(timeline.lastFloor).length, timeline.numberInput.value.length);
+  }
+
+  function floorAtTimelinePosition(timeline) {
+    // 区间边界归较小楼号；位置保持连续，整数楼号只用于预览和提交。
+    return Math.max(1, Math.ceil(timeline.input.valueAsNumber * timeline.lastFloor));
+  }
+
+  function floorTimelineDate(timeline, floor) {
+    const stream = timeline.topic.postStream;
+    let post = stream.posts.find((entry) => entry.post_number === floor);
+    // 树登记只写入原站identityMap，不在当前原帖分页的posts数组里。
+    if (!post && treeRegisteredTopicId === timeline.topicId) {
+      for (const id of treeRegisteredPostIds) {
+        const entry = stream.findLoadedPost(id);
+        if (entry?.post_number === floor) {
+          post = entry;
+          break;
+        }
+      }
+    }
+    if (!post?.created_at) return "";
+    const date = window.moment(post.created_at);
+    const format = date.year() === window.moment().year() ? "long_no_year_no_time" : "timeline_date";
+    return date.format(window.require("discourse-i18n").i18n(`dates.${format}`));
+  }
+
+  function renderFloorTimeline(timeline, floor, position = timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0) {
     const value = String(floor);
-    if (timeline.input.value !== value) timeline.input.value = value;
+    if (timeline.input.valueAsNumber !== position) timeline.input.value = String(position);
+    // 聚焦编辑或保留非法输入时不重写楼号输入，避免吞掉用户键入的内容。
+    if (!timeline.numberEditing && !timeline.numberDirty && !timeline.numberError && timeline.numberInput.value !== value) timeline.numberInput.value = value;
+    renderFloorTotal(timeline);
+    if (timeline.current.textContent !== value) timeline.current.textContent = value;
     const label = `${floor} / ${timeline.lastFloor}`;
-    if (timeline.label.textContent !== label) timeline.label.textContent = label;
     if (timeline.input.getAttribute("aria-valuetext") !== label) timeline.input.setAttribute("aria-valuetext", label);
-    const progress = String(timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0);
+    timeline.input.setAttribute("aria-valuenow", value);
+    const date = floorTimelineDate(timeline, floor);
+    if (timeline.date.textContent !== date) timeline.date.textContent = date;
+    timeline.date.hidden = !date;
+    const progress = String(position);
     if (timeline.element.style.getPropertyValue("--betterld-floor-progress") !== progress) timeline.element.style.setProperty("--betterld-floor-progress", progress);
   }
 
@@ -105,10 +142,67 @@
     }, delay);
   }
 
+  // 只接受 trim 后的纯 ASCII 数字楼号：非法输入不夹取、不兜底，交回用户重新输入。
+  function parseFloorInput(value, lastFloor) {
+    const text = value.trim();
+    if (!/^[0-9]+$/.test(text)) return null;
+    const floor = Number(text);
+    return Number.isSafeInteger(floor) && floor >= 1 && floor <= lastFloor ? floor : null;
+  }
+
+  function clearFloorNumberError(timeline) {
+    if (timeline.numberError && timeline.status.textContent === timeline.numberError) timeline.status.textContent = "";
+    timeline.numberError = "";
+    timeline.numberInput.removeAttribute("aria-invalid");
+  }
+
+  function closeFloorNumberEditor(timeline) {
+    timeline.numberInput.hidden = true;
+    timeline.current.hidden = false;
+    timeline.numberEditing = false;
+    timeline.numberDirty = false;
+  }
+
+  function requestFloorJump(timeline, target) {
+    if (timeline.pending) return;
+    clearFloorNumberError(timeline);
+    timeline.editing = false;
+    timeline.numberDirty = false;
+    timeline.status.textContent = "";
+    if (target === timeline.floor && !timeline.active) {
+      closeFloorNumberEditor(timeline);
+      renderFloorTimeline(timeline, timeline.floor);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    timeline.pending = { requestId, target };
+    timeline.input.disabled = true;
+    timeline.numberInput.disabled = true;
+    timeline.current.disabled = true;
+    timeline.status.textContent = `正在前往 #${target}…`;
+    armFloorJumpTimeout(timeline, timeline.timeoutMs);
+    if (timeline.active) {
+      jumpReply(target, undefined, requestId);
+    } else {
+      try {
+        Promise.resolve(discourseUrl.routeTo(`/t/topic/${timeline.topicId}/${target}`)).catch((error) => {
+          if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
+            finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
+          }
+        });
+      } catch (error) {
+        finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
+      }
+    }
+  }
+
   function finishFloorJump(timeline, floor, error = "") {
     clearTimeout(timeline.timer);
     timeline.pending = null;
     timeline.input.disabled = timeline.lastFloor === 1;
+    timeline.numberInput.disabled = false;
+    timeline.current.disabled = false;
+    closeFloorNumberEditor(timeline);
     timeline.status.textContent = error;
     renderFloorTimeline(timeline, floor);
   }
@@ -128,23 +222,59 @@
       element.dataset.betterldOwned = "true";
       const input = document.createElement("input");
       input.type = "range";
-      input.min = "1";
-      input.step = "1";
+      input.min = "0";
+      input.max = "1";
+      input.step = "any";
       input.setAttribute("aria-label", "按实际楼号跳转");
       input.setAttribute("aria-orientation", "vertical");
-      const label = document.createElement("output");
-      label.className = "betterld-floor-timeline__label";
+      input.setAttribute("aria-valuemin", "1");
       const status = document.createElement("p");
       status.className = "betterld-floor-timeline__status";
       status.setAttribute("role", "status");
-      element.append(input, label, status);
+      const form = document.createElement("form");
+      form.className = "betterld-floor-timeline__label";
+      const current = document.createElement("button");
+      current.type = "button";
+      current.className = "betterld-floor-timeline__current";
+      current.setAttribute("aria-label", "编辑当前楼号，Enter 跳转，Escape 取消");
+      const numberInput = document.createElement("input");
+      numberInput.type = "text";
+      numberInput.className = "betterld-floor-timeline__number";
+      numberInput.setAttribute("inputmode", "numeric");
+      numberInput.setAttribute("aria-label", "楼号，Enter 跳转，Escape 取消");
+      numberInput.hidden = true;
+      const total = document.createElement("span");
+      total.className = "betterld-floor-timeline__total";
+      const counter = document.createElement("div");
+      counter.className = "betterld-floor-timeline__counter";
+      counter.append(current, numberInput, total);
+      const date = document.createElement("span");
+      date.className = "betterld-floor-timeline__date timeline-ago";
+      form.append(counter, date);
+      element.append(input, form, status);
       source.after(element);
       host.classList.add("betterld-floor-timeline-active");
-      const timeline = { host, source, element, input, label, status, topicId: String(topic.id), floor, lastFloor, editing: false, pending: null };
+      const timeline = { host, source, element, input, current, date, status, numberInput, total, topicId: String(topic.id), floor, lastFloor, editing: false, numberEditing: false, numberDirty: false, numberError: "", pending: null };
       floorTimeline = timeline;
       input.addEventListener("input", () => {
         timeline.editing = true;
-        renderFloorTimeline(timeline, input.valueAsNumber);
+        renderFloorTimeline(timeline, floorAtTimelinePosition(timeline), input.valueAsNumber);
+      });
+      // step=any只负责指针连续位置；键盘仍以实际楼号逐楼定位。
+      input.addEventListener("keydown", (event) => {
+        const target = {
+          ArrowUp: Math.max(1, timeline.floor - 1),
+          ArrowLeft: Math.max(1, timeline.floor - 1),
+          ArrowDown: Math.min(timeline.lastFloor, timeline.floor + 1),
+          ArrowRight: Math.min(timeline.lastFloor, timeline.floor + 1),
+          PageUp: Math.max(1, timeline.floor - 1),
+          PageDown: Math.min(timeline.lastFloor, timeline.floor + 1),
+          Home: 1,
+          End: timeline.lastFloor
+        }[event.key];
+        if (target === undefined) return;
+        event.preventDefault();
+        requestFloorJump(timeline, target);
       });
       const cancelPreview = () => {
         timeline.editing = false;
@@ -152,37 +282,51 @@
       };
       input.addEventListener("pointercancel", cancelPreview);
       input.addEventListener("blur", cancelPreview);
-      input.addEventListener("change", () => {
-        const target = input.valueAsNumber;
-        timeline.editing = false;
-        timeline.status.textContent = "";
-        if (target === timeline.floor && !timeline.active) return;
-        const requestId = crypto.randomUUID();
-        timeline.pending = { requestId, target };
-        input.disabled = true;
-        timeline.status.textContent = `正在前往 #${target}…`;
-        armFloorJumpTimeout(timeline, timeline.timeoutMs);
-        if (timeline.active) {
-          jumpReply(target, undefined, requestId);
-        } else {
-          try {
-            Promise.resolve(discourseUrl.routeTo(`/t/topic/${timeline.topicId}/${target}`)).catch((error) => {
-              if (floorTimeline === timeline && timeline.pending?.requestId === requestId) {
-                finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
-              }
-            });
-          } catch (error) {
-            finishFloorJump(timeline, timeline.floor, `楼层跳转失败：${error.message}`);
-          }
+      input.addEventListener("change", () => requestFloorJump(timeline, floorAtTimelinePosition(timeline)));
+      current.addEventListener("click", () => {
+        current.hidden = true;
+        numberInput.hidden = false;
+        numberInput.focus();
+        numberInput.select();
+      });
+      numberInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        clearFloorNumberError(timeline);
+        closeFloorNumberEditor(timeline);
+        renderFloorTimeline(timeline, timeline.floor);
+        current.focus();
+      });
+      // 聚焦编辑期间同步不重写输入；失焦只结束编辑，不触发跳转。
+      numberInput.addEventListener("focus", () => { timeline.numberEditing = true; });
+      numberInput.addEventListener("blur", () => { timeline.numberEditing = false; });
+      numberInput.addEventListener("input", () => {
+        timeline.numberDirty = true;
+        renderFloorTotal(timeline);
+        clearFloorNumberError(timeline);
+      });
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (timeline.pending) return;
+        const target = parseFloorInput(numberInput.value, timeline.lastFloor);
+        if (target === null) {
+          const message = `请输入 1–${timeline.lastFloor} 的整数楼号`;
+          timeline.numberError = message;
+          timeline.status.textContent = message;
+          numberInput.setAttribute("aria-invalid", "true");
+          return;
         }
+        requestFloorJump(timeline, target);
       });
     }
     const timeline = floorTimeline;
+    timeline.topic = topic;
     timeline.lastFloor = lastFloor;
+    renderFloorTotal(timeline);
+    timeline.input.setAttribute("aria-valuemax", String(lastFloor));
     timeline.active = active;
     timeline.timeoutMs = timeoutMs;
-    if (timeline.input.max !== String(lastFloor)) timeline.input.max = String(lastFloor);
-    if (timeline.element.style.height !== source.style.height) timeline.element.style.height = source.style.height;
+    if (timeline.element.style.getPropertyValue("--betterld-floor-track-height") !== source.style.height) timeline.element.style.setProperty("--betterld-floor-track-height", source.style.height);
     if (Number.isInteger(floor) && floor > 0 && floor <= lastFloor) timeline.floor = floor;
     if (!active && timeline.pending?.target === timeline.floor) finishFloorJump(timeline, timeline.floor);
     if (!timeline.editing && !timeline.pending) {
@@ -1251,6 +1395,8 @@
     const category = currentTopic?.category;
     const currentMetadata = currentTopic ? {
       id: String(currentTopic.id),
+      ...(currentTopic.details?.created_by?.username?.trim() ? { author: currentTopic.details.created_by.username.trim() } : {}),
+      ...(currentTopic.details?.created_by?.avatar_template ? { author_avatar_template: currentTopic.details.created_by.avatar_template } : {}),
       ...(category?.id && category.name ? { category: { id: String(category.id), name: category.name } }
         : currentTopic.category_id === null ? { category: null } : {}),
       ...(Array.isArray(currentTopic.tags) ? { tags: currentTopic.tags.map((tag) => typeof tag === "string" ? tag : tag.name).filter((tag) => typeof tag === "string" && tag.trim()) } : {})

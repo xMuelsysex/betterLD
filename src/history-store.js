@@ -36,6 +36,23 @@
     return value.trim().slice(0, config.visitedHistoryTitleMaxLength) || undefined;
   }
 
+  function authorField(value) {
+    if (typeof value !== "string") {
+      fail("浏览历史的发帖人格式异常，原数据保持不变");
+    }
+    return value.trim().slice(0, config.visitedHistoryTitleMaxLength) || undefined;
+  }
+
+  function authorAvatarField(value) {
+    if (typeof value !== "string") fail("浏览历史的头像格式异常，原数据保持不变");
+    if (!value.trim()) return undefined;
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) {
+      fail("浏览历史的头像地址无效，原数据保持不变");
+    }
+    return url.href;
+  }
+
   function categoryField(value) {
     if (value === null) return null;
     if (!isPlainObject(value) || typeof value.name !== "string" || !value.name.trim()) {
@@ -53,7 +70,11 @@
   }
 
   function metadataFields(record) {
+    const author = record.author === undefined ? undefined : authorField(record.author);
+    const authorAvatar = record.authorAvatar === undefined ? undefined : authorAvatarField(record.authorAvatar);
     return {
+      ...(author === undefined ? {} : { author }),
+      ...(authorAvatar === undefined ? {} : { authorAvatar }),
       ...(record.category === undefined ? {} : { category: categoryField(record.category) }),
       ...(record.tags === undefined ? {} : { tags: tagsField(record.tags) })
     };
@@ -161,7 +182,8 @@
       return null;
     }
     const record = merge(previous, entry);
-    if (record.title === previous.title && record.postNumber === previous.postNumber
+    if (record.title === previous.title && record.postNumber === previous.postNumber && record.author === previous.author
+      && record.authorAvatar === previous.authorAvatar
       && JSON.stringify(record.category) === JSON.stringify(previous.category)
       && JSON.stringify(record.tags) === JSON.stringify(previous.tags)) {
       return null;
