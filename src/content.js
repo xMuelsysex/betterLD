@@ -690,14 +690,14 @@
     return currentPath() === config.homepagePath;
   }
 
-  function userTopicsUsername() {
-    return currentPath().match(/^\/u\/([^/]+)\/activity\/topics$/)?.[1] || "";
+  function isUserSpaceTopicListPage() {
+    return /^\/u\/[^/]+\/activity\/(?:topics|read)$/.test(currentPath());
   }
 
   function isTopicListPage() {
     const path = currentPath();
     return isHomepage()
-      || Boolean(userTopicsUsername())
+      || isUserSpaceTopicListPage()
       || /^\/(?:latest|new|unread|unseen|hot|top|read|posted|bookmarks)(?:\/|$)/.test(path)
       || /^\/my\/[^/]+(?:\/|$)/.test(path)
       || /^\/l\/(?:latest|new|unread|unseen|hot|top|read)(?:\/|$)/.test(path)
@@ -713,11 +713,6 @@
   function hasOwnTopicRanking() {
     const path = currentPath();
     return /^\/(?:hot|top)(?:\/|$)/.test(path) || /^\/l\/(?:hot|top)(?:\/|$)/.test(path);
-  }
-
-  // 个人空间的话题列表不在 betterLD 管理的页面集合里，排序靠 Discourse 的 order 参数生效
-  function isUserSpaceTopicListPage() {
-    return /^\/u\/[^/]+\/activity\/topics$/.test(currentPath());
   }
 
   function isSortableTopicListPage() {

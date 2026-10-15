@@ -98,19 +98,24 @@
 
   function floorTimelineDate(timeline, floor) {
     const stream = timeline.topic.postStream;
-    let post = stream.posts.find((entry) => entry.post_number === floor);
-    // 树登记只写入原站identityMap，不在当前原帖分页的posts数组里。
-    if (!post && treeRegisteredTopicId === timeline.topicId) {
-      for (const id of treeRegisteredPostIds) {
-        const entry = stream.findLoadedPost(id);
-        if (entry?.post_number === floor) {
-          post = entry;
-          break;
-        }
+    // loadedPosts覆盖原帖分页和树已登记的identityMap模型，翻页后仍读同一楼层身份。
+    const post = stream.loadedPosts.find((entry) => entry.post_number === floor);
+    let createdAt = post?.created_at;
+    const omittedFloors = timeline.lastFloor - stream.stream.length;
+    if (!createdAt && stream.hasNoFilters && !stream.isMegaTopic && omittedFloors >= 0) {
+      // 表按流序号而非楼号编码。删楼使序号偏移时，只有整个可能范围同属一天才显示。
+      const firstIndex = Math.max(1, floor - omittedFloors);
+      const lastIndex = Math.min(floor, stream.stream.length);
+      const daysAgo = stream.closestDaysAgoFor(firstIndex);
+      const lastDaysAgo = stream.closestDaysAgoFor(lastIndex);
+      if (firstIndex <= lastIndex && daysAgo === lastDaysAgo && typeof daysAgo === "number" && Number.isFinite(daysAgo) && daysAgo >= 0) {
+        createdAt = new Date();
+        createdAt.setDate(createdAt.getDate() - daysAgo);
       }
     }
-    if (!post?.created_at) return "";
-    const date = window.moment(post.created_at);
+    timeline.date.title = createdAt ? (post?.created_at ? "楼层发布时间" : "原站时间轴分组日期，非精确发布时间") : "";
+    if (!createdAt) return "";
+    const date = window.moment(createdAt);
     const format = date.year() === window.moment().year() ? "long_no_year_no_time" : "timeline_date";
     return date.format(window.require("discourse-i18n").i18n(`dates.${format}`));
   }
@@ -332,6 +337,9 @@
     if (!timeline.editing && !timeline.pending) {
       if (timeline.input.disabled !== (lastFloor === 1)) timeline.input.disabled = lastFloor === 1;
       renderFloorTimeline(timeline, timeline.floor);
+    } else if (timeline.editing && !timeline.pending) {
+      // 模型晚到时刷新当前拖动楼层的日期，保持指针位置和待选楼号。
+      renderFloorTimeline(timeline, floorAtTimelinePosition(timeline), timeline.input.valueAsNumber);
     }
   }
 
