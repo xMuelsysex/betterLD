@@ -4632,9 +4632,9 @@
         const last = [...branch.children].findLast((child) => !child.hidden);
         if (last) {
           const trunk = last.querySelector(':scope > .betterld-reply-tree__line-hit--trunk');
-          const top = parseFloat(getComputedStyle(branch, '::after').top);
-          const height = trunk.getBoundingClientRect().bottom - branch.getBoundingClientRect().top - top;
-          setReplyBranchCoordinate(branch, '--betterld-reply-trunk-height', height);
+          const top = parseFloat(getComputedStyle(item, '::after').top);
+          const height = trunk.getBoundingClientRect().bottom - item.getBoundingClientRect().top - top;
+          setReplyBranchCoordinate(item, '--betterld-reply-trunk-height', height);
         }
       }
       tree.branchDirty.delete(item);
@@ -6182,6 +6182,40 @@
     if (data.title) tree.title = cleanText(data.title);
     post.bookmarked = data.bookmarked;
     syncReplyBookmark(tree, post, data.bookmarked, true);
+  });
+
+  document.addEventListener('betterld:reply-poll-refresh', async (event) => {
+    const { topicId, postId, revision } = JSON.parse(event.detail);
+    const tree = state.replyTree;
+    if (tree?.topicId !== topicId || !tree.posts.has(postId) || tree.contentContainer.hidden) return;
+    const pending = tree.pollRefreshRequests ||= new Map();
+    const existing = pending.get(postId);
+    if (existing) { existing.revision = revision; return; }
+    const request = { revision };
+    pending.set(postId, request);
+    try {
+      const active = () => state.replyTree === tree && topicIdFromPath() === topicId && !tree.contentContainer.hidden;
+      while (active()) {
+        const requestedRevision = request.revision;
+        // 同一队列串行，直接读取本次消息之后的新响应，不复用投票前的正文在途请求。
+        const data = await scheduleMetadataRequest(
+          () => fetchTopicJson(`/t/${topicId}/posts.json?post_ids[]=${postId}`), active
+        );
+        if (!active()) return;
+        if (request.revision !== requestedRevision) continue;
+        const post = data?.post_stream?.posts?.find((entry) => entry.id === postId);
+        if (!post || !Array.isArray(post.polls)) throw new Error('站点未返回该楼层的投票结果');
+        document.dispatchEvent(new CustomEvent('betterld:reply-poll-data', {
+          detail: JSON.stringify({ topicId, postId, polls: post.polls, revision: requestedRevision })
+        }));
+        break;
+      }
+    } catch (error) {
+      console.error('[betterLD] poll result refresh failed', error);
+      if (state.replyTree === tree) tree.status.textContent = `投票结果同步失败：${error.message}`;
+    } finally {
+      pending.delete(postId);
+    }
   });
 
   document.addEventListener('betterld:reply-posts-registered', (event) => {

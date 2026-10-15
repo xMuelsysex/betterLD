@@ -619,6 +619,62 @@
   // 必须在 Ember runloop 内挂载；树节点移除后同时销毁宿主与装饰器。
   const cookedHosts = new Map();
   const postMenuHosts = new Map();
+  let treePollSync = null;
+  let treePollRevision = 0;
+
+  function releaseTreePollSync() {
+    if (!treePollSync) return;
+    treePollSync.bus.unsubscribe(`/polls/${treePollSync.topicId}`, treePollSync.onMessage);
+    treePollSync.appEvents.off('poll:voted', treePollSync.onVote);
+    treePollSync = null;
+  }
+
+  function syncTreePolls(owner, topic) {
+    if (treePollSync?.topicId === String(topic.id)) return;
+    const revisions = new Map();
+    releaseTreePollSync();
+    const requestRefresh = (postId) => {
+      if (!document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) return;
+      const mounted = [...cookedHosts.values()].some((entry) => entry.element.isConnected && entry.post.id === postId);
+      if (mounted) document.dispatchEvent(new CustomEvent('betterld:reply-poll-refresh', {
+        detail: JSON.stringify({ topicId: String(topic.id), postId, revision: revisions.get(postId) })
+      }));
+    };
+    const onMessage = (message) => {
+      const post = topic.postStream.findLoadedPost(message.post_id);
+      revisions.set(message.post_id, ++treePollRevision);
+      // on_vote 广播可能只带人数；原站回调先消费同一载荷，缺失票数也可能已被它补成 0。
+      // 原生组件实际显示结果才补读，作者、管理员和关闭后可见等权限仍由它决定。
+      if (post && message.polls.some((poll) => poll.voters > 0
+        && ['regular', 'multiple', 'number'].includes(poll.type)
+        && poll.options?.length && poll.options.every((option) => !option.votes)
+        && [...cookedHosts.values()].some((entry) => entry.post === post && entry.element.isConnected
+          && entry.element.querySelector(`[data-poll-name="${CSS.escape(poll.name)}"] [class*="-results"]`)))) requestRefresh(post.id);
+    };
+    const onVote = (poll, post) => {
+      if (String(post.topic_id) !== String(topic.id)
+        || !document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')) return;
+      revisions.set(post.id, ++treePollRevision);
+      // 投票/撤票响应是本次操作的权威结果；同步原始 polls 与 tracked pollsObject。
+      post.polls = post.polls.map((entry) => entry.name === poll.name ? poll : entry);
+    };
+    const bus = owner.lookup('service:message-bus');
+    const appEvents = owner.lookup('service:app-events');
+    bus.subscribe(`/polls/${topic.id}`, onMessage);
+    appEvents.on('poll:voted', onVote);
+    treePollSync = { topicId: String(topic.id), bus, appEvents, onMessage, onVote, revisions };
+  }
+
+  document.addEventListener('betterld:reply-poll-data', (event) => {
+    const { topicId, postId, polls, revision } = JSON.parse(event.detail);
+    const topic = window.require('discourse/lib/get-owner').getOwnerWithFallback().lookup('controller:topic').model;
+    if (String(topic?.id) !== topicId || treePollSync?.topicId !== topicId
+      || treePollSync.revisions.get(postId) !== revision) return;
+    const post = topic.postStream.findLoadedPost(postId);
+    if (post) window.require('@ember/runloop').join(() => { post.polls = polls; });
+  });
+  document.addEventListener('betterld:reply-reading-release', releaseTreePollSync);
+  window.addEventListener('pagehide', releaseTreePollSync);
   function releaseHostResources(entry, menu) {
     const errors = [];
     window.require("@ember/runloop").join(() => {
@@ -736,6 +792,7 @@
           host.appendTo(document.body);
         });
         cookedHosts.set(body.id, { element, host, post, ownsPost });
+        if (post.polls?.length && !body.post.embeddedPost) syncTreePolls(owner, topic);
         element.dataset.betterldCookedMounted = "true";
       } catch (error) {
         if (host || (ownsPost && post)) {
@@ -1044,11 +1101,13 @@
         treeRegisteredPostIds.clear();
         treeRevealedIgnoredIds.clear();
         treeRegisteredTopicId = '';
+        releaseTreePollSync();
         releaseTreeReading();
         resetFloorTimeline();
         return;
       }
       if (replyTopicId !== topicId) {
+        releaseTreePollSync();
         replySignature = "";
         replyPostSnapshots.clear();
         // 内容脚本可能已为新主题登记，不因首个同步再清一次。
@@ -1062,6 +1121,9 @@
       replyTopicId = topicId;
       const stream = topic.postStream;
       if (stream.loadingFilter) return;
+      if (document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')
+        && [...cookedHosts.values()].some((entry) => entry.element.isConnected
+          && String(entry.post.topic_id) === topicId && entry.post.polls?.length && !entry.ownsPost)) syncTreePolls(owner, topic);
       const posts = new Map(stream.posts.map((post) => [String(post.id), post]));
       const streamIds = new Set(stream.stream.map(String));
       for (const entry of postMenuHosts.values()) {

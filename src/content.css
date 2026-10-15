@@ -4147,9 +4147,11 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 
 .betterld-reply-tree__item {
   /* 每楼独立保存收放坐标，隐藏楼不继承祖先坐标。 */
+  --betterld-reply-arc-join: 10px;
   --betterld-branch-toggle-y: initial;
   --betterld-reply-tail-y: initial;
   --betterld-reply-trunk-end: initial;
+  --betterld-reply-trunk-height: initial;
   position: relative;
   min-width: 0;
   padding-bottom: 14px;
@@ -4680,25 +4682,24 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   padding-left: 24px;
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children) > .betterld-reply-tree__card::after {
+/* 父楼与子楼主干在同一坐标空间一次绘制，跨正文边界也不拼接。 */
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children)::after {
   content: "";
   position: absolute;
   top: 36px;
-  bottom: auto;
-  height: max(0px, calc(var(--betterld-branch-toggle-y) - 43px));
   left: 17px;
+  height: max(0px, calc(var(--betterld-branch-toggle-y) - 43px));
   pointer-events: none;
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
+  mask-image: linear-gradient(to bottom,
+    #000 calc(var(--betterld-branch-toggle-y) - 43px),
+    transparent calc(var(--betterld-branch-toggle-y) - 43px),
+    transparent calc(var(--betterld-branch-toggle-y) - 29px),
+    #000 calc(var(--betterld-branch-toggle-y) - 29px));
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden])) > .betterld-reply-tree__card::before {
-  content: "";
-  position: absolute;
-  top: calc(var(--betterld-branch-toggle-y) + 7px);
-  bottom: -8px;
-  left: 17px;
-  pointer-events: none;
-  border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
+.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden]))::after {
+  height: var(--betterld-reply-trunk-height);
 }
 
 .betterld-reply-tree__children[hidden] { display: none; }
@@ -4712,17 +4713,6 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   outline-offset: 2px;
 }
 
-/* 同一父组的主干一次绘制，避免相邻楼层的小数像素边界留下拼接缝。 */
-.betterld-reply-tree__children::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: var(--betterld-reply-trunk-height);
-  pointer-events: none;
-  border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
-}
-
 .betterld-reply-tree__children > .betterld-reply-tree__item::before {
   content: "";
   position: absolute;
@@ -4733,8 +4723,13 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
   border-bottom: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
   border-bottom-left-radius: 12px;
-  /* 主干区域只由组级竖线着色，半透明弧线不重复叠加。 */
+  /* 中途接点由竖干覆盖左侧，避免半透明笔画叠色。 */
   clip-path: inset(0 0 0 2px);
+}
+
+.betterld-reply-tree__children > .betterld-reply-tree__item:is(:last-child, [data-reply-last-visible]):not(:has(> .betterld-reply-tree__tail-control))::before {
+  /* 末端保留完整圆弧，从圆弧切点接续竖干，不能裁掉左侧再提前截断主干。 */
+  clip-path: inset(var(--betterld-reply-arc-join) 0 0 0);
 }
 
 .betterld-reply-tree .betterld-reply-tree__collapse,
@@ -4764,11 +4759,11 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 
 .betterld-reply-tree__item[data-reply-last-visible] > .betterld-reply-tree__line-hit--trunk {
   bottom: auto;
-  height: var(--betterld-reply-trunk-end, 8px);
+  height: var(--betterld-reply-trunk-end, var(--betterld-reply-arc-join));
 }
 
 .betterld-reply-tree__item[data-reply-last-visible]:first-child > .betterld-reply-tree__line-hit--trunk {
-  height: calc(var(--betterld-reply-trunk-end, 8px) + 10px);
+  height: calc(var(--betterld-reply-trunk-end, var(--betterld-reply-arc-join)) + 10px);
 }
 
 .betterld-reply-tree__collapse-symbol {
@@ -4821,7 +4816,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 
 .betterld-reply-tree__item:last-child > .betterld-reply-tree__line-hit--trunk {
   bottom: auto;
-  height: 8px;
+  height: var(--betterld-reply-arc-join);
 }
 
 .betterld-reply-tree__item:first-child > .betterld-reply-tree__line-hit--trunk {
@@ -4829,7 +4824,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 }
 
 .betterld-reply-tree__item:only-child > .betterld-reply-tree__line-hit--trunk {
-  height: 18px;
+  height: calc(var(--betterld-reply-arc-join) + 10px);
 }
 
 .betterld-reply-tree__line-hit--arc {
@@ -4839,10 +4834,8 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   height: 18px;
 }
 
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children::after {
+.betterld-reply-tree__item[data-branch-highlight]::after,
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before {
   border-color: var(--betterld-primary);
 }
 
@@ -4900,16 +4893,12 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 
 @media (forced-colors: active) {
   .betterld-reply-tree,
-  .betterld-reply-tree__item > .betterld-reply-tree__card::before,
-  .betterld-reply-tree__item > .betterld-reply-tree__card::after,
-  .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-  .betterld-reply-tree__children::after {
+  .betterld-reply-tree__item::after,
+  .betterld-reply-tree__children > .betterld-reply-tree__item::before {
     border-color: CanvasText;
   }
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children::after {
+  .betterld-reply-tree__item[data-branch-highlight]::after,
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before {
     border-color: Highlight;
   }
   .betterld-reply-tree .betterld-reply-tree__collapse,
