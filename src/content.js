@@ -4488,10 +4488,12 @@
 
   function bindReplyBranchInteraction(tree) {
     const owner = (target) => Number(target instanceof Element ? target.closest('[data-reply-branch-owner]')?.dataset.replyBranchOwner : 0) || 0;
-    tree.content.addEventListener('pointerover', (event) => setReplyBranchHighlight(tree, owner(event.target)));
-    tree.content.addEventListener('pointerout', (event) => setReplyBranchHighlight(tree, owner(event.relatedTarget)));
-    tree.content.addEventListener('focusin', (event) => setReplyBranchHighlight(tree, owner(event.target)));
-    tree.content.addEventListener('focusout', (event) => setReplyBranchHighlight(tree, owner(event.relatedTarget)));
+    // 后续同级入口独立高亮；父分支的连线与组首按钮才共享整组状态。
+    const highlightOwner = (target) => target instanceof Element && target.closest('[data-reply-tail-after]') ? 0 : owner(target);
+    tree.content.addEventListener('pointerover', (event) => setReplyBranchHighlight(tree, highlightOwner(event.target)));
+    tree.content.addEventListener('pointerout', (event) => setReplyBranchHighlight(tree, highlightOwner(event.relatedTarget)));
+    tree.content.addEventListener('focusin', (event) => setReplyBranchHighlight(tree, highlightOwner(event.target)));
+    tree.content.addEventListener('focusout', (event) => setReplyBranchHighlight(tree, highlightOwner(event.relatedTarget)));
     tree.content.addEventListener('click', (event) => {
       const number = owner(event.target);
       if (!number) return;
