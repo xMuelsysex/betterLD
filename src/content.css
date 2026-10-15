@@ -1686,6 +1686,8 @@ body.betterld-shell #user-card .usercard-controls {
 }
 
 body.betterld-shell .user-card .usercard-controls li {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
 }
 
@@ -4105,7 +4107,9 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
   box-sizing: border-box;
 }
 .betterld-user-marks { margin-top: 8px; }
-#user-card .betterld-user-marks { flex: 1 1 100%; min-width: 0; width: 100%; list-style: none; }
+#user-card .betterld-user-marks { flex: 0 1 auto; min-width: 0; margin-top: 0; list-style: none; }
+#user-card .betterld-user-marks:has(> .betterld-user-marks__panel:not([hidden])) { flex-basis: 100%; }
+#user-card .betterld-user-marks > .betterld-user-marks__toggle { min-width: 0; width: auto; }
 .betterld-user-marks__panel { margin-top: 8px; padding: 12px; border: 1px solid rgb(var(--betterld-outline-rgb) / .24); border-radius: var(--betterld-radius-md); background: rgb(var(--betterld-surface-rgb) / .56); }
 .betterld-user-marks__panel[hidden] { display: none; }
 .betterld-user-marks__input { display: block; width: 100%; margin-bottom: 6px; min-height: 40px; box-sizing: border-box; padding: 10px 12px; border: 1px solid rgb(var(--betterld-outline-rgb) / .35); border-radius: var(--betterld-radius-sm); background: rgb(var(--betterld-surface-container-rgb) / .78); color: var(--betterld-on-surface); font: inherit; font-size: 14px; caret-color: var(--betterld-primary); }
@@ -5332,12 +5336,6 @@ body.betterld-shell .container.posts[data-betterld-reading-active="true"] .post_
 }
 .betterld-reply-tree .betterld-reply-tree__users-close:active {
   background: color-mix(in srgb, var(--betterld-primary) 12%, transparent);
-}
-.betterld-reply-tree :is(.betterld-reply-tree__collapse, .betterld-reply-tree__tail-control):is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-rgb)));
-}
-.betterld-reply-tree :is(.betterld-reply-tree__collapse, .betterld-reply-tree__tail-control):active {
-  background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-rgb)));
 }
 
 /* 垂直轨道沿用原生键盘/拖动语义，文本输入仅在提交时跳楼。 */
