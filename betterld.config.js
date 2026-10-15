@@ -328,8 +328,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       darkOnPrimary: "#472900"
     }
   ]),
-  topicListMaxWidthPx: 1320,
-  topicDetailWidthPercent: 80,
+  topicListMaxWidthPx: 1500,
+  topicDetailWidthPercent: 90,
   topicTimelineSpacePx: 176,
   topicNavigationItems: Object.freeze([
     "latest",
