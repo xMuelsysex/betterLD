@@ -4712,26 +4712,15 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   outline-offset: 2px;
 }
 
-.betterld-reply-tree__children > .betterld-reply-tree__item::after {
+/* 同一父组的主干一次绘制，避免相邻楼层的小数像素边界留下拼接缝。 */
+.betterld-reply-tree__children::after {
   content: "";
   position: absolute;
   top: 0;
-  bottom: 0;
-  left: -24px;
+  left: 0;
+  height: var(--betterld-reply-trunk-height);
+  pointer-events: none;
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
-}
-
-.betterld-reply-tree__children > .betterld-reply-tree__item:last-child::after {
-  bottom: auto;
-  height: 8px;
-}
-
-.betterld-reply-tree__children > .betterld-reply-tree__item:first-child::after {
-  top: -10px;
-}
-
-.betterld-reply-tree__children > .betterld-reply-tree__item:only-child::after {
-  height: 18px;
 }
 
 .betterld-reply-tree__children > .betterld-reply-tree__item::before {
@@ -4744,6 +4733,8 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   border-left: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
   border-bottom: 2px solid rgb(var(--betterld-outline-rgb) / 0.56);
   border-bottom-left-radius: 12px;
+  /* 主干区域只由组级竖线着色，半透明弧线不重复叠加。 */
+  clip-path: inset(0 0 0 2px);
 }
 
 .betterld-reply-tree .betterld-reply-tree__collapse,
@@ -4771,13 +4762,11 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   left: -23px;
 }
 
-.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]::after,
 .betterld-reply-tree__item[data-reply-last-visible] > .betterld-reply-tree__line-hit--trunk {
   bottom: auto;
   height: var(--betterld-reply-trunk-end, 8px);
 }
 
-.betterld-reply-tree__children > .betterld-reply-tree__item[data-reply-last-visible]:first-child::after,
 .betterld-reply-tree__item[data-reply-last-visible]:first-child > .betterld-reply-tree__line-hit--trunk {
   height: calc(var(--betterld-reply-trunk-end, 8px) + 10px);
 }
@@ -4853,7 +4842,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
 .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
 .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after {
+.betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children::after {
   border-color: var(--betterld-primary);
 }
 
@@ -4897,9 +4886,6 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
     left: -12px;
     width: 10px;
   }
-  .betterld-reply-tree__children > .betterld-reply-tree__item::after {
-    left: -12px;
-  }
   .betterld-reply-tree .betterld-reply-tree__tail-control {
     left: -11px;
   }
@@ -4917,13 +4903,13 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   .betterld-reply-tree__item > .betterld-reply-tree__card::before,
   .betterld-reply-tree__item > .betterld-reply-tree__card::after,
   .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-  .betterld-reply-tree__children > .betterld-reply-tree__item::after {
+  .betterld-reply-tree__children::after {
     border-color: CanvasText;
   }
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::before,
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__card::after,
   .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::before,
-  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children > .betterld-reply-tree__item::after {
+  .betterld-reply-tree__item[data-branch-highlight] > .betterld-reply-tree__children::after {
     border-color: Highlight;
   }
   .betterld-reply-tree .betterld-reply-tree__collapse,

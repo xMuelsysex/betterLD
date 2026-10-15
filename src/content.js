@@ -4627,6 +4627,16 @@
         }
       }
       setReplyBranchSpace(item, bottom);
+      const branch = item.querySelector(':scope > .betterld-reply-tree__children:not([hidden])');
+      if (branch) {
+        const last = [...branch.children].findLast((child) => !child.hidden);
+        if (last) {
+          const trunk = last.querySelector(':scope > .betterld-reply-tree__line-hit--trunk');
+          const top = parseFloat(getComputedStyle(branch, '::after').top);
+          const height = trunk.getBoundingClientRect().bottom - branch.getBoundingClientRect().top - top;
+          setReplyBranchCoordinate(branch, '--betterld-reply-trunk-height', height);
+        }
+      }
       tree.branchDirty.delete(item);
     }
   }
