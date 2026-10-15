@@ -22,6 +22,9 @@
   --betterld-radius-xl: 24px;
   /* 话题页 Header 标题块比站点默认（--d-max-width，1320px）横向多出的宽度 */
   --betterld-title-block-extra-width: 240px;
+  --betterld-topic-preview-padding: 16px;
+  --betterld-topic-preview-border: 1px;
+  --betterld-topic-preview-page-padding: 16px;
   /* 侧栏亚克力封面相对侧栏列左右内缩的距离（对齐侧栏内容列） */
   --betterld-sidebar-cover-inset: 9px;
   --betterld-motion-fast: 120ms ease-out;
@@ -1774,6 +1777,14 @@ body.betterld-shell #main-outlet-wrapper #main-outlet > .regular:has(.container.
   padding-inline: 0;
 }
 
+/* 完整主题的阅读底板复用首页预览实际轨道，预览自身保持原宽度。 */
+@media (min-width: 768px) {
+  html.desktop-view:not([data-betterld-topic-preview="true"]) body.betterld-shell #main-outlet-wrapper #main-outlet > .regular:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
+    max-width: min(100%, var(--betterld-topic-preview-reading-limit)) !important;
+    margin-inline: auto;
+  }
+}
+
 body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row {
   grid-column: 1 / -1;
   grid-row: 1;
@@ -1846,7 +1857,7 @@ html[data-betterld-topic-preview="true"] body.betterld-shell :is(.sidebar-wrappe
 html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet-wrapper {
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-areas: none !important;
-  padding-inline: 16px !important;
+  padding-inline: var(--betterld-topic-preview-page-padding) !important;
 }
 html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet {
   grid-area: auto / 1 / auto / -1 !important;
@@ -2982,9 +2993,9 @@ html[data-betterld-scroll-top="true"] .betterld-action-rail__button[data-betterl
   max-height: none;
   box-sizing: border-box;
   margin: auto;
-  padding: 16px;
+  padding: var(--betterld-topic-preview-padding);
   overflow: hidden;
-  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.34);
+  border: var(--betterld-topic-preview-border) solid rgb(var(--betterld-outline-rgb) / 0.34);
   border-radius: 24px;
   background: rgb(var(--betterld-surface-container-high-rgb) / 0.98);
   color: var(--betterld-on-surface);
@@ -3537,9 +3548,11 @@ html[data-betterld-navigation-counts="false"] body.betterld-shell #navigation-ba
     bottom: 12px;
   }
 
+  :root { --betterld-topic-preview-padding: 12px; }
+
   .betterld-topic-drawer {
     margin: auto;
-    padding: 12px;
+    padding: var(--betterld-topic-preview-padding);
     border-radius: 20px;
   }
 

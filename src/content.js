@@ -412,6 +412,7 @@
     root.style.setProperty("--betterld-topic-list-max-width", `${config.topicListMaxWidthPx}px`);
     root.style.setProperty("--betterld-topic-detail-width", `${config.topicDetailWidthPercent}%`);
     root.style.setProperty("--betterld-topic-timeline-space", `${config.topicTimelineSpacePx}px`);
+    resizeTopicDrawer();
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
     root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
     root.style.setProperty("--betterld-sidebar-top-gap", `${config.sidebarTopGapPx}px`);
@@ -2298,15 +2299,29 @@
 
   function resizeTopicDrawer() {
     const dialog = state.topicDrawer?.dialog;
-    if (!dialog?.open) return;
     const { aspectRatio, viewportArea, marginPx } = config.topicPreview;
     const width = Math.min(
       Math.sqrt(window.innerWidth * window.innerHeight * viewportArea * aspectRatio),
       window.innerWidth - marginPx * 2,
       (window.innerHeight - marginPx * 2) * aspectRatio
     );
-    dialog.style.width = `${width}px`;
-    dialog.style.height = `${width / aspectRatio}px`;
+    const root = document.documentElement;
+    const style = getComputedStyle(root);
+    const padding = parseFloat(style.getPropertyValue('--betterld-topic-preview-padding'));
+    const border = parseFloat(style.getPropertyValue('--betterld-topic-preview-border'));
+    const framePadding = parseFloat(style.getPropertyValue('--betterld-topic-preview-page-padding'));
+    const scrollbar = window.innerWidth - root.clientWidth;
+    const frameWidth = width - (padding + border) * 2;
+    const pageWidth = frameWidth - scrollbar - framePadding * 2;
+    root.style.setProperty('--betterld-topic-preview-page-width', `${pageWidth}px`);
+    root.style.setProperty('--betterld-topic-preview-reading-percent', `${pageWidth * config.topicDetailWidthPercent / 100}px`);
+    root.style.setProperty('--betterld-topic-preview-reading-limit', frameWidth <= 767
+      ? 'var(--betterld-topic-preview-page-width)'
+      : 'min(var(--betterld-topic-preview-reading-percent), calc(var(--betterld-topic-preview-page-width) - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2))');
+    if (dialog?.open) {
+      dialog.style.width = `${width}px`;
+      dialog.style.height = `${width / aspectRatio}px`;
+    }
   }
 
   function openTopicDrawer(card) {
