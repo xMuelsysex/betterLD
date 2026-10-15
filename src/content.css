@@ -1762,7 +1762,7 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outle
 
 html.desktop-view body.betterld-shell #main-outlet:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
   grid-column: 1 / -1 !important;
-  width: min(var(--betterld-topic-detail-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
+  width: min(var(--betterld-topic-detail-width), var(--betterld-topic-detail-max-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
   margin-inline: auto !important;
   justify-self: center;
   /* vw 包含滚动条，网格包含块不包含；补齐半个滚动条宽度才能对齐物理中线。 */
@@ -1777,12 +1777,29 @@ body.betterld-shell #main-outlet-wrapper #main-outlet > .regular:has(.container.
   padding-inline: 0;
 }
 
-/* 完整主题的阅读底板复用首页预览实际轨道，预览自身保持原宽度。 */
-@media (min-width: 768px) {
-  html.desktop-view:not([data-betterld-topic-preview="true"]) body.betterld-shell #main-outlet-wrapper #main-outlet > .regular:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
-    max-width: min(100%, var(--betterld-topic-preview-reading-limit)) !important;
-    margin-inline: auto;
-  }
+/* 社区提示与主题壳同轨；只覆盖阅读态，保留首页和普通原帖布局。 */
+body.betterld-shell #main-outlet-wrapper #main-outlet:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) > #main-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100% !important;
+  padding-inline: 0;
+  margin-inline: 0;
+}
+
+body.betterld-shell #main-outlet > .regular:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) :is(#topic-footer-buttons, .more-topics__container) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100% !important;
+  margin-inline: 0;
+}
+
+/* 统计移入树底板前或作者筛选态仍在原位时，也沿完整阅读轨道排布。 */
+body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .topic-map.--bottom {
+  box-sizing: border-box;
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
 }
 
 body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row {
@@ -1859,11 +1876,11 @@ html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet-wrappe
   grid-template-areas: none !important;
   padding-inline: var(--betterld-topic-preview-page-padding) !important;
 }
-html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet {
+html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet-wrapper #main-outlet {
   grid-area: auto / 1 / auto / -1 !important;
   min-width: 0;
   left: 0 !important;
-  width: min(var(--betterld-topic-detail-width), calc(100% - var(--betterld-topic-timeline-space) * 2)) !important;
+  width: min(var(--betterld-topic-detail-width), var(--betterld-topic-detail-max-width), calc(100% - var(--betterld-topic-timeline-space) * 2)) !important;
   margin-inline: auto !important;
   justify-self: center;
 }
@@ -1890,7 +1907,7 @@ html[data-betterld-topic-preview="true"] body.betterld-shell #reply-control:not(
   transform: none !important;
 }
 @media (max-width: 767px) {
-  html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet {
+  html[data-betterld-topic-preview="true"] body.betterld-shell #main-outlet-wrapper #main-outlet {
     width: 100% !important;
     margin-inline: 0 !important;
   }
