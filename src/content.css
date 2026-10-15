@@ -1766,6 +1766,14 @@ html.desktop-view body.betterld-shell #main-outlet:has(.container.posts:is([data
   left: calc((100vw - 100%) / 2);
 }
 
+/* 原站主题壳仍有 1320px 上限与两侧 24px 内边距；阅读态跟随外层宽度轨道。 */
+body.betterld-shell #main-outlet-wrapper #main-outlet > .regular:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none !important;
+  padding-inline: 0;
+}
+
 body.betterld-shell .container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"]) > .row {
   grid-column: 1 / -1;
   grid-row: 1;
