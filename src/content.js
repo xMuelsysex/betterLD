@@ -5996,7 +5996,9 @@
       const boundary = card.getBoundingClientRect();
       if (direction === 'backward') {
         const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
-        return boundary.top >= headerHeight - config.replyTreeLoadAheadPx;
+        // 上翻到还剩约五条可见回复时预载，避免长正文使像素阈值触发过晚。
+        const ahead = cards[Math.min(config.replyTreeBackwardLoadAheadPosts, cards.length - 1)].getBoundingClientRect();
+        return ahead.bottom >= headerHeight || boundary.top >= headerHeight - config.replyTreeLoadAheadPx;
       }
       if (boundary.bottom >= 0 && boundary.bottom <= innerHeight + config.replyTreeLoadAheadPx) return true;
     }
