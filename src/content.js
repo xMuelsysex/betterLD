@@ -65,6 +65,7 @@
     metadataNextAt: 0,
     replyParentNextAt: 0,
     metadataCooldownUntil: 0,
+    metadataRateLimitFailures: 0,
     topicListMetadata: new Map(),
     preloadedTopicListSeeded: false,
     topicLinks: new WeakSet(),
@@ -2458,18 +2459,29 @@
     }, Math.max(0, at - Date.now()));
   }
 
-  function holdMetadataRequests(until) {
-    state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil, until);
-    storageSet({ [config.topicRequestCooldownStorageKey]: state.metadataCooldownUntil })
-      .catch((error) => console.warn("[betterLD] 请求冷却时间写入失败", error));
+  function persistMetadataCooldown() {
+    storageSet({ [config.topicRequestCooldownStorageKey]: {
+      until: state.metadataCooldownUntil,
+      failures: state.metadataRateLimitFailures
+    } }).catch((error) => console.warn("[betterLD] 请求冷却状态写入失败", error));
+  }
+
+  function resetMetadataRateLimit() {
+    if (!state.metadataRateLimitFailures) return;
+    state.metadataRateLimitFailures = 0;
+    persistMetadataCooldown();
   }
 
   function applyRateLimit(retryAfter) {
+    const now = Date.now();
     const seconds = Number(retryAfter);
-    const delay = seconds > 0 ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
-    holdMetadataRequests(Date.now() + Math.min(
-      Math.max(config.topicRequestCooldownMs, Number.isFinite(delay) ? delay : 0),
-      config.topicChallengeCooldownMs));
+    const delay = seconds > 0 ? seconds * 1000 : Date.parse(retryAfter) - now;
+    state.metadataRateLimitFailures += 1;
+    const backoff = config.topicRequestCooldownMs * state.metadataRateLimitFailures;
+    // 递增的是插件退避；站点明确要求的Retry-After始终作为下限。
+    state.metadataCooldownUntil = Math.max(state.metadataCooldownUntil,
+      now + Math.max(backoff, Number.isFinite(delay) ? delay : 0));
+    persistMetadataCooldown();
   }
 
   // 冷却错误带明确截止时间，调用方可以区分限流与普通失败，不靠猜冷却状态。
@@ -2491,7 +2503,7 @@
         signal: controller.signal
       });
       if (response.headers.get("cf-mitigated") === "challenge") {
-        holdMetadataRequests(Date.now() + config.topicChallengeCooldownMs);
+        applyRateLimit(response.headers.get("Retry-After"));
         throw topicRequestError("主题请求被站点质询拦截，已进入冷却", { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
       }
       if (response.status === 429) {
@@ -2501,7 +2513,9 @@
       if (!response.ok) {
         throw new Error(`topic request failed with ${response.status}`);
       }
-      return await response.json();
+      const data = await response.json();
+      resetMetadataRateLimit();
+      return data;
     } finally {
       clearTimeout(timer);
     }
@@ -3375,6 +3389,7 @@
         const result = JSON.parse(event.detail);
         if (result.id !== id) return;
         if (result.status === 429) applyRateLimit(result.retryAfter);
+        else if (!result.error) resetMetadataRateLimit();
         finish(result.error ? new Error(result.error) : null);
       };
       const timer = window.setTimeout(() => finish(new Error("原站局部刷新超时")), config.pageRefreshTimeoutMs);
@@ -7253,11 +7268,14 @@
         ? stored[config.wallpaperRemoteCacheKey]
         : null;
       // 站点限速按 IP 计，上一个页面撞上冷却时新页面要接着等，不能重新起一轮突发请求
-      const storedCooldown = Number(stored[config.topicRequestCooldownStorageKey]);
+      const cooldown = stored[config.topicRequestCooldownStorageKey];
+      // 旧包仅保存截止时间，新包在同一键保存截止时间及连续失败次数。
+      const storedCooldown = Number(typeof cooldown === 'object' && cooldown ? cooldown.until : cooldown);
       if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) {
         state.metadataCooldownUntil = storedCooldown;
-
       }
+      const failures = cooldown?.failures;
+      if (Number.isSafeInteger(failures) && failures >= 0) state.metadataRateLimitFailures = failures;
       const activeSettings = await getActiveSettings(stored[config.storageKey]);
       applyVisualSettings(activeSettings);
       state.settingsResolved = true;

@@ -116,8 +116,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   }),
   pageRefreshMinIntervalMs: 3000,
   pageRefreshTimeoutMs: 30000,
-  topicRequestCooldownMs: 15000,
-  topicChallengeCooldownMs: 600000,
+  // 限流/质询首次等待10秒，连续失败每次增加同等时长；成功后重置。
+  topicRequestCooldownMs: 10000,
   topicRequestCooldownStorageKey: "betterld.request-cooldown",
   siteTopicListTimeoutMs: 1500,
   refreshScrollTopStorageKey: "betterld.refresh-scroll-top",
