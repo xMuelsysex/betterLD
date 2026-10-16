@@ -10,7 +10,7 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -66,6 +66,7 @@
     return {
       currentUserId: currentUser?.id ?? null,
       canCreatePost: Boolean(topic.details?.can_create_post),
+      hasAcceptedAnswers: Boolean(topic.accepted_answers?.length),
       ignoredUsernames: [...(currentUser?.ignored_users || [])],
       revealedIgnoredIds: [...treeRevealedIgnoredIds]
     };
@@ -680,6 +681,7 @@
     window.require("@ember/runloop").join(() => {
       const resources = entry.host ? [["host", () => entry.host.destroy()]] : [];
       if (menu && entry.bookmarkEvents) resources.push(["bookmark-events", () => entry.bookmarkEvents.off("bookmarks:changed", entry, entry.onBookmark)]);
+      if (menu && entry.solvedEvents) resources.push(["solved-events", () => entry.solvedEvents.off("discourse-solved:solution-toggled", entry, entry.onSolved)]);
       if (menu && entry.behavior) resources.push(["behavior", () => window.require("@ember/destroyable").destroy(entry.behavior)]);
       if (entry.ownsPost) resources.push(["post", () => entry.post.destroy()]);
       for (const [key, release] of resources) {
@@ -846,7 +848,7 @@
       ({ post, ownsPost } = resolveTreePost(owner, topic, data));
       const Native = window.require("discourse/components/post/menu").default;
       // 已在树操作栏提供的动作保留一份；其余顺序、权限与插件注册交给原站。
-      const existingActions = new Set(["like", "copyLink", "reply", "replies", "showMore", "discourse-reactions-actions", "discourse-boosts-action"]);
+      const existingActions = new Set(["like", "copyLink", "reply", "replies", "showMore", "discourse-reactions-actions", "discourse-boosts-action", "solved"]);
       class MoreMenu extends Native {
         constructor(...args) {
           super(...args);
@@ -906,6 +908,72 @@
       }
       console.error("[betterLD] native post menu mount failed", error);
       document.dispatchEvent(new CustomEvent("betterld:reply-menu-mounted", { detail: JSON.stringify({ id, error: error.message }) }));
+    }
+  });
+
+  // 解决方案沿用原站菜单注册和摘要组件；同一 identityMap 同时覆盖树补载楼层与实时采纳更新。
+  document.addEventListener("betterld:reply-solved-mount", (event) => {
+    const { topicId, slots } = JSON.parse(event.detail);
+    for (const slot of slots) {
+      let host;
+      try {
+        const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+        const topic = owner.lookup("controller:topic").model;
+        if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
+        const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(slot.id)}"]`);
+        if (!element || postMenuHosts.has(slot.id)) continue;
+        const { post } = resolveTreePost(owner, topic, slot.post);
+        const NativeMenu = window.require("discourse/components/post/menu").default;
+        class SolvedMenu extends NativeMenu {
+          constructor(...args) {
+            super(...args);
+            this.collapsed = false;
+          }
+          get availableButtons() {
+            return super.availableButtons.filter((button) => button.key === "solved");
+          }
+          get extraControls() {
+            return super.extraControls.filter((button) => button.key === "solved");
+          }
+        }
+        const Native = slot.summary
+          ? window.require("discourse/plugins/discourse-solved/discourse/components/solved-accepted-answers").default
+          : SolvedMenu;
+        const Component = window.require("@ember/component");
+        const Container = window.require("discourse/components/render-glimmer-container").default;
+        const curry = window.require("ember-curry-component").default;
+        const Host = Component.default.extend({
+          layout: Component.getComponentTemplate(Container),
+          renderGlimmer: { _registrations: [{ element, component: curry(Native, { post }, owner), data: {} }] }
+        });
+        window.require("@ember/runloop").join(() => {
+          host = Host.create(owner.ownerInjection());
+          host.appendTo(document.body);
+        });
+        const entry = { element, host, post, ownsPost: false };
+        if (!slot.summary) {
+          entry.solvedEvents = owner.lookup("service:app-events");
+          entry.onSolved = (changedPost) => {
+            if (changedPost !== post) return;
+            document.dispatchEvent(new CustomEvent("betterld:reply-sync", { detail: JSON.stringify({ topicId }) }));
+          };
+          entry.solvedEvents.on("discourse-solved:solution-toggled", entry, entry.onSolved);
+        }
+        postMenuHosts.set(slot.id, entry);
+        element.dataset.betterldMenuMounted = "true";
+      } catch (error) {
+        const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(slot.id)}"]`);
+        if (element) element.dataset.betterldMenuMounted = "error";
+        try {
+          releaseHostResources({ host }, false);
+        } catch (cleanupError) {
+          console.error("[betterLD] failed solved mount cleanup", cleanupError);
+        }
+        console.error("[betterLD] native solved mount failed", error);
+        document.dispatchEvent(new CustomEvent("betterld:reply-data", {
+          detail: JSON.stringify({ topicId, error: `解决方案加载失败：${error.message}` })
+        }));
+      }
     }
   });
 

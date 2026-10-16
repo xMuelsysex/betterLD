@@ -4816,7 +4816,7 @@
         userMarksApi.find(state.userMarks, post.user_id)?.tag || "",
         tree.boostEditor?.postNumber === post.post_number,
         isContextPost, isContextPost && tree.contextExpanded.has(post.post_number),
-        tree.context?.currentUserId, tree.context?.canCreatePost,
+        tree.context?.currentUserId, tree.context?.canCreatePost, post.post_number === 1 && tree.context?.hasAcceptedAnswers,
         replyTreePostIgnored(tree, post)]);
     };
     const changedAuthors = new Set();
@@ -4992,9 +4992,19 @@
         : bodyState === "hidden" && post.can_see_hidden_post === true
           ? replyTreeActionButton("读取被隐藏的正文", "eye", () => revealReplyTreeHiddenBody(tree, post, stateAction), "betterld-reply-tree__state-action")
           : null;
+      function solvedSlot(className) {
+        const slot = previousBody?.querySelector(`.${className}`) || createElement("div", className);
+        if (!slot.dataset.betterldMenuId) slot.dataset.betterldMenuId = crypto.randomUUID();
+        return slot;
+      }
+      const solutionSummary = post.post_number === 1 && tree.context?.hasAcceptedAnswers && !ignoredAuthor && !post.cooked_hidden
+        ? solvedSlot("betterld-reply-tree__solutions") : null;
       const actions = createElement("div", "betterld-reply-tree__actions");
       actions.setAttribute("role", "group");
       actions.setAttribute("aria-label", `#${post.post_number} 帖子操作`);
+      if (!ignoredAuthor && !post.cooked_hidden && (post.accepted_answer === true || post.can_accept_answer === true)) {
+        actions.append(solvedSlot("betterld-reply-tree__solution-action"));
+      }
       const reactionCount = Number(post.reaction_users_count) || Number(post.actions_summary?.find((action) => action.id === 2)?.count) || 0;
       const selected = post.current_user_reaction?.id || post.current_user_reaction;
       const liked = selected === "heart";
@@ -5142,6 +5152,9 @@
         previousBody.querySelector(":scope > .betterld-reply-tree__state-action")?.remove();
         if (stateNotice) previousBody.insertBefore(stateNotice, cooked);
         if (stateAction) previousBody.insertBefore(stateAction, cooked);
+        const previousSummary = previousBody.querySelector(":scope > .betterld-reply-tree__solutions");
+        if (solutionSummary) previousBody.insertBefore(solutionSummary, previousBody.querySelector(":scope > .betterld-reply-tree__actions"));
+        else previousSummary?.remove();
         const previousActions = previousBody.querySelector(":scope > .betterld-reply-tree__actions");
         if (previousActions) previousActions.replaceWith(actions);
         else previousBody.append(actions);
@@ -5151,6 +5164,7 @@
         }
       } else {
         body.insertBefore(cooked, stateNotice || actions);
+        if (solutionSummary) body.insertBefore(solutionSummary, actions);
         if (boosts) body.append(boosts);
         card.append(avatarWrap, body);
         item.append(card);
@@ -5272,6 +5286,13 @@
         .filter((element) => !element.dataset.betterldCookedMounted)
         .map((element) => ({ id: element.dataset.betterldCookedId, post: element.betterldCookedPost || byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
       if (bodies.length) document.dispatchEvent(new CustomEvent("betterld:reply-cooked-mount", { detail: JSON.stringify({ topicId: tree.topicId, bodies }) }));
+      const solvedSlots = [...tree.content.querySelectorAll(".betterld-reply-tree__solution-action, .betterld-reply-tree__solutions")]
+        .filter((element) => !element.dataset.betterldMenuMounted)
+        .map((element) => ({ id: element.dataset.betterldMenuId, summary: element.classList.contains("betterld-reply-tree__solutions"),
+          post: byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
+      if (solvedSlots.length) document.dispatchEvent(new CustomEvent("betterld:reply-solved-mount", {
+        detail: JSON.stringify({ topicId: tree.topicId, slots: solvedSlots })
+      }));
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
     // 窗口前面还有未加载楼层时提供真实入口，而不是从流首缺口补到目标。
