@@ -59,6 +59,8 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - 现行规范总览：`.pi/specs/project-overview.md`。进入新模块或梳理项目约束时先读，用于定位产品契约、工程规则、废弃方案和证据记录；不替代各权威文件，也不代表功能已全部验收。
 - 帖子界面开发与交付约束：`.pi/specs/topic-ui-development.md`。修改时间轴、树状回复、正文引用、楼层操作栏或帖底统计前先读；涵盖授权范围、CSS 层叠、原站模型与组件生命周期、预览证据和打包交付。产品语义仍以 `CONTEXT.md` 为权威；该规范不新增测试、版本调整、提交或发布授权。需要将讨论和用户纠正沉淀为新规范时，可调用通用 Pi skill `/skill:spec-summary`；该 skill 负责生成规范，不是帖子界面的实现技能。
 
+- 首页、帖子与预览布局对齐：`.pi/specs/page-layout-alignment.md`。调整页面宽度或上下模块边界前先读；记录红线范围、真实列表路由、原生内壳上限与静态证据边界。产品语义及运行参数仍分别以 `CONTEXT.md`、`betterld.config.js` 为准。
+
 ## 代码约定
 
 - 树楼层与 Boost 正文统一复用原站 `PostCookedHtml`，不另维护媒体/引用/代码等装饰规则；插件预览的树和原帖共用居中轨道。导出范围/请求/媒体引用约定以 `CONTEXT.md`「Topic Export」为权威。
