@@ -4971,6 +4971,24 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outle
   }
 }
 
+/* 首页与帖子阅读区共用视口中线和可用空间；上下模块沿同一外轨铺满。 */
+@media (min-width: 768px) {
+  html.desktop-view body.betterld-home #main-outlet-wrapper #main-outlet:has(.betterld-topic-list) {
+    width: min(var(--betterld-topic-detail-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
+  }
+}
+
+body.betterld-home #main-outlet-wrapper #main-outlet:has(.betterld-topic-list) > :is(#main-container, .welcome-banner, .above-main-container-outlet, .list-controls, .container.list-container.--topic-list) {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-inline: 0 !important;
+}
+
+body.betterld-home #main-outlet-wrapper #main-outlet:has(.betterld-topic-list) > :is(#main-container, .welcome-banner, .above-main-container-outlet, .container.list-container.--topic-list) {
+  padding-inline: 0;
+}
+
 /* 原生主题列表：保留站点行、排序与分页，信息栏是唯一新增的内容。 */
 body.betterld-shell .betterld-topic-list {
   width: 100%;
