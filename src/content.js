@@ -4441,7 +4441,12 @@
   }
 
   function replyTreePostGraph(tree) {
-    const streamPosts = tree.stream.map((id) => tree.posts.get(id)).filter(Boolean).sort((a, b) => a.post_number - b.post_number);
+    const reading = replyTreeWindow(tree);
+    const windowIds = reading && !reading.empty ? tree.stream.slice(reading.lo, reading.hi + 1) : [];
+    // 缓存可有多个不相连的读段；只投影当前窗口，避免上翻掉回帖首缓存。
+    const streamPosts = windowIds.map((id) => tree.posts.get(id)).filter(Boolean).sort((a, b) => a.post_number - b.post_number);
+    const root = [...tree.posts.values()].find((post) => post.post_number === 1);
+    if (root && !streamPosts.includes(root)) streamPosts.unshift(root);
     const streamNumbers = new Set(streamPosts.map((post) => post.post_number));
     const loadedByNumber = new Map([...tree.posts.values()].map((post) => [post.post_number, post]));
     const contextNumbers = new Set();
@@ -4795,6 +4800,7 @@
     const topicOwnerId = byNumber.get(1)?.user_id;
     const currentUserId = preloadedCurrentUser()?.id;
     const children = new Map(posts.map((post) => [post.post_number, []]));
+    const cachedParents = new Set([...tree.posts.values()].map((post) => Number(post.reply_to_post_number)));
     for (const post of posts) {
       if (post.post_number === 1) continue;
       const parent = Number(post.reply_to_post_number);
@@ -5177,7 +5183,8 @@
         if (boost) syncReplyBoostControls(tree, bubble, post, boost);
       }
       const replies = children.get(post.post_number) || [];
-      if (!replies.length) tree.branchStates.delete(post.post_number);
+      // 当前窗口外仍有已缓存子楼时保留会话收放选择，实际叶子楼才清除旧状态。
+      if (!replies.length && !cachedParents.has(post.post_number)) tree.branchStates.delete(post.post_number);
 
       if (replies.length) {
         let button = item.querySelector(":scope > .betterld-reply-tree__collapse");
@@ -5711,7 +5718,7 @@
     return { lo, hi, anchor, empty: false };
   }
 
-  // 正文批次只围绕窗口取，不从流首缺口补到目标；上段缺失由窗口前的入口单独取。
+  // 正文批次只围绕窗口双向取相邻一批，不从流首缺口补到目标。
   function replyTreeBodyBatch(tree, direction) {
     const reading = replyTreeWindow(tree);
     if (!reading) return null;
@@ -5719,15 +5726,15 @@
     const unloaded = (ids) => ids.filter((id) => !tree.loaded.has(id));
     if (reading.empty) {
       const ids = unloaded(stream.slice(reading.anchor, reading.anchor + config.replyTreePageSize));
-      return ids.length ? { key: `body:at:${reading.anchor}`, ids } : null;
+      return ids.length ? { key: `body:at:${reading.anchor}`, ids, direction } : null;
     }
     if (direction === "backward") {
       if (!reading.lo) return null;
       const ids = unloaded(stream.slice(Math.max(0, reading.lo - config.replyTreePageSize), reading.lo));
-      return ids.length ? { key: `body:back:${reading.lo}`, ids } : null;
+      return ids.length ? { key: `body:back:${reading.lo}`, ids, direction } : null;
     }
     const ids = unloaded(stream.slice(reading.hi + 1, reading.hi + 1 + config.replyTreePageSize));
-    return ids.length ? { key: `body:next:${reading.hi}`, ids } : null;
+    return ids.length ? { key: `body:next:${reading.hi}`, ids, direction } : null;
   }
 
   function scheduleReplyTreeTopic(tree) {
@@ -5960,11 +5967,12 @@
       drainMetadataQueue();
       return;
     }
-    // 正文优先：锚点楼还没有正文就立即补齐；其余只在底部哨兵进入预读范围后续载窗口后方。
+    // 正文优先：沿用户滚动方向补当前窗口相邻一批，不跨回其他缓存读段。
     const reading = replyTreeWindow(tree);
-    const batch = tree.retryBatch || replyTreeBodyBatch(tree, "forward");
-    if (batch && (tree.retryBatch || reading.empty || (!tree.bodyLoadBlocked && replyTreeSentinelReached(tree)))) {
-      scheduleReplyTreeBody(tree, "forward");
+    const direction = tree.bodyLoadDirection;
+    const batch = tree.retryBatch || replyTreeBodyBatch(tree, direction);
+    if (batch && (tree.retryBatch || reading.empty || (!tree.bodyLoadBlocked && replyTreeBoundaryReached(tree, direction)))) {
+      scheduleReplyTreeBody(tree, direction);
       return;
     }
     // 空闲时才补可见回复的父楼上文；图索引扫描按父楼预算节流，滚动不反复全量构建。
@@ -5976,14 +5984,23 @@
     if (gap && Date.now() >= state.replyParentNextAt) scheduleReplyTreeParent(tree, gap);
   }
 
-  function replyTreeSentinelReached(tree) {
+  function replyTreeBoundaryReached(tree, direction) {
     const reading = replyTreeWindow(tree);
-    const lastPost = reading && tree.posts.get(tree.stream[reading.hi]);
-    const card = lastPost && tree.content.querySelector(`[data-post-number="${lastPost.post_number}"] > .betterld-reply-tree__card`);
-    if (card?.getClientRects().length) {
+    if (!reading || reading.empty) return false;
+    const ids = new Set(tree.stream.slice(reading.lo, reading.hi + 1));
+    const cards = [...tree.content.querySelectorAll('.betterld-reply-tree__card')]
+      .filter((card) => ids.has(Number(card.dataset.postId)) && card.getClientRects().length);
+    // 树按父子关系排列，stream边界楼可能折叠；用读段实际可见的首尾正文判断边界。
+    const card = direction === 'backward' ? cards[0] : cards.at(-1);
+    if (card) {
       const boundary = card.getBoundingClientRect();
+      if (direction === 'backward') {
+        const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
+        return boundary.top >= headerHeight - config.replyTreeLoadAheadPx;
+      }
       if (boundary.bottom >= 0 && boundary.bottom <= innerHeight + config.replyTreeLoadAheadPx) return true;
     }
+    if (direction === 'backward') return false;
     const boundary = tree.sentinel.getBoundingClientRect();
     return boundary.top <= innerHeight + config.replyTreeLoadAheadPx && boundary.bottom >= 0;
   }
@@ -6174,6 +6191,9 @@
         clearReplyTreeWait(tree);
         // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
         tree.anchorId = post.id;
+        tree.bodyLoadBlocked = false;
+        tree.bodyLoadDirection = 'forward';
+        tree.autoLoadPaused = false;
         expandReplyBranchPath(tree, post, new Map([...tree.posts.values()].map((entry) => [entry.post_number, entry])));
         // 主动跳楼自己决定滚动位置，跳过锚点补偿。
         tree.skipAnchorRestore = true;
@@ -6201,6 +6221,7 @@
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     window.scrollTo({ top: pageScrollTop() + card.getBoundingClientRect().top - headerHeight, behavior: 'instant' });
     // 末楼可能无法贴到视口顶部；在用户实际滚动前保持刚命中的楼号。
+    tree.bodyLoadScrollTop = pageScrollTop();
     tree.positionedPost = { postNumber: post.post_number, postId: post.id, scrollY: pageScrollTop() };
   }
 
@@ -6708,6 +6729,7 @@
     tree.skipAnchorRestore = false;
     tree.registeredPostIds = new Set();
     tree.bodyLoadBlocked = false;
+    tree.bodyLoadDirection = 'forward';
     tree.bodyLoadScrollTop = pageScrollTop();
     bindReplyBranchInteraction(tree);
     tree.branchLayouts = new WeakMap();
@@ -6758,17 +6780,20 @@
     returnAll.addEventListener("click", () => returnAllReplyTreePosts(tree));
     applyTopicReadingFilterView(tree);
     toggle.addEventListener("click", () => tree.contentContainer.hidden ? showReplyTree(tree) : showNativeReply(tree));
-    moreButton.addEventListener("click", () => {
+    const loadBody = (requestedDirection) => {
+      const direction = tree.retryBatch?.direction || requestedDirection;
       tree.autoLoadPaused = false;
       tree.wait.until = 0;
       tree.wait.retryUsed = false;
       moreButton.hidden = true;
       tree.bodyLoadBlocked = false;
+      tree.bodyLoadDirection = direction;
       tree.status.textContent = "";
-      if (replyTreeBodyBatch(tree, 'forward') && !tree.wait.pendingJump) scheduleReplyTreeBody(tree, 'forward');
+      if ((tree.retryBatch || replyTreeBodyBatch(tree, direction)) && !tree.wait.pendingJump) scheduleReplyTreeBody(tree, direction);
       else maybeLoadMoreReplyTree(tree);
-    });
-    previousButton.addEventListener("click", () => scheduleReplyTreeBody(tree, "backward"));
+    };
+    moreButton.addEventListener("click", () => loadBody('forward'));
+    previousButton.addEventListener("click", () => loadBody('backward'));
     if (content.hidden) panel.hidden = false;
     else if (tree.posts.size) renderReplyTree(tree);
     // 深链先登记目标意图，优先级高于任何正文/上文任务。
@@ -6793,8 +6818,12 @@
     const active = !tree.contentContainer.hidden;
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     const current = active ? replyTreeCurrentPost(tree) : null;
-    // 当前阅读楼成为正文窗口锚点：滚动到哪里，续载就从哪里往后取；无可见楼时不改边界。
-    if (current?.postId && current.visible) tree.anchorId = current.postId;
+    // 必要父楼可能位于另一缓存段；读到上下文不把窗口切回帖首。
+    const reading = replyTreeWindow(tree);
+    const currentIndex = current?.postId ? tree.stream.indexOf(current.postId) : -1;
+    if (current?.visible && reading && !reading.empty && currentIndex >= reading.lo && currentIndex <= reading.hi) {
+      tree.anchorId = current.postId;
+    }
     // 楼层上报依赖原站桥接，本地锚点更新不依赖。
     if (tree.bridgeReady) {
       const visiblePostIds = active ? [...tree.content.querySelectorAll('.betterld-reply-tree__card')].flatMap((card) => {
@@ -7363,6 +7392,7 @@
     updateListControlsScrollState();
     const tree = state.replyTree;
     if (tree && !tree.compensating && !tree.contentContainer.hidden && pageScrollTop() !== tree.bodyLoadScrollTop) {
+      tree.bodyLoadDirection = pageScrollTop() < tree.bodyLoadScrollTop ? 'backward' : 'forward';
       tree.bodyLoadScrollTop = pageScrollTop();
       tree.bodyLoadBlocked = false;
       updateReplyTreeMore(tree);
