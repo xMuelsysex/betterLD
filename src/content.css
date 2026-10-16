@@ -4255,8 +4255,18 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 0 8px;
   font-weight: 650;
+}
+
+.betterld-reply-tree__author > :is(.betterld-reply-tree__nickname, .betterld-reply-tree__username) {
+  min-width: 0;
+  max-width: var(--betterld-reply-author-name-max-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .betterld-reply-tree__author > .betterld-reply-tree__nickname {

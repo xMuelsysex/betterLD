@@ -412,6 +412,7 @@
     root.style.setProperty("--betterld-topic-list-max-width", `${config.topicListMaxWidthPx}px`);
     root.style.setProperty("--betterld-topic-detail-width", `${config.topicDetailWidthPercent}%`);
     root.style.setProperty("--betterld-topic-detail-max-width", `${config.topicDetailMaxWidthPx}px`);
+    root.style.setProperty("--betterld-reply-author-name-max-width", `${config.replyTreeAuthorNameMaxWidthEm}em`);
     root.style.setProperty("--betterld-topic-timeline-space", `${config.topicTimelineSpacePx}px`);
     root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
     root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
@@ -4879,6 +4880,7 @@
       const nameMode = state.currentSettings.replyTreeNameMode;
       function appendName(className, text) {
         const name = createElement(avatarHref ? "a" : "span", className, text);
+        name.title = text;
         if (avatarHref) {
           name.href = avatarHref;
           name.dataset.userCard = username;
