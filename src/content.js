@@ -3647,6 +3647,7 @@
   }
 
   function showNativeReply(tree) {
+    cancelReplyTreeAnchorRestore(tree);
     if (!tree.userFilters.length && !tree.filterBusy) sessionStorage.setItem(config.topicReadingViewStorageKey, JSON.stringify({ topicId: tree.topicId, native: true }));
     closeReplyReactionPicker(tree);
     // 隐藏树视图时尚未发请求的任务全部作废，不在后台偷偷续载。
@@ -4517,6 +4518,7 @@
       tree.skipBranchAnchor = true;
       tree.skipAnchorRestore = true;
       tree.bodyLoadBlocked = true;
+      cancelReplyTreeAnchorRestore(tree);
       tree.compensating = true;
       try {
         renderReplyTree(tree);
@@ -4573,8 +4575,9 @@
     if (item.style.minHeight !== value) item.style.minHeight = value;
   }
 
-  function positionReplyBranchControls(tree) {
+  function positionReplyBranchControls(tree, preservePosition = true) {
     if (state.replyTree !== tree || tree.contentContainer.hidden) return;
+    const anchor = preservePosition && pageActive() ? captureReplyTreeAnchor(tree) : null;
     const items = [...tree.content.querySelectorAll('.betterld-reply-tree__item')].filter((item) => item.getClientRects().length);
     for (const item of items) {
       // 隐藏正文的原生挂载由 DOM 通知失效；可见尺寸变化继续使用几何签名。
@@ -4642,6 +4645,9 @@
       }
       tree.branchDirty.delete(item);
     }
+    // 临时清占位、展开隐藏内容的测量也可能触发浏览器滚动钳制。
+    // 只在最终几何确定后保留读段，不让观察器每轮把视口推向更早楼层。
+    restoreReplyTreeAnchor(tree, anchor);
   }
 
   function syncReplyTailControls(tree, branch, parentNumber) {
@@ -4705,6 +4711,45 @@
     }
   }
 
+  function captureReplyTreeAnchor(tree) {
+    if (tree.contentContainer.hidden) return null;
+    const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
+    for (const card of tree.content.querySelectorAll('.betterld-reply-tree__card')) {
+      if (!card.getClientRects().length) continue;
+      const bounds = card.getBoundingClientRect();
+      if (bounds.bottom > headerHeight && bounds.top < innerHeight) {
+        return { card, number: card.parentElement.dataset.postNumber, top: bounds.top };
+      }
+    }
+    return null;
+  }
+
+  function cancelReplyTreeAnchorRestore(tree) {
+    if (!tree.anchorRestoreTimer) return;
+    clearTimeout(tree.anchorRestoreTimer);
+    tree.anchorRestoreTimer = 0;
+    tree.compensating = false;
+  }
+
+  function restoreReplyTreeAnchor(tree, anchor) {
+    if (!anchor || tree.contentContainer.hidden) return;
+    const card = tree.content.querySelector(`[data-post-number="${anchor.number}"] > .betterld-reply-tree__card`);
+    if (!card?.getClientRects().length) return;
+    const delta = card.getBoundingClientRect().top - anchor.top;
+    if (!delta) return;
+    cancelReplyTreeAnchorRestore(tree);
+    tree.compensating = true;
+    // 一次即时补偿；auto 会继承原站的平滑滚动，旧基线不能跨任务继续纠偏。
+    window.scrollBy({ top: delta, behavior: 'instant' });
+    tree.bodyLoadScrollTop = pageScrollTop();
+    const generation = tree.filterGeneration;
+    tree.anchorRestoreTimer = window.setTimeout(() => {
+      tree.anchorRestoreTimer = 0;
+      tree.compensating = false;
+      if (replyTreeTaskActive(tree, generation)) maybeLoadMoreReplyTree(tree);
+    }, 0);
+  }
+
   function renderReplyTree(tree) {
     if (!tree.context) return;
     if (!pageActive()) {
@@ -4712,19 +4757,16 @@
       return;
     }
     tree.renderPending = false;
+    cancelReplyTreeAnchorRestore(tree);
     tree.positionedPost = null;
     for (const post of tree.posts.values()) {
       if (typeof post.bookmarked === "boolean") syncReplyBookmark(tree, post, post.bookmarked);
     }
-    // 锚点只取可见的直接 CARD：item 的 rect 包含整棵子树，会把祖先误当可见楼。
-    const anchorCard = tree.skipAnchorRestore ? null : [...tree.content.querySelectorAll('.betterld-reply-tree__card')].find((card) => {
-      if (!card.getClientRects().length) return false;
-      const bounds = card.getBoundingClientRect();
-      return bounds.bottom > (document.querySelector('.d-header')?.offsetHeight || 0) && bounds.top < innerHeight;
-    });
+    // 只取可见的直接 CARD；item 的矩形包含整棵子树。
+    const anchor = tree.skipAnchorRestore ? null : captureReplyTreeAnchor(tree);
     tree.skipAnchorRestore = false;
-    const anchorNumber = anchorCard?.parentElement.dataset.postNumber || "";
-    const anchorTop = anchorCard?.getBoundingClientRect().top;
+    const anchorCard = anchor?.card;
+    const anchorNumber = anchor?.number || "";
     const focusedBoostInput = document.activeElement?.closest?.(".betterld-reply-tree__boost-editor") ? document.activeElement : null;
     const focusedReactionTrigger = tree.reactionPicker && document.activeElement === tree.reactionTrigger;
     // 摘要流中的回复沿已有祖先补作上下文，正文默认折叠但命中子树保持可见。
@@ -5201,7 +5243,7 @@
       tree.branchLayoutObserver.observe(card);
       tree.branchLayoutObserver.observe(card.querySelector('.betterld-reply-tree__actions'));
     }
-    positionReplyBranchControls(tree);
+    positionReplyBranchControls(tree, false);
     syncReplyReactionPopover(tree);
     if (focusedReactionTrigger && tree.reactionTrigger) tree.reactionTrigger.focus({ preventScroll: true });
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
@@ -5230,22 +5272,6 @@
       if (bodies.length) document.dispatchEvent(new CustomEvent("betterld:reply-cooked-mount", { detail: JSON.stringify({ topicId: tree.topicId, bodies }) }));
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
-    if (anchorCard && !tree.contentContainer.hidden) {
-      const replacement = tree.content.querySelector(`[data-post-number="${anchorNumber}"] > .betterld-reply-tree__card`);
-      if (replacement?.isConnected) {
-        // 补偿期间暂停自动续载；只测一次剩余差，避免与原站滚动锚定双重补偿。
-        tree.compensating = true;
-        window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
-        window.setTimeout(() => {
-          if (state.replyTree !== tree) return;
-          const remaining = replacement.isConnected ? replacement.getBoundingClientRect().top - anchorTop : 0;
-          if (remaining) window.scrollBy(0, remaining);
-          tree.bodyLoadScrollTop = pageScrollTop();
-          tree.compensating = false;
-          maybeLoadMoreReplyTree(tree);
-        }, 0);
-      }
-    }
     // 窗口前面还有未加载楼层时提供真实入口，而不是从流首缺口补到目标。
     const reading = replyTreeWindow(tree);
     tree.previous.hidden = !reading || reading.empty || reading.lo === 0;
@@ -5259,17 +5285,6 @@
     }
     scheduleReplyPosition();
     updateReplyTreeMore(tree);
-    if (!tree.targetLocated && byNumber.has(tree.targetPostNumber)) {
-      tree.anchorId = byNumber.get(tree.targetPostNumber).id;
-      tree.targetLocated = true;
-      const scrollY = pageScrollTop();
-      setTimeout(() => {
-        if (state.replyTree !== tree || state.replyTreeNativeTopicId === tree.topicId) return;
-        // 用户已经自己滚动时不再抢滚动位置。
-        if (pageScrollTop() !== scrollY) return;
-        tree.content.querySelector(`[data-post-number="${tree.targetPostNumber}"]`)?.scrollIntoView({ block: "center" });
-      }, config.replyTreeDeepLinkDelayMs);
-    }
     // 深链楼层不在筛选流里时明确告知；流还没加载完就继续等，不提前下结论。
     const streamComplete = tree.stream.every((id) => tree.loaded.has(id));
     if (!tree.targetLocated && tree.targetPostNumber > 0 && !streamNumbers.has(tree.targetPostNumber)
@@ -5287,6 +5302,8 @@
     } else {
       tree.notice.hidden = true;
     }
+    // 包含前段入口、筛选栏、原帖隐藏和提示区的最终布局，只补偿一次。
+    restoreReplyTreeAnchor(tree, anchor);
   }
 
   async function exportTopicSnapshot(topicId) {
@@ -5915,6 +5932,11 @@
       scheduleReplyTreeJump(tree, tree.wait.pendingJump);
       return;
     }
+    // 模型/主帖刚到齐时唤醒已登记的跳楼，不让正文或父楼抢先改变读段。
+    if (tree.tasks.some((task) => task.kind === 'jump')) {
+      drainMetadataQueue();
+      return;
+    }
     // 正文优先：锚点楼还没有正文就立即补齐；其余只在底部哨兵进入预读范围后续载窗口后方。
     const reading = replyTreeWindow(tree);
     const batch = tree.retryBatch || replyTreeBodyBatch(tree, "forward");
@@ -6051,7 +6073,7 @@
     tree.retryBatch = null;
     if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "跳转请求已被新的跳转取代");
     const post = replyTreePostByTarget(tree, record.postNumber, record.postId);
-    if ([...tree.posts.values()].some((entry) => entry.post_number === 1)
+    if (tree.context && [...tree.posts.values()].some((entry) => entry.post_number === 1)
       && tree.stream.length && post && (Boolean(replyTreeBodyState(post)) || replyTreePostIgnored(tree, post))) {
       applyReplyTreeJump(tree, record, post, "");
       return;
@@ -6072,7 +6094,7 @@
       generation,
       priority: config.topicRequestPriority.jump,
       isNeeded: () => replyTreeTaskActive(tree, generation),
-      canStart: () => tree.stream.length > 0 && [...tree.posts.values()].some((post) => post.post_number === 1),
+      canStart: () => Boolean(tree.context) && tree.stream.length > 0 && [...tree.posts.values()].some((post) => post.post_number === 1),
       // 排队中或取数中被取消（切帖、隐藏、筛选切换）时也要及时回执。
       finish: () => {
         if (record.state === "pending") ackReplyTreeJump(tree, record, "楼层跳转请求已取消");
@@ -6082,7 +6104,12 @@
   }
 
   async function loadReplyTreeJump(tree, entry, record) {
-    let post = null;
+    let post = replyTreePostByTarget(tree, record.postNumber, record.postId);
+    // 初始跳楼可能先于模型到齐登记；出队时已有正文就复用，不再请求同一楼。
+    if (post && (replyTreeBodyState(post) || replyTreePostIgnored(tree, post))) {
+      applyReplyTreeJump(tree, record, post, "");
+      return;
+    }
     try {
       const endpoint = record.postId
         ? `/t/${tree.topicId}/posts.json?post_ids[]=${record.postId}`
@@ -6124,7 +6151,6 @@
         clearReplyTreeWait(tree);
         // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
         tree.anchorId = post.id;
-        tree.targetLocated = true;
         expandReplyBranchPath(tree, post, new Map([...tree.posts.values()].map((entry) => [entry.post_number, entry])));
         // 主动跳楼自己决定滚动位置，跳过锚点补偿。
         tree.skipAnchorRestore = true;
@@ -6132,6 +6158,7 @@
         const card = tree.content.querySelector(`[data-post-number="${post.post_number}"] > .betterld-reply-tree__card`);
         if (!card?.getClientRects().length) throw new Error(`楼层 #${post.post_number} 尚未渲染，跳转未完成`);
         scrollReplyTreeCard(tree, post);
+        tree.targetLocated = true;
         tree.status.textContent = "";
       } else if (errorMessage && state.replyTree === tree) {
         tree.status.textContent = errorMessage;
@@ -6403,6 +6430,7 @@
     }
     // 状态变化后旧流属于另一种筛选：丢掉已加载楼层按新筛选重读；首次建立面板沿用同筛选的快照流。
     if (tree.filterViewKey !== null) {
+      cancelReplyTreeAnchorRestore(tree);
       closeReplyReactionPicker(tree);
       tree.boostExpanded.clear();
       tree.stream = [];
@@ -6531,6 +6559,7 @@
       } else {
         state.replyTreeSnapshot = null;
       }
+      cancelReplyTreeAnchorRestore(state.replyTree);
       state.replyTree.observer.disconnect();
     state.replyTree.branchLayoutObserver.disconnect();
       state.replyTree.branchContentObserver.disconnect();
@@ -6720,7 +6749,7 @@
     if (content.hidden) panel.hidden = false;
     else if (tree.posts.size) renderReplyTree(tree);
     // 深链先登记目标意图，优先级高于任何正文/上文任务。
-    if (!content.hidden && tree.targetPostNumber > 1) {
+    if (!content.hidden && tree.targetPostNumber > 0) {
       requestReplyTreeJump(tree, tree.targetPostNumber, 0, "");
     }
     maybeLoadMoreReplyTree(tree);
@@ -7095,6 +7124,7 @@
     cancelAnimationFrame(state.filterBinFrame);
     state.filterBinFrame = 0;
     if (state.replyTree) {
+      cancelReplyTreeAnchorRestore(state.replyTree);
       clearInterval(state.replyTree.relativeTimeTimer);
       state.replyTree.relativeTimeTimer = 0;
     }

@@ -102,7 +102,6 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   // 主题请求队列优先级：数字越小越先出队；刷新沿用原有最高优先，跳楼 > 正文 > 父楼。
   topicRequestPriority: Object.freeze({ refresh: -1, jump: 0, body: 1, parent: 2 }),
   replyTreeTimeRefreshMs: 60000,
-  replyTreeDeepLinkDelayMs: 1200,
   replyTreeActionTimeoutMs: 8000,
   replyTreeReactionHoldMs: 500,
   replyTreeReactionHoverMs: 400,
