@@ -10,7 +10,7 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -780,11 +780,21 @@
         }
         // 正文统一走 identityMap：已登记的楼层复用原站模型，旧载荷不再新建一份覆盖它。
         ({ post, ownsPost } = resolveTreePost(owner, topic, body.post));
+        const smallAction = !body.post.embeddedPost && body.post.post_type === 3;
+        const NativeBody = smallAction ? window.require("discourse/components/post/small-action").default : Native;
+        const controller = owner.lookup("controller:topic");
+        const args = { post, streamElement: true, className: body.post.embeddedPost ? "betterld-embedded-cooked" : "cooked",
+          embeddedPost: body.post.embeddedPost, selectionBarrier: Boolean(body.post.embeddedPost) };
+        if (smallAction) {
+          args.editPost = () => controller.send("editPost", post);
+          args.deletePost = (...values) => controller.send("deletePost", post, ...values);
+          args.recoverPost = () => controller.send("recoverPost", post);
+        }
         const Host = Component.default.extend({
           layout: Component.getComponentTemplate(Container),
           renderGlimmer: { _registrations: [{
             element,
-            component: curry(Native, { post, streamElement: true, className: body.post.embeddedPost ? "betterld-embedded-cooked" : "cooked", embeddedPost: body.post.embeddedPost, selectionBarrier: Boolean(body.post.embeddedPost) }, owner),
+            component: curry(NativeBody, args, owner),
             data: {}
           }] }
         });

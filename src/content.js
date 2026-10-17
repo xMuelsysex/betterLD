@@ -4978,10 +4978,12 @@
       if (!cooked || previous.cooked !== post.cooked || previous.bodyState !== bodyState || previous.ignoredAuthor !== ignoredAuthor) {
         cooked = createElement("div", "betterld-reply-tree__cooked");
         // 被忽略的作者不解析原站正文，避免旧缓存正文泄露；隐藏/删除楼显示的是服务端自己的占位正文。
-        if (!ignoredAuthor && !post.cooked_hidden && typeof post.cooked === 'string') {
+        if (!ignoredAuthor && !post.cooked_hidden && (typeof post.cooked === 'string' || bodyState === 'action')) {
           cooked.dataset.betterldCookedId = crypto.randomUUID();
-          const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
-          cooked.append(...parsed.body.childNodes);
+          if (typeof post.cooked === 'string') {
+            const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
+            cooked.append(...parsed.body.childNodes);
+          }
         }
       }
       body.append(head);
@@ -5152,11 +5154,11 @@
       if (stateAction) body.append(stateAction);
       // 被忽略的作者不给帖子操作入口，回复归属仍留在树里。
       body.append(actions);
-      actions.hidden = ignoredAuthor;
+      actions.hidden = ignoredAuthor || post.post_type === 3;
       const boostsChanged = !previous || JSON.stringify(previous.boosts?.map(({ id, cooked, user }) => ({ id, cooked, user }))) !== JSON.stringify(post.boosts?.map(({ id, cooked, user }) => ({ id, cooked, user })))
         || previous.canBoost !== post.can_boost || previous.editing !== editing || previous.ignoredAuthor !== ignoredAuthor || previous.bodyState !== bodyState
         || previous.boostUserId !== tree.context?.currentUserId;
-      const boosts = boostsChanged && !ignoredAuthor && !post.cooked_hidden ? replyTreeBoostSection(tree, post) : null;
+      const boosts = boostsChanged && !ignoredAuthor && !post.cooked_hidden && post.post_type !== 3 ? replyTreeBoostSection(tree, post) : null;
       if (existing) {
         existing.firstElementChild.firstElementChild.replaceWith(avatarWrap);
         previousBody.firstElementChild.replaceWith(head);
@@ -5681,11 +5683,13 @@
     }
   }
 
-  // 正文状态：隐藏、删除与忽略作者都是原站给出的合法状态，不是“正文缺失”。
+  // 正文状态：系统事件、隐藏、删除与忽略作者都是原站给出的合法状态，不是“正文缺失”。
   // 合并、父楼补读、分页与实时同步共用这一处判定，普通空正文仍然算缺口。
   function replyTreeBodyState(post) {
     if (post.cooked_hidden) return "hidden";
     if (post.deleted_post_placeholder || post.deleted_at || post.user_deleted) return "deleted";
+    // 系统事件以 action_code 表达内容（如置顶），cooked 可以合法为空。
+    if (post.post_type === 3 && typeof post.action_code === "string" && post.action_code.trim()) return "action";
     if (typeof post.cooked === "string" && post.cooked.trim()) return "ready";
     return "";
   }
@@ -5699,7 +5703,7 @@
     if (!bodyState && !replyTreePostIgnored(tree, post)) return false;
     const previous = tree.posts.get(post.id);
     // 真实状态优先：楼层在服务端变成隐藏/删除时，即使 overwrite=false 也要替掉缓存正文。
-    const cached = replyTreeBodyState(previous || {}) && (bodyState === 'ready' || !bodyState);
+    const cached = replyTreeBodyState(previous || {}) && (bodyState === 'ready' || bodyState === 'action' || !bodyState);
     if (cached && !overwrite) {
       tree.loaded.add(post.id);
       return false;
