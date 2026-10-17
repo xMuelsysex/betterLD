@@ -799,8 +799,8 @@
           }] }
         });
         join(() => {
+          // 宿主从空容器直接挂载，不再先展示一份临时HTML再清空重排。
           host = Host.create(owner.ownerInjection());
-          element.replaceChildren();
           host.appendTo(document.body);
         });
         cookedHosts.set(body.id, { element, host, post, ownsPost });

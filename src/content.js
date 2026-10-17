@@ -4408,8 +4408,6 @@
       const cooked = createElement("span", "discourse-boosts__cooked");
       cooked.dataset.betterldCookedId = crypto.randomUUID();
       cooked.betterldCookedPost = { ...post, cooked: boost.cooked, embeddedPost: true };
-      const parsed = new DOMParser().parseFromString(boost.cooked, "text/html");
-      cooked.append(...parsed.body.childNodes);
       bubble.append(cooked);
       const toggle = (event) => {
         if (event.target.closest('a, button, input, video, audio, iframe, summary')) return;
@@ -4573,14 +4571,15 @@
     const layout = `${bounds.width}:${bounds.height}:${anchor.centerY - bounds.top}`;
     const previous = tree.branchLayouts.get(card);
     tree.branchLayouts.set(card, layout);
-    return previous !== undefined ? previous !== layout
-      : Boolean(item.style.getPropertyValue('--betterld-branch-toggle-y') || item.style.getPropertyValue('--betterld-reply-tail-y'));
+    return previous !== layout;
   }
 
   function invalidateReplyBranchLayout(tree, item) {
     for (let owner = item; owner; owner = owner.parentElement.closest('.betterld-reply-tree__item')) {
       tree.branchDirty.add(owner);
-      if (owner.previousElementSibling) tree.branchDirty.add(owner.previousElementSibling);
+      let previous = owner.previousElementSibling;
+      while (previous?.hasAttribute('data-betterld-system-event')) previous = previous.previousElementSibling;
+      if (previous) tree.branchDirty.add(previous);
     }
   }
 
@@ -4596,6 +4595,19 @@
     if (item.style.minHeight !== value) item.style.minHeight = value;
   }
 
+  function cancelReplyBranchLayout(tree) {
+    cancelAnimationFrame(tree.branchLayoutFrame);
+    tree.branchLayoutFrame = 0;
+  }
+
+  function scheduleReplyBranchLayout(tree) {
+    if (tree.branchLayoutFrame || !pageActive() || tree.contentContainer.hidden) return;
+    tree.branchLayoutFrame = requestAnimationFrame(() => {
+      tree.branchLayoutFrame = 0;
+      if (state.replyTree === tree && pageActive()) positionReplyBranchControls(tree);
+    });
+  }
+
   function positionReplyBranchControls(tree, preservePosition = true) {
     if (state.replyTree !== tree || tree.contentContainer.hidden) return;
     const anchor = preservePosition && pageActive() ? captureReplyTreeAnchor(tree) : null;
@@ -4609,6 +4621,8 @@
       const button = item.querySelector(':scope > .betterld-reply-tree__collapse');
       const tail = item.querySelector(':scope > .betterld-reply-tree__tail-control');
       const refresh = tree.branchDirty.has(item);
+      // 无尺寸/正文/收放变化时不清占位或临时展开，避免重复通知改变滚动布局。
+      if (!refresh) continue;
       let bottom = 0;
       setReplyBranchSpace(item, 0);
       if (button) {
@@ -4779,11 +4793,12 @@
 
   function renderReplyTree(tree) {
     if (!tree.context) return;
-    if (!pageActive()) {
+    if (!pageActive() || !tree.bridgeReady) {
       tree.renderPending = true;
       return;
     }
     tree.renderPending = false;
+    cancelReplyBranchLayout(tree);
     cancelReplyTreeAnchorRestore(tree);
     tree.positionedPost = null;
     for (const post of tree.posts.values()) {
@@ -4989,10 +5004,7 @@
         // 被忽略的作者不解析原站正文，避免旧缓存正文泄露；隐藏/删除楼显示的是服务端自己的占位正文。
         if (!ignoredAuthor && !post.cooked_hidden && (typeof post.cooked === 'string' || bodyState === 'action')) {
           cooked.dataset.betterldCookedId = crypto.randomUUID();
-          if (typeof post.cooked === 'string') {
-            const parsed = new DOMParser().parseFromString(post.cooked, "text/html");
-            cooked.append(...parsed.body.childNodes);
-          }
+          // 直接交给原生正文组件；不先展示随后会被清空的临时HTML。
         }
       }
       body.append(head);
@@ -5300,7 +5312,6 @@
       tree.branchLayoutObserver.observe(card);
       tree.branchLayoutObserver.observe(card.querySelector('.betterld-reply-tree__actions'));
     }
-    positionReplyBranchControls(tree, false);
     syncReplyReactionPopover(tree);
     if (focusedReactionTrigger && tree.reactionTrigger) tree.reactionTrigger.focus({ preventScroll: true });
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
@@ -5366,6 +5377,9 @@
     } else {
       tree.notice.hidden = true;
     }
+    // 原生正文/作者挂载完成后再量连线；结构变化使现有收放坐标失效。
+    for (const item of tree.content.querySelectorAll('.betterld-reply-tree__item')) tree.branchDirty.add(item);
+    positionReplyBranchControls(tree, false);
     // 包含前段入口、筛选栏、原帖隐藏和提示区的最终布局，只补偿一次。
     restoreReplyTreeAnchor(tree, anchor);
   }
@@ -6679,8 +6693,9 @@
         state.replyTreeSnapshot = null;
       }
       cancelReplyTreeAnchorRestore(state.replyTree);
+      cancelReplyBranchLayout(state.replyTree);
       state.replyTree.observer.disconnect();
-    state.replyTree.branchLayoutObserver.disconnect();
+      state.replyTree.branchLayoutObserver.disconnect();
       state.replyTree.branchContentObserver.disconnect();
       state.replyTree.content.removeEventListener('load', state.replyTree.branchMediaLoad, true);
       state.replyTree.content.removeEventListener('loadedmetadata', state.replyTree.branchMediaLoad, true);
@@ -6809,7 +6824,8 @@
     bindReplyBranchInteraction(tree);
     tree.branchLayouts = new WeakMap();
     tree.branchDirty = new WeakSet();
-    tree.branchLayoutObserver = new ResizeObserver(() => positionReplyBranchControls(tree));
+    tree.branchLayoutFrame = 0;
+    tree.branchLayoutObserver = new ResizeObserver(() => scheduleReplyBranchLayout(tree));
     const branchContentSelector = '.betterld-reply-tree__cooked, .betterld-reply-tree__boosts, .betterld-reply-tree__head, .betterld-reply-tree__avatar-wrap';
     tree.branchContentObserver = new MutationObserver((records) => {
       let changed = false;
@@ -6823,7 +6839,7 @@
         invalidateReplyBranchLayout(tree, element.closest('.betterld-reply-tree__item'));
         changed = true;
       }
-      if (changed) positionReplyBranchControls(tree);
+      if (changed) scheduleReplyBranchLayout(tree);
     });
     tree.branchContentObserver.observe(tree.content, {
       childList: true, characterData: true, subtree: true,
@@ -6832,7 +6848,7 @@
     tree.branchMediaLoad = (event) => {
       if (!(event.target instanceof Element) || !event.target.closest(branchContentSelector)) return;
       invalidateReplyBranchLayout(tree, event.target.closest('.betterld-reply-tree__item'));
-      positionReplyBranchControls(tree);
+      scheduleReplyBranchLayout(tree);
     };
     tree.content.addEventListener('load', tree.branchMediaLoad, true);
     tree.content.addEventListener('loadedmetadata', tree.branchMediaLoad, true);
@@ -6849,7 +6865,7 @@
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }).catch((error) => {
       console.error('[betterLD] reply bridge failed', error);
-      if (state.replyTree === tree) tree.status.textContent = `回复实时同步与楼层跳转不可用：${error.message}`;
+      if (state.replyTree === tree) tree.status.textContent = `树状回复正文组件加载失败：${error.message}。请通过“原帖回复”查看内容。`;
     });
     tree.relativeTimeTimer = setInterval(() => refreshReplyTreeTimes(tree), config.replyTreeTimeRefreshMs);
     returnAll.addEventListener("click", () => returnAllReplyTreePosts(tree));
@@ -7252,6 +7268,7 @@
     state.filterBinFrame = 0;
     if (state.replyTree) {
       cancelReplyTreeAnchorRestore(state.replyTree);
+      cancelReplyBranchLayout(state.replyTree);
       clearInterval(state.replyTree.relativeTimeTimer);
       state.replyTree.relativeTimeTimer = 0;
     }
@@ -7266,6 +7283,7 @@
     if (state.replyTree) {
       const tree = state.replyTree;
       refreshReplyTreeTimes(tree);
+      scheduleReplyBranchLayout(tree);
       if (!tree.relativeTimeTimer) tree.relativeTimeTimer = setInterval(() => refreshReplyTreeTimes(tree), config.replyTreeTimeRefreshMs);
     }
   }
