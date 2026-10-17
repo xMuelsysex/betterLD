@@ -2772,7 +2772,7 @@
       const authorAvatar = topicAvatarUrl(metadata.author_avatar_template, 48) || undefined;
       globalThis.BETTERLD_LIBRARY.updateMetadata([{ ...metadata, authorAvatar }]);
     }
-    if (state.currentSettings.topicListAppearance !== "material") return;
+    if (state.currentSettings.topicListAppearance !== "material") return new Set();
     const entries = topicListEntries(payload);
     if (!entries.length || `${location.pathname}${location.search}` !== route || state.metadataRoute !== route || state.metadataGeneration !== generation) {
       return;
@@ -2783,34 +2783,49 @@
     }
     entries.forEach((entry) => state.topicListMetadata.set(entry.id, entry));
     applyTopicListMetadataToAll();
+    return new Set(entries.map((entry) => entry.id));
   }
 
   function syncTopicListMetadata() {
     if (!pageActive() || (state.currentSettings.topicListAppearance !== "material" && !topicIdFromPath())) return;
     if (state.topicListSync) {
       state.topicListSyncAgain = true;
-      return;
+      return state.topicListSync;
     }
     state.topicListSync = Promise.resolve()
       .then(async () => {
-        if (!isTopicListPage() && !isSearchPage() && !topicIdFromPath()) return;
-        // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次
+        // 同轮入口合并为一次读取；在途晚到的变化交回已有调度器补齐。
+        state.topicListSyncAgain = false;
+        if (!pageActive() || (!isTopicListPage() && !isSearchPage() && !topicIdFromPath())) return;
+        const generation = state.metadataGeneration;
+        const route = `${location.pathname}${location.search}`;
+        // 预载元素在文档末尾，注入过早时第一次读不到，这里补一次。
         seedPreloadedTopicList();
         applyTopicListMetadataToAll();
-        await syncTopicListMetadataFromSite();
-        // 缺失字段保持缺失；列表阅读不再补发逐主题请求。
-        if (pageActive()) uncoveredTopicCards().forEach((card) => setAuthor(card, "", "unavailable"));
+        const coveredCards = uncoveredTopicCards();
+        const applied = await syncTopicListMetadataFromSite();
+        if (applied && pageActive() && state.metadataGeneration === generation
+          && `${location.pathname}${location.search}` === route) {
+          // 只结束本轮已读取的行；晚到的新行继续等待自己的模型同步。
+          coveredCards.filter((card) => card.isConnected && applied.has(card.dataset.topicId)
+            && card.dataset.authorState === "loading")
+            .forEach((card) => setAuthor(card, "", "unavailable"));
+          return managedCards().every((card) => applied.has(card.dataset.topicId));
+        }
+        return false;
       })
       .catch((error) => {
         console.warn("[betterLD] 主题列表元数据同步失败", error);
+        return false;
       })
       .finally(() => {
         state.topicListSync = null;
         if (state.topicListSyncAgain) {
           state.topicListSyncAgain = false;
-          syncTopicListMetadata();
+          scheduleSync();
         }
       });
+    return state.topicListSync;
   }
 
   function setTopicActivity(card, activityAt) {
@@ -3410,15 +3425,22 @@
     showActionStatus("正在局部刷新…", "success");
     state.refreshNextAt = Date.now() + config.pageRefreshMinIntervalMs;
     state.refreshPromise = scheduleMetadataRequest(() => refreshSitePage(href), () => location.href === href, () => config.topicRequestPriority.refresh)
-      .then(() => {
+      .then(async () => {
         if (location.href !== href) return;
-        syncHomepage();
-        syncTopicListMetadata();
+        // 刷新前已启动的读取只负责自己的批次，完成后再读取刷新后的模型。
+        if (state.topicListSync) await state.topicListSync;
+        if (location.href !== href) return;
+        const metadataApplied = await syncHomepage();
+        if (location.href !== href) return;
         syncFloatingActions();
         window.requestAnimationFrame(() => {
           if (location.href === href) window.scrollTo({ top: scrollY, behavior: "auto" });
         });
-        showActionStatus("已更新当前页面", "success");
+        if (state.currentSettings.topicListAppearance === "material" && managedCards().length && metadataApplied !== true) {
+          showActionStatus("页面已刷新，主题信息尚未同步完成");
+        } else {
+          showActionStatus("已更新当前页面", "success");
+        }
       })
       .catch((error) => {
         console.warn("[betterLD] local refresh failed", error);
@@ -3520,7 +3542,6 @@
       container.classList.add("betterld-topic-list");
       items.forEach(enhanceTopicRow);
     }
-    syncTopicListMetadata();
   }
 
   function syncHomepage() {
@@ -3533,6 +3554,7 @@
     globalThis.BETTERLD_LIBRARY.sync();
     applyListControlsScrollState();
     scheduleFilterBinRender();
+    return syncTopicListMetadata();
   }
 
   // 搜索标题、摘要和命中高亮继续由 Discourse 管理；只追加独立操作栏。
@@ -3597,7 +3619,6 @@
       container.querySelectorAll(".fps-result").forEach(enhanceSearchResult);
       syncFilterEmptyState(container);
     });
-    syncTopicListMetadata();
   }
 
   function pageActive() {
@@ -7444,22 +7465,29 @@
       return true;
     });
     if (!sources.length) return;
-    // 原站新行当轮增强；插件自己的节点插入和移除不驱动源列表同步。
-    if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || topicIdFromPath())) {
+    // 新行及原站分批填入的标题/状态当轮增强，不等尾部扫描补齐。
+    if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || isSearchPage() || topicIdFromPath())) {
       const rows = new Set();
+      const rowSelector = ".topic-list-item, .latest-topic-list-item, .fps-result";
       for (const record of sources) {
+        const target = record.target instanceof Element ? record.target : record.target.parentElement;
+        const row = target?.closest(rowSelector);
+        if (row) rows.add(row);
         for (const node of record.addedNodes) {
           if (!(node instanceof Element) || ownedNode(node)) continue;
-          if (node.matches(".topic-list-item")) rows.add(node);
-          const parentRow = node.closest(".topic-list-item:not(.betterld-topic-row)");
-          if (parentRow) rows.add(parentRow);
-          node.querySelectorAll(".topic-list-item").forEach((row) => rows.add(row));
+          if (node.matches(rowSelector)) rows.add(node);
+          node.querySelectorAll(rowSelector).forEach((item) => rows.add(item));
         }
       }
       rows.forEach((row) => {
-        if (topicIdFromPath() && !row.closest(".more-topics__lists")) return;
-        row.closest(".topic-list")?.classList.add("betterld-topic-list");
-        enhanceTopicRow(row);
+        if (!row.isConnected || (topicIdFromPath() && !row.closest(".more-topics__lists"))) return;
+        if (row.matches(".fps-result")) {
+          row.closest(".fps-result-entries")?.classList.add("betterld-search-results");
+          enhanceSearchResult(row);
+        } else {
+          row.closest(".topic-list, .latest-topic-list")?.classList.add("betterld-topic-list");
+          enhanceTopicRow(row);
+        }
       });
       if (rows.size) globalThis.BETTERLD_LIBRARY.sync();
     }
