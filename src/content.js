@@ -3683,6 +3683,7 @@
 
   function showNativeReply(tree) {
     cancelReplyTreeAnchorRestore(tree);
+    resetReplyTreePrefetch(tree);
     if (!tree.userFilters.length && !tree.filterBusy) sessionStorage.setItem(config.topicReadingViewStorageKey, JSON.stringify({ topicId: tree.topicId, native: true }));
     closeReplyReactionPicker(tree);
     // 隐藏树视图时尚未发请求的任务全部作废，不在后台偷偷续载。
@@ -4562,6 +4563,7 @@
       tree.skipBranchAnchor = true;
       tree.skipAnchorRestore = true;
       tree.bodyLoadBlocked = true;
+      resetReplyTreePrefetch(tree);
       cancelReplyTreeAnchorRestore(tree);
       tree.compensating = true;
       try {
@@ -5416,6 +5418,10 @@
     positionReplyBranchControls(tree, false);
     // 包含前段入口、筛选栏、原帖隐藏和提示区的最终布局，只补偿一次。
     restoreReplyTreeAnchor(tree, anchor);
+    // 无正文进展暂停后，仅真实新增可读正文解除；单纯滚动不反复补满额度。
+    if (tree.prefetch.stalled && replyTreeReadableBodies(tree).some(({ id }) => !tree.prefetch.stalled.has(id))) {
+      tree.prefetch.stalled = null;
+    }
   }
 
   async function exportTopicSnapshot(topicId) {
@@ -5887,6 +5893,71 @@
     tree.status.textContent = "";
   }
 
+  function resetReplyTreePrefetch(tree) {
+    tree.prefetch = {
+      speed: 0, sampledAt: 0, until: 0, remaining: 0, stalled: null,
+      loadMs: tree.prefetch ? tree.prefetch.loadMs : config.replyTreePrefetch.initialLoadMs
+    };
+  }
+
+  function noteReplyTreeScroll(tree, top) {
+    const now = performance.now();
+    const direction = top < tree.bodyLoadScrollTop ? 'backward' : 'forward';
+    if (direction !== tree.bodyLoadDirection) resetReplyTreePrefetch(tree);
+    const prefetch = tree.prefetch;
+    const elapsed = now - prefetch.sampledAt;
+    const options = config.replyTreePrefetch;
+    if (prefetch.sampledAt && elapsed > 0 && elapsed <= options.scrollIdleMs) {
+      const sample = Math.abs(top - tree.bodyLoadScrollTop) / elapsed;
+      prefetch.speed += options.speedSampleWeight * (sample - prefetch.speed);
+    } else {
+      prefetch.speed = 0;
+    }
+    prefetch.sampledAt = now;
+    prefetch.until = now + options.scrollIdleMs;
+    if (!prefetch.stalled) prefetch.remaining = options.maxBatchesPerScroll;
+    tree.bodyLoadDirection = direction;
+    tree.bodyLoadScrollTop = top;
+    tree.bodyLoadBlocked = false;
+  }
+
+  function replyTreePrefetchActive(tree) {
+    return tree.prefetch.remaining > 0 && performance.now() < tree.prefetch.until;
+  }
+
+  function replyTreeLoadAhead(tree) {
+    const options = config.replyTreePrefetch;
+    const viewport = innerHeight;
+    const speed = replyTreePrefetchActive(tree) ? tree.prefetch.speed : 0;
+    const predicted = speed * (tree.prefetch.loadMs + options.latencyMarginMs) + config.replyTreeLoadAheadPx;
+    return Math.min(viewport * options.maxScreens, Math.max(viewport * options.minScreens, predicted));
+  }
+
+  function replyTreeReadableBodies(tree) {
+    const reading = replyTreeWindow(tree);
+    if (!reading || reading.empty) return [];
+    const ids = new Set(tree.stream.slice(reading.lo, reading.hi + 1));
+    return [...tree.content.querySelectorAll('.betterld-reply-tree__card')].flatMap((card) => {
+      const id = Number(card.dataset.postId);
+      const post = tree.posts.get(id);
+      const body = card.querySelector(':scope > .betterld-reply-tree__body > .betterld-reply-tree__cooked');
+      if (!ids.has(id) || !post || post.post_type === 3 || replyTreeBodyState(post) !== 'ready'
+        || replyTreePostIgnored(tree, post) || body?.dataset.betterldCookedMounted !== 'true' || !body.getClientRects().length) return [];
+      return [{ id, bounds: body.getBoundingClientRect() }];
+    });
+  }
+
+  function replyTreeBufferNeeded(tree, direction) {
+    const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
+    const available = replyTreeReadableBodies(tree).reduce((sum, { bounds }) => {
+      const length = direction === 'backward'
+        ? Math.min(bounds.bottom, headerHeight) - bounds.top
+        : bounds.bottom - Math.max(bounds.top, innerHeight);
+      return sum + Math.max(0, length);
+    }, 0);
+    return available < replyTreeLoadAhead(tree);
+  }
+
   function scheduleReplyTreeBody(tree, direction) {
     const source = tree.retryBatch || replyTreeBodyBatch(tree, direction);
     if (!source) return null;
@@ -5898,19 +5969,26 @@
       return null;
     }
     const generation = tree.filterGeneration;
+    const queuedAt = performance.now();
+    const continuation = tree.bodyLoadBlocked;
     return scheduleReplyTreeTask(tree, {
       kind: "body",
       key: batch.key,
       generation,
       priority: config.topicRequestPriority.body,
-      isNeeded: () => replyTreeTaskActive(tree, generation) && replyTreeMissingIds(tree, batch).length > 0,
+      isNeeded: () => replyTreeTaskActive(tree, generation) && replyTreeMissingIds(tree, batch).length > 0
+        && (Boolean(tree.retryBatch) || (!tree.prefetch.stalled && direction === tree.bodyLoadDirection
+          && (!continuation || (replyTreePrefetchActive(tree) && replyTreeBufferNeeded(tree, direction))))),
       canStart: () => !tree.tasks.some((pending) => pending.kind === "jump" && !pending.cancelled),
-      run: (entry) => loadReplyTreeBody(tree, entry, batch)
+      run: (entry) => loadReplyTreeBody(tree, entry, batch, queuedAt)
     });
   }
 
-  async function loadReplyTreeBody(tree, entry, batch) {
+  async function loadReplyTreeBody(tree, entry, batch, queuedAt) {
     if (!tree.posts.size) tree.status.textContent = "正在读取回复…";
+    const prefetch = tree.prefetch;
+    const before = new Set(replyTreeReadableBodies(tree).map(({ id }) => id));
+    if (prefetch.remaining > 0) prefetch.remaining -= 1;
     try {
       const params = new URLSearchParams();
       replyTreeMissingIds(tree, batch).forEach((id) => params.append("post_ids[]", id));
@@ -5929,10 +6007,18 @@
       // 只登记真实带正文的返回；漏返回或没正文的楼层用 loaded 判定为缺口，不假装成功。
       mergeReplyTreePosts(tree, posts, { overwrite: false });
       const missing = replyTreeMissingIds(tree, batch);
-      // 折叠后哨兵可能长驻视口：一次续载后等待用户继续滚动或点击更多。
-      tree.bodyLoadBlocked = true;
+      // 完成后仅在当前方向、阅读意图仍有效且正文缓冲不足时继续有限补批。
+      tree.bodyLoadBlocked = batch.direction === tree.bodyLoadDirection;
       tree.bodyLoadScrollTop = pageScrollTop();
       renderReplyTree(tree);
+      if (tree.prefetch === prefetch) {
+        prefetch.loadMs = performance.now() - queuedAt;
+        const readable = replyTreeReadableBodies(tree);
+        if (!readable.some(({ id }) => !before.has(id))) {
+          prefetch.remaining = 0;
+          prefetch.stalled = new Set(readable.map(({ id }) => id));
+        }
+      }
       if (missing.length) {
         // 分页可能遇到已删/移走的旧ID；另排一次主题核对，不在同一队列条目内连发请求。
         const exhausted = Boolean(batch.verified);
@@ -6089,7 +6175,10 @@
     const reading = replyTreeWindow(tree);
     const direction = tree.bodyLoadDirection;
     const batch = tree.retryBatch || replyTreeBodyBatch(tree, direction);
-    if (batch && (tree.retryBatch || reading.empty || (!tree.bodyLoadBlocked && replyTreeBoundaryReached(tree, direction)))) {
+    const needsBody = batch && !tree.prefetch.stalled && (!tree.bodyLoadBlocked
+      ? replyTreeBoundaryReached(tree, direction)
+      : replyTreePrefetchActive(tree) && replyTreeBufferNeeded(tree, direction));
+    if (batch && (tree.retryBatch || reading.empty || needsBody)) {
       scheduleReplyTreeBody(tree, direction);
       return;
     }
@@ -6110,6 +6199,8 @@
       .filter((card) => ids.has(Number(card.dataset.postId)) && card.getClientRects().length);
     // 树按父子关系排列，stream边界楼可能折叠；用读段实际可见的首尾正文判断边界。
     const card = direction === 'backward' ? cards[0] : cards.at(-1);
+    // 缓冲以当前读段展开的正文累计长度衡量，祖先外壳与折叠后代不充数。
+    if (replyTreeBufferNeeded(tree, direction)) return true;
     if (card) {
       const boundary = card.getBoundingClientRect();
       if (direction === 'backward') {
@@ -6314,6 +6405,7 @@
         clearReplyTreeWait(tree);
         // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
         tree.anchorId = post.id;
+        resetReplyTreePrefetch(tree);
         tree.bodyLoadBlocked = false;
         tree.bodyLoadDirection = 'forward';
         tree.autoLoadPaused = false;
@@ -6621,6 +6713,7 @@
     clearReplyTreeFilterError(tree);
     // 筛选世代单调递增：全部→摘要→全部 这类回到原值的切换也能作废旧任务。
     tree.filterGeneration += 1;
+    resetReplyTreePrefetch(tree);
     tree.filterViewKey = key;
     if (tree.userFilters.length) {
       showNativeReply(tree);
@@ -6855,6 +6948,7 @@
     tree.bodyLoadBlocked = false;
     tree.bodyLoadDirection = 'forward';
     tree.bodyLoadScrollTop = pageScrollTop();
+    resetReplyTreePrefetch(tree);
     bindReplyBranchInteraction(tree);
     tree.branchLayouts = new WeakMap();
     tree.branchDirty = new WeakSet();
@@ -6911,6 +7005,7 @@
       tree.wait.until = 0;
       tree.wait.retryUsed = false;
       moreButton.hidden = true;
+      resetReplyTreePrefetch(tree);
       tree.bodyLoadBlocked = false;
       tree.bodyLoadDirection = direction;
       tree.status.textContent = "";
@@ -7301,6 +7396,7 @@
     cancelAnimationFrame(state.filterBinFrame);
     state.filterBinFrame = 0;
     if (state.replyTree) {
+      resetReplyTreePrefetch(state.replyTree);
       cancelReplyTreeAnchorRestore(state.replyTree);
       cancelReplyBranchLayout(state.replyTree);
       clearInterval(state.replyTree.relativeTimeTimer);
@@ -7544,9 +7640,7 @@
     updateListControlsScrollState();
     const tree = state.replyTree;
     if (tree && !tree.compensating && !tree.contentContainer.hidden && pageScrollTop() !== tree.bodyLoadScrollTop) {
-      tree.bodyLoadDirection = pageScrollTop() < tree.bodyLoadScrollTop ? 'backward' : 'forward';
-      tree.bodyLoadScrollTop = pageScrollTop();
-      tree.bodyLoadBlocked = false;
+      noteReplyTreeScroll(tree, pageScrollTop());
       updateReplyTreeMore(tree);
     }
     scheduleReplyPosition();

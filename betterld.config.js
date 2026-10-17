@@ -99,6 +99,16 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   replyTreeParentLoadIntervalMs: 5000,
   replyTreeLoadAheadPx: 400,
   replyTreeBackwardLoadAheadPosts: 5,
+  // 速度以 px/ms 采样，耗时包含队列等待、取数与原生正文挂载；缓冲只计展开正文。
+  replyTreePrefetch: Object.freeze({
+    minScreens: 2,
+    maxScreens: 6,
+    initialLoadMs: 1200,
+    latencyMarginMs: 300,
+    scrollIdleMs: 1500,
+    speedSampleWeight: 0.35,
+    maxBatchesPerScroll: 3
+  }),
   // 树内等待状态的可见刷新间隔：只读本地队列与冷却，不产生任何请求。
   replyTreeStatusTickMs: 1000,
   // 主题请求队列优先级：数字越小越先出队；刷新沿用原有最高优先，跳楼 > 正文 > 父楼。
