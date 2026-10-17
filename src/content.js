@@ -3430,12 +3430,12 @@
         // 刷新前已启动的读取只负责自己的批次，完成后再读取刷新后的模型。
         if (state.topicListSync) await state.topicListSync;
         if (location.href !== href) return;
-        const metadataApplied = await syncHomepage();
+        const metadataSync = syncHomepage();
+        // 结构增强后立即恢复，避免下一帧继承原站 smooth 再把画面拉回。
+        window.scrollTo({ top: scrollY, behavior: "instant" });
+        const metadataApplied = await metadataSync;
         if (location.href !== href) return;
         syncFloatingActions();
-        window.requestAnimationFrame(() => {
-          if (location.href === href) window.scrollTo({ top: scrollY, behavior: "auto" });
-        });
         if (state.currentSettings.topicListAppearance === "material" && managedCards().length && metadataApplied !== true) {
           showActionStatus("页面已刷新，主题信息尚未同步完成");
         } else {
@@ -7440,6 +7440,10 @@
       const value = element.getAttribute(record.attributeName);
       if (record.oldValue === value) return false;
       if (record.attributeName === "class") {
+        // 原站动态 class 重算可能覆盖布局标记，必须在本轮绘制前恢复。
+        const layoutClasses = ["betterld-topic-list", "betterld-search-results", "betterld-topic-row", "betterld-search-result"];
+        const previousClasses = (record.oldValue || "").split(/\s+/);
+        if (layoutClasses.some((name) => previousClasses.includes(name) && !element.classList.contains(name))) return true;
         const nativeClasses = (text) => (text || "").split(/\s+/).filter((name) => name && !name.startsWith("betterld-")).sort().join(" ");
         if (nativeClasses(record.oldValue) === nativeClasses(value)) return false;
       }
@@ -7468,17 +7472,28 @@
     // 新行及原站分批填入的标题/状态当轮增强，不等尾部扫描补齐。
     if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || isSearchPage() || topicIdFromPath())) {
       const rows = new Set();
+      const containers = new Set();
       const rowSelector = ".topic-list-item, .latest-topic-list-item, .fps-result";
+      const containerSelector = ".topic-list, .latest-topic-list, .fps-result-entries";
       for (const record of sources) {
         const target = record.target instanceof Element ? record.target : record.target.parentElement;
+        const container = target?.closest(containerSelector);
+        if (container) containers.add(container);
         const row = target?.closest(rowSelector);
         if (row) rows.add(row);
         for (const node of record.addedNodes) {
           if (!(node instanceof Element) || ownedNode(node)) continue;
+          if (node.matches(containerSelector)) containers.add(node);
+          node.querySelectorAll(containerSelector).forEach((item) => containers.add(item));
           if (node.matches(rowSelector)) rows.add(node);
           node.querySelectorAll(rowSelector).forEach((item) => rows.add(item));
         }
       }
+      // topics 更新也会重算原站 table class；不能等防抖期间整表退回原样再切回来。
+      containers.forEach((container) => {
+        if (!container.isConnected || (topicIdFromPath() && !container.closest(".more-topics__lists"))) return;
+        container.classList.add(container.matches(".fps-result-entries") ? "betterld-search-results" : "betterld-topic-list");
+      });
       rows.forEach((row) => {
         if (!row.isConnected || (topicIdFromPath() && !row.closest(".more-topics__lists"))) return;
         if (row.matches(".fps-result")) {
