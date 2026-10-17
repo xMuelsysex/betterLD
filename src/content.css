@@ -4745,7 +4745,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
 }
 
 /* 父楼与子楼主干在同一坐标空间一次绘制，跨正文边界也不拼接。 */
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children)::after {
+.betterld-reply-tree__item[data-betterld-reply-branches]::after {
   content: "";
   position: absolute;
   top: 36px;
@@ -4760,7 +4760,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
     #000 calc(var(--betterld-branch-toggle-y) - 29px));
 }
 
-.betterld-reply-tree__item:has(> .betterld-reply-tree__children:not([hidden]))::after {
+.betterld-reply-tree__item[data-betterld-reply-branches]:has(> .betterld-reply-tree__children:not([hidden]))::after {
   height: var(--betterld-reply-trunk-height);
 }
 
@@ -4775,7 +4775,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   outline-offset: 2px;
 }
 
-.betterld-reply-tree__children > .betterld-reply-tree__item::before {
+.betterld-reply-tree__children > .betterld-reply-tree__item:not([data-betterld-system-event])::before {
   content: "";
   position: absolute;
   top: 0;
@@ -4789,7 +4789,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   clip-path: inset(0 0 0 2px);
 }
 
-.betterld-reply-tree__children > .betterld-reply-tree__item:is(:last-child, [data-reply-last-visible]):not(:has(> .betterld-reply-tree__tail-control))::before {
+.betterld-reply-tree__children > .betterld-reply-tree__item:is(:nth-last-child(1 of :not([data-betterld-system-event])), [data-reply-last-visible]):not(:has(> .betterld-reply-tree__tail-control))::before {
   /* 末端保留完整圆弧，从圆弧切点接续竖干，不能裁掉左侧再提前截断主干。 */
   clip-path: inset(var(--betterld-reply-arc-join) 0 0 0);
 }
@@ -4824,7 +4824,7 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   height: var(--betterld-reply-trunk-end, var(--betterld-reply-arc-join));
 }
 
-.betterld-reply-tree__item[data-reply-last-visible]:first-child > .betterld-reply-tree__line-hit--trunk {
+.betterld-reply-tree__item[data-reply-last-visible]:nth-child(1 of :not([data-betterld-system-event])) > .betterld-reply-tree__line-hit--trunk {
   height: calc(var(--betterld-reply-trunk-end, var(--betterld-reply-arc-join)) + 10px);
 }
 
@@ -4876,16 +4876,16 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   width: 14px;
 }
 
-.betterld-reply-tree__item:last-child > .betterld-reply-tree__line-hit--trunk {
+.betterld-reply-tree__item:nth-last-child(1 of :not([data-betterld-system-event])) > .betterld-reply-tree__line-hit--trunk {
   bottom: auto;
   height: var(--betterld-reply-arc-join);
 }
 
-.betterld-reply-tree__item:first-child > .betterld-reply-tree__line-hit--trunk {
+.betterld-reply-tree__item:nth-child(1 of :not([data-betterld-system-event])) > .betterld-reply-tree__line-hit--trunk {
   top: -10px;
 }
 
-.betterld-reply-tree__item:only-child > .betterld-reply-tree__line-hit--trunk {
+.betterld-reply-tree__item:nth-child(1 of :not([data-betterld-system-event])):nth-last-child(1 of :not([data-betterld-system-event])) > .betterld-reply-tree__line-hit--trunk {
   height: calc(var(--betterld-reply-arc-join) + 10px);
 }
 
