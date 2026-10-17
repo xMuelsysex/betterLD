@@ -5775,10 +5775,7 @@
       let nearbyPosts = [];
       if (!startsAtFirstPost) {
         // 深链或 SPA 切换时预载可能不含主帖；补读带上当前摘要与作者筛选，不用完整流覆盖筛选结果。
-        const params = new URLSearchParams();
-        if (tree.topReplies) params.set("filter", "summary");
-        if (tree.userFilters.length) params.set("username_filters", tree.userFilters.join(","));
-        data = await shareTopicFetch(`/t/${tree.topicId}.json${params.size ? `?${params}` : ""}`);
+        data = await shareTopicFetch(replyTreeTopicUrl(tree));
         if (!entry.active()) return;
         if (state.preloadedReplyFilterKey === tree.filterViewKey && Array.isArray(preloaded?.post_stream?.posts)) nearbyPosts = preloaded.post_stream.posts;
       }
@@ -5802,16 +5799,42 @@
     }
   }
 
+  function replyTreeTopicUrl(tree) {
+    const params = new URLSearchParams();
+    if (tree.topReplies) params.set("filter", "summary");
+    if (tree.userFilters.length) params.set("username_filters", tree.userFilters.join(","));
+    return `/t/${tree.topicId}.json${params.size ? `?${params}` : ""}`;
+  }
+
+  function replyTreeMissingIds(tree, batch) {
+    const streamIds = new Set(tree.stream);
+    return batch.ids.filter((id) => streamIds.has(id) && !tree.loaded.has(id));
+  }
+
+  function clearReplyTreeBodyRetry(tree) {
+    tree.retryBatch = null;
+    clearReplyTreeWait(tree);
+    tree.autoLoadPaused = false;
+    tree.status.textContent = "";
+  }
+
   function scheduleReplyTreeBody(tree, direction) {
-    const batch = tree.retryBatch || replyTreeBodyBatch(tree, direction);
-    if (!batch) return null;
+    const source = tree.retryBatch || replyTreeBodyBatch(tree, direction);
+    if (!source) return null;
+    const batch = { ...source, ids: replyTreeMissingIds(tree, source) };
+    if (!batch.ids.length) {
+      clearReplyTreeBodyRetry(tree);
+      updateReplyTreeMore(tree);
+      scheduleReplyTreeWake(tree);
+      return null;
+    }
     const generation = tree.filterGeneration;
     return scheduleReplyTreeTask(tree, {
       kind: "body",
       key: batch.key,
       generation,
       priority: config.topicRequestPriority.body,
-      isNeeded: () => replyTreeTaskActive(tree, generation) && batch.ids.some((id) => !tree.loaded.has(id)),
+      isNeeded: () => replyTreeTaskActive(tree, generation) && replyTreeMissingIds(tree, batch).length > 0,
       canStart: () => !tree.tasks.some((pending) => pending.kind === "jump" && !pending.cancelled),
       run: (entry) => loadReplyTreeBody(tree, entry, batch)
     });
@@ -5821,31 +5844,42 @@
     if (!tree.posts.size) tree.status.textContent = "正在读取回复…";
     try {
       const params = new URLSearchParams();
-      batch.ids.forEach((id) => params.append("post_ids[]", id));
-      const data = await shareTopicFetch(`/t/${tree.topicId}/posts.json?${params}`);
+      replyTreeMissingIds(tree, batch).forEach((id) => params.append("post_ids[]", id));
+      const data = await shareTopicFetch(batch.reconcile ? replyTreeTopicUrl(tree) : `/t/${tree.topicId}/posts.json?${params}`);
       if (!entry.active()) return;
       const posts = Array.isArray(data?.post_stream?.posts) ? data.post_stream.posts : null;
       if (!posts) throw new Error("回复分页数据格式不正确");
+      if (batch.reconcile) {
+        const stream = data.post_stream.stream;
+        if (String(data.id) !== tree.topicId || !Array.isArray(stream) || !stream.length || stream.some((id) => !Number.isInteger(id))) {
+          throw new Error("核对回复失败：原站未返回有效楼层列表");
+        }
+        tree.stream = stream;
+      }
       mergeReplyUserBadges(tree, data.user_badges);
       // 只登记真实带正文的返回；漏返回或没正文的楼层用 loaded 判定为缺口，不假装成功。
       mergeReplyTreePosts(tree, posts, { overwrite: false });
-      const missing = batch.ids.filter((id) => !tree.loaded.has(id));
+      const missing = replyTreeMissingIds(tree, batch);
       // 折叠后哨兵可能长驻视口：一次续载后等待用户继续滚动或点击更多。
       tree.bodyLoadBlocked = true;
       tree.bodyLoadScrollTop = pageScrollTop();
       renderReplyTree(tree);
       if (missing.length) {
-        tree.retryBatch = batch;
-        tree.autoLoadPaused = true;
+        // 分页可能遇到已删/移走的旧ID；另排一次主题核对，不在同一队列条目内连发请求。
+        const exhausted = Boolean(batch.verified);
+        tree.retryBatch = {
+          ...batch, ids: missing, reconcile: !batch.reconcile && !exhausted, verified: Boolean(batch.reconcile) || exhausted
+        };
+        tree.autoLoadPaused = exhausted;
         tree.more.hidden = false;
-        tree.more.textContent = "重试加载回复";
-        tree.status.textContent = `原站没有返回帖子 ${missing.join("、")} 的正文；点击“重试加载回复”继续。`;
+        tree.more.textContent = exhausted ? "重试加载回复" : "加载更多回复";
+        tree.status.textContent = exhausted
+          ? `核对并重读后，帖子 ID ${missing.join("、")} 仍未返回正文；点击“重试加载回复”定点重读。`
+          : batch.reconcile ? `帖子 ID ${missing.join("、")} 仍在楼层列表中，正在定点重读正文…`
+            : `帖子 ID ${missing.join("、")} 未返回正文，正在核对楼层列表…`;
         return;
       }
-      tree.retryBatch = null;
-      clearReplyTreeWait(tree);
-      tree.autoLoadPaused = false;
-      tree.status.textContent = "";
+      clearReplyTreeBodyRetry(tree);
     } catch (error) {
       if (!entry.stillCurrent()) return;
       tree.retryBatch = batch;
@@ -6099,7 +6133,10 @@
       if (previous && Object.keys(post).every((key) => JSON.stringify(previous[key]) === JSON.stringify(post[key]))) continue;
       if (mergeReplyTreePost(tree, post)) changed = true;
     }
+    // 原站实时流可能已移除缺失ID，或模型已补到正文；旧失败批次不再阻断续读。
+    if (tree.retryBatch && !replyTreeMissingIds(tree, tree.retryBatch).length) clearReplyTreeBodyRetry(tree);
     if (changed && tree.posts.size) renderReplyTree(tree);
+    updateReplyTreeMore(tree);
     scheduleReplyTreeWake(tree);
   }
 
