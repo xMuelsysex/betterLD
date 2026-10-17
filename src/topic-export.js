@@ -468,7 +468,7 @@
   async function openOfflinePermissionSettings(refs) {
     refs.permissionButton.disabled = true;
     try {
-      const response = await sendRuntimeMessage({ type: "open-topic-export-settings" });
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "topicExportOffline" });
       if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
       refs.progress.textContent = "已打开扩展授权页：高级 → 导入与导出 → HTML 导出离线归档。HTML 归档与分享图片共用资源授权；授权缺失域名后回到主题页重新生成。";
     } catch (error) {
@@ -1209,11 +1209,11 @@
     return renderPostNodeHtml(node, depth, children);
   }
 
-  function renderNestedPosts(items) {
+  // 两种嵌套格式共用同一父子森林，只在渲染时按各自格式决定缩进与标题层级。
+  function buildReplyForest(items) {
     const byNumber = new Map(items.map((item) => [item.post.post_number, { ...item, children: [] }]));
     const roots = [];
     const outOfRangeParents = [];
-
     const mainPostNode = byNumber.get(1);
 
     for (const node of byNumber.values()) {
@@ -1235,6 +1235,12 @@
 
     roots.sort((first, second) => first.post.post_number - second.post.post_number);
     outOfRangeParents.sort((first, second) => first.post.post_number - second.post.post_number);
+
+    return { roots, outOfRangeParents };
+  }
+
+  function renderNestedPosts(items) {
+    const { roots, outOfRangeParents } = buildReplyForest(items);
 
     const lines = [];
     for (const root of roots) {
@@ -1252,30 +1258,7 @@
   }
 
   function renderNestedPostsHtml(items) {
-    const byNumber = new Map(items.map((item) => [item.post.post_number, { ...item, children: [] }]));
-    const roots = [];
-    const outOfRangeParents = [];
-    const mainPostNode = byNumber.get(1);
-
-    for (const node of byNumber.values()) {
-      const parentNumber = Number(node.post.reply_to_post_number || 0);
-      if (parentNumber && byNumber.has(parentNumber)) {
-        byNumber.get(parentNumber).children.push(node);
-      } else if (parentNumber && !byNumber.has(parentNumber)) {
-        outOfRangeParents.push(node);
-      } else if (mainPostNode && node.post.post_number !== 1) {
-        mainPostNode.children.push(node);
-      } else {
-        roots.push(node);
-      }
-    }
-
-    for (const node of byNumber.values()) {
-      node.children.sort((first, second) => first.post.post_number - second.post.post_number);
-    }
-
-    roots.sort((first, second) => first.post.post_number - second.post.post_number);
-    outOfRangeParents.sort((first, second) => first.post.post_number - second.post.post_number);
+    const { roots, outOfRangeParents } = buildReplyForest(items);
 
     const html = roots.map((root) => renderNestedNodeHtml(root, 0));
     if (outOfRangeParents.length) {

@@ -79,5 +79,5 @@
     };
   }
 
-  globalThis.BETTERLD_WEBDAV = { createWebdavApi, webdavUrl, basicAuthorization };
+  globalThis.BETTERLD_WEBDAV = { createWebdavApi };
 })();

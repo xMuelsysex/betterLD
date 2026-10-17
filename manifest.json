@@ -44,7 +44,6 @@
       "js": [
         "betterld.config.js",
         "src/settings.js",
-        "src/markdown.js",
         "src/external-search.js",
         "src/library-entry.js",
         "src/library-store.js",

@@ -84,8 +84,6 @@
     storageKey: config.userMarksStorageKey,
     tagMaxLength: limits.tagMaxLength,
     noteMaxLength: limits.noteMaxLength,
-    maxEntries: limits.maxEntries,
-    validate,
     normalize,
     upsert,
     remove,

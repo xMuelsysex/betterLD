@@ -518,7 +518,6 @@
       resolveAvatars = typeof resolver === "function" ? resolver : null;
     },
     sync,
-    invalidate,
-    teardown
+    invalidate
   });
 })();

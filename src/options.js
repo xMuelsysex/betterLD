@@ -2053,7 +2053,7 @@
 
   async function openTopicExportSettings() {
     try {
-      const response = await sendRuntimeMessage({ type: "open-topic-export-settings" });
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "topicExportOffline" });
       if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
       setStatusMessage(topicExportOriginStatus, "已打开扩展授权页：高级 → 导入与导出。", "success");
     } catch (error) {
@@ -2098,7 +2098,7 @@
     externalSearchPermissionBusy = true;
     syncExternalSearchControl(state.settings.externalSearchEngine);
     try {
-      const response = await sendRuntimeMessage({ type: "open-external-search-settings" });
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "externalSearchEngine" });
       if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
       setStatusMessage(externalSearchPermissionStatus, "已打开扩展授权页：页面 → 搜索 → 外部搜索。请选择引擎并允许访问，然后返回这里。", "success");
     } catch (error) {

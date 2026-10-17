@@ -627,16 +627,12 @@
   }
 
   globalThis.BETTERLD_SETTINGS = Object.freeze({
-    defaultSettings,
     normalizeSettings,
     normalizeImportedSettings,
-    normalizeRules,
     webdavUrlAllowed,
     validateCustomCss,
     validateSettings,
     toSyncSettings,
-    stableStringify,
-    settingKeys: Object.freeze(Object.keys(defaults)),
-    allowedCustomCssProperties: Object.freeze([...allowedCustomCssProperties])
+    stableStringify
   });
 })();

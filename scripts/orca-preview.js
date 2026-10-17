@@ -434,10 +434,9 @@ function buildInjection(port) {
     }
     return response.text();
   };
-  const [configCode, settingsCode, markdownCode, styleCode, contentCode] = await Promise.all([
+  const [configCode, settingsCode, styleCode, contentCode] = await Promise.all([
     sourceText("betterld.config.js"),
     sourceText("src/settings.js"),
-    sourceText("src/markdown.js"),
     sourceText("src/content.css"),
     sourceText("src/content.js")
   ]);
@@ -458,7 +457,6 @@ function buildInjection(port) {
 
   runScript(configCode);
   runScript(settingsCode);
-  runScript(markdownCode);
   const config = globalThis.BETTERLD_CONFIG;
   if (!config?.storageKey || !config.wallpaperLocalStorageKey || !config.settingsDefaults) {
     throw new Error("betterLD config did not initialize");

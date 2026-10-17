@@ -118,13 +118,8 @@
     return { ok: true, latestTag };
   }
 
-  async function handleOpenExternalSearchSettings(sender) {
-    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
-    return createTab({ url: api.runtime.getURL("src/options.html#externalSearchEngine"), active: true });
-  }
-
   // 设置页深链只接受已知字段，避免任意 hash 被当成定位目标
-  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl", "stickerOrigins"]);
+  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl", "stickerOrigins", "topicExportOffline"]);
 
   async function handleOpenSettingsAt(message, sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
@@ -244,16 +239,6 @@
     return bytes;
   }
 
-  // 后台可能是 Chrome service worker 或 Firefox 后台页，两者都有 btoa，不能依赖 FileReader。
-  function encodeBase64(bytes) {
-    const chunkSize = 0x8000;
-    let binary = "";
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-    }
-    return btoa(binary);
-  }
-
   // 下载的 SVG 会作为 data URL 内嵌，必须自包含：脚本、foreignObject、事件属性与外部引用都显式失败。
   async function handleTopicExportCheckOrigins(message, sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
@@ -297,7 +282,7 @@
       }
       const bytes = await readBoundedBody(response, offlineMaxAssetBytes, target.href);
       if (mimeType === "image/svg+xml") offlineAssets.assertSelfContainedSvgBytes(bytes, target.href);
-      return { ok: true, mimeType, size: bytes.length, dataUrl: `data:${mimeType};base64,${encodeBase64(bytes)}` };
+      return { ok: true, mimeType, size: bytes.length, dataUrl: `data:${mimeType};base64,${stickerStore.bytesToBase64(bytes)}` };
     } catch (error) {
       if (controller.signal.aborted) return { ok: false, error: `资源请求超时（${offlineFetchTimeoutMs}ms）` };
       // redirect: "error" 下要求重定向的地址只会以网络错误失败，明确报告而不是静默当成空资源。
@@ -308,11 +293,6 @@
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  async function handleOpenTopicExportSettings(sender) {
-    if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
-    return createTab({ url: api.runtime.getURL("src/options.html#topicExportOffline"), active: true });
   }
 
   let libraryQueue = Promise.resolve();
@@ -353,7 +333,8 @@
     } else if (existing < 0) {
       items.unshift(libraryStore.record(topic));
     }
-    return { ok: true, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true };
   }
 
   async function createFolder(message, sender) {
@@ -362,7 +343,8 @@
     const library = await readStoredLibrary();
     if (library.folders.length >= config.libraryFoldersMax) throw new Error(`收藏分组数量已达上限 ${config.libraryFoldersMax}`);
     library.folders.push({ id: libraryStore.uniqueFolderId(library), name });
-    return { ok: true, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true };
   }
 
   async function renameFolder(message, sender) {
@@ -372,7 +354,8 @@
     const folder = library.folders.find((item) => item.id === message.id);
     if (!folder) throw new Error("收藏分组不存在");
     folder.name = name;
-    return { ok: true, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true };
   }
 
   // 删除分组只移除分组本身，收藏回到未分类，收藏条目与原站书签都不动。
@@ -385,7 +368,8 @@
     library.favorites.forEach((item) => {
       if (item.folderId === message.id) delete item.folderId;
     });
-    return { ok: true, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true };
   }
 
   async function moveLibraryItem(message, sender) {
@@ -402,7 +386,8 @@
       if (!library.folders.some((folder) => folder.id === message.folderId)) throw new Error("收藏分组不存在");
       item.folderId = message.folderId;
     }
-    return { ok: true, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true };
   }
 
   // 导入按当前最新数据追加去重；dryRun 只预览摘要，不写存储。
@@ -414,7 +399,8 @@
     if (message.dryRun === true) {
       return { ok: true, summary };
     }
-    return { ok: true, summary, library: await writeStoredLibrary(library) };
+    await writeStoredLibrary(library);
+    return { ok: true, summary };
   }
 
   const libraryHandlers = {
@@ -727,7 +713,7 @@
     });
   }
 
-  async function stickerList(sender) {
+  async function stickerList(message, sender) {
     if (!isTrustedSender(sender)) throw new Error("请求来源无效");
     const data = await stickerDb.list();
     return { ok: true, folders: data.folders, items: data.items, totalBytes: data.totalBytes };
@@ -865,12 +851,6 @@
       return true;
     }
 
-    if (message?.type === "open-topic-export-settings") {
-      handleOpenTopicExportSettings(sender)
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
     if (message?.type === "topic-export-check-origins") {
       handleTopicExportCheckOrigins(message, sender)
         .then(sendResponse)
@@ -897,12 +877,6 @@
     }
     if (message?.type === "open-dns-settings") {
       handleOpenDnsSettings(sender)
-        .then(sendResponse)
-        .catch((error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
-    if (message?.type === "open-external-search-settings") {
-      handleOpenExternalSearchSettings(sender)
         .then(sendResponse)
         .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;

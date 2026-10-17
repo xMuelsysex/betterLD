@@ -50,14 +50,16 @@
 
   // 嵌入的 Boost 正文不是帖子，保持独立模型，不登记进 identityMap。
   // ownsPost 只表示组件自己创建、必须自己销毁的模型：已登记进 identityMap 的楼层由原站管理，释放时不销毁。
-  function resolveTreePost(owner, topic, data) {
-    if (data.embeddedPost) {
-      return { post: owner.factoryFor("model:post").create(treePostAttributes(topic, data)), ownsPost: true };
-    }
-    const loaded = topic.postStream.findLoadedPost(data.id);
-    treeRegisteredPostIds.add(String(data.id));
-    if (loaded) return { post: loaded, ownsPost: false };
-    return { post: createTreePost(owner, topic, data), ownsPost: false };
+  function createEmbeddedTreePost(owner, topic, data) {
+    return { post: owner.factoryFor("model:post").create(treePostAttributes(topic, data)), ownsPost: true };
+  }
+
+  // 普通楼层只按 postId 取已登记的原站模型：树注册阶段已经建好，这里缺失就是挂载协议被破坏，明确报错。
+  function resolveTreePost(topic, postId) {
+    const loaded = topic.postStream.findLoadedPost(postId);
+    if (!loaded) throw new Error(`楼层 #${postId} 尚未登记进原站模型`);
+    treeRegisteredPostIds.add(String(postId));
+    return { post: loaded, ownsPost: false };
   }
 
   // 权限与忽略列表只来自原站模型：桥一次投影给内容脚本，内容脚本不自己推断登录与发帖权限。
@@ -778,13 +780,14 @@
             throw error;
           }
         }
-        // 正文统一走 identityMap：已登记的楼层复用原站模型，旧载荷不再新建一份覆盖它。
-        ({ post, ownsPost } = resolveTreePost(owner, topic, body.post));
-        const smallAction = !body.post.embeddedPost && body.post.post_type === 3;
+        // 正文统一走 identityMap：普通楼层按 postId 复用已登记的原站模型，嵌入的 Boost 正文保持自己的模型。
+        const embedded = body.post;
+        ({ post, ownsPost } = embedded ? createEmbeddedTreePost(owner, topic, embedded) : resolveTreePost(topic, body.postId));
+        const smallAction = !embedded?.embeddedPost && post.post_type === 3;
         const NativeBody = smallAction ? window.require("discourse/components/post/small-action").default : Native;
         const controller = owner.lookup("controller:topic");
-        const args = { post, streamElement: true, className: body.post.embeddedPost ? "betterld-embedded-cooked" : "cooked",
-          embeddedPost: body.post.embeddedPost, selectionBarrier: Boolean(body.post.embeddedPost) };
+        const args = { post, streamElement: true, className: embedded?.embeddedPost ? "betterld-embedded-cooked" : "cooked",
+          embeddedPost: embedded?.embeddedPost, selectionBarrier: Boolean(embedded?.embeddedPost) };
         if (smallAction) {
           args.editPost = () => controller.send("editPost", post);
           args.deletePost = (...values) => controller.send("deletePost", post, ...values);
@@ -804,7 +807,7 @@
           host.appendTo(document.body);
         });
         cookedHosts.set(body.id, { element, host, post, ownsPost });
-        if (post.polls?.length && !body.post.embeddedPost) syncTreePolls(owner, topic);
+        if (post.polls?.length && !embedded) syncTreePolls(owner, topic);
         element.dataset.betterldCookedMounted = "true";
       } catch (error) {
         if (host || (ownsPost && post)) {
@@ -841,7 +844,7 @@
   });
 
   document.addEventListener("betterld:reply-menu-mount", (event) => {
-    const { id, topicId, post: data } = JSON.parse(event.detail);
+    const { id, topicId, postId } = JSON.parse(event.detail);
     let host;
     let post;
     let behavior;
@@ -854,8 +857,8 @@
       if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
       const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(id)}"]`);
       if (!element) throw new Error("帖子操作入口已移除");
-      // 操作菜单同样走 identityMap：树已登记的楼层用同一模型，不再新建或 HTTP 补读。
-      ({ post, ownsPost } = resolveTreePost(owner, topic, data));
+      // 操作菜单同样走 identityMap：用树已登记的同一模型，不再新建或 HTTP 补读。
+      ({ post, ownsPost } = resolveTreePost(topic, postId));
       const Native = window.require("discourse/components/post/menu").default;
       // 已在树操作栏提供的动作保留一份；其余顺序、权限与插件注册交给原站。
       const existingActions = new Set(["like", "copyLink", "reply", "replies", "showMore", "discourse-reactions-actions", "discourse-boosts-action", "solved"]);
@@ -932,7 +935,7 @@
         if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
         const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(slot.id)}"]`);
         if (!element || postMenuHosts.has(slot.id)) continue;
-        const { post } = resolveTreePost(owner, topic, slot.post);
+        const { post } = resolveTreePost(topic, slot.postId);
         const NativeMenu = window.require("discourse/components/post/menu").default;
         class SolvedMenu extends NativeMenu {
           constructor(...args) {
@@ -1513,7 +1516,7 @@
   });
 
   // 当前列表路由的主题数据就在站点自己的模型里（服务端预载、无限滚动、客户端路由取回的都在），
-  // 投影成列表接口的载荷形状，交给内容脚本用同一套映射取值，不再向站点重新请求一遍。
+  // 直接投影列表条目与已有计数，头像按模板解析、统计展示仍由内容脚本共用实现。
   function isoOrEmpty(value) {
     if (!value) return "";
     if (value instanceof Date) return Number.isNaN(value.getTime()) ? "" : value.toISOString();
@@ -1533,6 +1536,47 @@
 
   function arrayOrEmpty(value) {
     return Array.isArray(value) ? value : [];
+  }
+
+  function cleanText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  // 列表条目的最终形状在这里定下来：内容脚本直接消费 entries，不再自己 join 用户表。
+  function topicListEntry(topic, users) {
+    const posters = arrayOrEmpty(topic.posters);
+    const firstPoster = posters[0];
+    const firstPosterId = firstPoster?.user?.id ?? firstPoster?.user_id ?? firstPoster?.userId;
+    const firstPosterUser = users.get(firstPosterId);
+    const participants = [];
+    const seenAvatars = new Set();
+    for (const poster of posters) {
+      const user = users.get(poster.user?.id ?? poster.user_id ?? poster.userId);
+      if (!user) continue;
+      const avatarTemplate = stringOrEmpty(user.avatar_template ?? user.avatarTemplate).trim();
+      if (!avatarTemplate || seenAvatars.has(avatarTemplate)) continue;
+      seenAvatars.add(avatarTemplate);
+      participants.push({ username: cleanText(user.username), avatarTemplate });
+      if (participants.length === 4) break;
+    }
+    const creatorAvatar = stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate);
+    return {
+      id: String(topic.id),
+      watched: topic.visited === true || numberOrNull(topic.last_read_post_number) > 0,
+      // 列表与详情推荐模型都带创建者身份；没有 id 时退回 posters[0]。
+      authorId: numberOrNull(topic.creator_id ?? topic.creator?.id) || Number(firstPosterId) || 0,
+      authorAvatar: creatorAvatar || stringOrEmpty(firstPosterUser?.avatar_template ?? firstPosterUser?.avatarTemplate),
+      author: cleanText(topic.creator?.username) || cleanText(firstPosterUser?.username),
+      activityAt: cleanText(isoOrEmpty(topic.last_posted_at ?? topic.lastPostedAt)
+        || isoOrEmpty(topic.bumped_at ?? topic.bumpedAt) || isoOrEmpty(topic.created_at ?? topic.createdAt)),
+      counts: {
+        posts_count: numberOrNull(topic.posts_count ?? topic.postsCount),
+        reply_count: numberOrNull(topic.reply_count ?? topic.replyCount),
+        like_count: numberOrNull(topic.like_count ?? topic.likeCount),
+        views: numberOrNull(topic.views)
+      },
+      participants
+    };
   }
 
   function currentTopicListPayload() {
@@ -1559,44 +1603,13 @@
       : Array.isArray(list?.topic_list?.topics) ? list.topic_list.topics : null;
     if (!topics?.length && !currentMetadata) return null;
     const entries = topics || [];
-    const users = [
+    const users = new Map([
       ...arrayOrEmpty(list?.users ?? model?.users),
       ...entries.flatMap((topic) => arrayOrEmpty(topic.posters).map((poster) => poster.user).filter(Boolean))
-    ];
+    ].map((user) => [user.id, user]));
     return {
       current_topic: currentMetadata,
-      // 头像保留模板（含 {size} 占位），消费端按原站 CDN 配置解析资产地址。
-      users: users.map((user) => ({
-        id: user.id,
-        username: user.username,
-        avatar_template: stringOrEmpty(user.avatar_template ?? user.avatarTemplate)
-      })),
-      topic_list: {
-        topics: entries.map((topic) => ({
-          id: String(topic.id),
-          creator: topic.creator?.username || "",
-          visited: topic.visited === true,
-          last_read_post_number: numberOrNull(topic.last_read_post_number),
-          // 列表与详情推荐模型都带创建者身份；没有 id 时留 null，消费端再退回 posters[0]。
-          creator_id: numberOrNull(topic.creator_id ?? topic.creator?.id),
-          creator_avatar_template: stringOrEmpty(topic.creator?.avatar_template ?? topic.creator?.avatarTemplate),
-          excerpt: stringOrEmpty(topic.excerpt),
-          posters: arrayOrEmpty(topic.posters).map((poster) => ({
-            user_id: poster.user?.id ?? poster.user_id ?? poster.userId,
-            description: stringOrEmpty(poster.description)
-          })),
-          posts_count: numberOrNull(topic.posts_count ?? topic.postsCount),
-          reply_count: numberOrNull(topic.reply_count ?? topic.replyCount),
-          like_count: numberOrNull(topic.like_count ?? topic.likeCount),
-          views: numberOrNull(topic.views),
-          image_url: stringOrEmpty(topic.image_url ?? topic.imageUrl),
-          thumbnails: arrayOrEmpty(topic.thumbnails),
-          tags: arrayOrEmpty(topic.tags).filter((tag) => typeof tag === "string"),
-          last_posted_at: isoOrEmpty(topic.last_posted_at ?? topic.lastPostedAt),
-          bumped_at: isoOrEmpty(topic.bumped_at ?? topic.bumpedAt),
-          created_at: isoOrEmpty(topic.created_at ?? topic.createdAt)
-        }))
-      }
+      entries: entries.map((topic) => topicListEntry(topic, users))
     };
   }
 

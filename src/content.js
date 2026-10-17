@@ -11,7 +11,6 @@
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
   const normalizeSettings = settingsApi?.normalizeSettings;
-  const markdownApi = globalThis.BETTERLD_MARKDOWN;
   const userMarksApi = globalThis.BETTERLD_USER_MARKS;
   const mediaApi = globalThis.BETTERLD_MEDIA;
 
@@ -22,7 +21,7 @@
     "Discourse-Present": "true"
   });
 
-  if (!config || !settingsApi || typeof normalizeSettings !== "function" || typeof markdownApi?.render !== "function" || !userMarksApi?.normalize || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
+  if (!config || !settingsApi || typeof normalizeSettings !== "function" || !userMarksApi?.normalize || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
     console.error("[betterLD] content script could not initialize: extension API is unavailable");
     return;
   }
@@ -2577,7 +2576,7 @@
     return request.promise;
   }
 
-  // 元信息仅消费原站预载或当前路由模型，缺字段不发逐主题请求。
+  // 服务端预载的列表载荷与桥接投影形状不同，这里专门适配预载；缺字段留空，不发逐主题请求。
   function topicListEntries(payload) {
     const users = new Map(
       (Array.isArray(payload?.users) ? payload.users : []).map((user) => [user.id, user])
@@ -2593,7 +2592,6 @@
         author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
           || cleanText(users.get(posters[0]?.user_id)?.username),
         activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at),
-        excerpt: cleanText(topic.excerpt),
         stats: topicStats(topic),
         participants: posters
           .map((poster) => users.get(poster.user_id))
@@ -2607,8 +2605,7 @@
             seen.add(entry.avatarTemplate);
             return true;
           })
-          .slice(0, 4),
-        thumbnails: Array.isArray(topic.thumbnails) ? topic.thumbnails : []
+          .slice(0, 4)
       };
     });
   }
@@ -2773,7 +2770,8 @@
       globalThis.BETTERLD_LIBRARY.updateMetadata([{ ...metadata, authorAvatar }]);
     }
     if (state.currentSettings.topicListAppearance !== "material") return new Set();
-    const entries = topicListEntries(payload);
+    // 桥已完成身份投影；预载与模型计数共用同一统计展示规则。
+    const entries = payload.entries.map(({ counts, ...entry }) => ({ ...entry, stats: topicStats(counts) }));
     if (!entries.length || `${location.pathname}${location.search}` !== route || state.metadataRoute !== route || state.metadataGeneration !== generation) {
       return;
     }
@@ -3772,6 +3770,12 @@
     button.disabled = true;
     try {
       await loadPageRefreshBridge();
+      // 首次打开菜单时帖子可能还没随本次渲染登记进原站模型，先登记现有完整帖再挂载。
+      if (!tree.registeredPostIds.has(post.id)) {
+        document.dispatchEvent(new CustomEvent("betterld:reply-register-posts", {
+          detail: JSON.stringify({ topicId: tree.topicId, posts: [post] })
+        }));
+      }
       await new Promise((resolve, reject) => {
         const id = menu.dataset.betterldMenuId;
         const finish = (error) => {
@@ -3786,7 +3790,7 @@
         const timer = setTimeout(() => finish(new Error("原站帖子操作加载超时")), config.replyTreeActionTimeoutMs);
         document.addEventListener("betterld:reply-menu-mounted", onResult);
         document.dispatchEvent(new CustomEvent("betterld:reply-menu-mount", {
-          detail: JSON.stringify({ id, topicId: tree.topicId, post })
+          detail: JSON.stringify({ id, topicId: tree.topicId, postId: post.id })
         }));
       });
     } catch (error) {
@@ -4871,11 +4875,15 @@
       .map((item) => [Number(item.dataset.postNumber), item]));
     const previousPosts = tree.renderedPosts || new Map();
     const renderedPosts = new Map();
+    // 同一次渲染里签名要被变更比对与 renderPost 各算一次，按楼号缓存避免同帖重复序列化。
+    const signatures = new Map();
     const signatureFor = (post) => {
+      const cached = signatures.get(post.post_number);
+      if (cached !== undefined) return cached;
       const badgeIds = tree.userBadges?.users?.[post.user_id]?.badge_ids;
       // 上下文身份本身参与签名：命中楼变成上下文楼时属性与正文折叠状态都要重排。
       const isContextPost = contextNumbers.has(post.post_number);
-      return JSON.stringify([post, state.currentSettings.replyTreeNameMode, topicOwnerId, currentUserId,
+      const signature = JSON.stringify([post, state.currentSettings.replyTreeNameMode, topicOwnerId, currentUserId,
         badgeIds?.map((id) => tree.userBadges.badges[id]), byNumber.has(Number(post.reply_to_post_number)),
         tree.parentLoadingNumber === Number(post.reply_to_post_number), tree.parentErrors.get(Number(post.reply_to_post_number)),
         userMarksApi.find(state.userMarks, post.user_id)?.tag || "",
@@ -4883,6 +4891,8 @@
         isContextPost, isContextPost && tree.contextExpanded.has(post.post_number),
         tree.context?.currentUserId, tree.context?.canCreatePost, post.post_number === 1 && tree.context?.hasAcceptedAnswers,
         replyTreePostIgnored(tree, post)]);
+      signatures.set(post.post_number, signature);
+      return signature;
     };
     const changedAuthors = new Set();
     for (const [number, rendered] of previousPosts) {
@@ -5357,12 +5367,15 @@
       }
       const bodies = [...tree.content.querySelectorAll("[data-betterld-cooked-id]")]
         .filter((element) => !element.dataset.betterldCookedMounted)
-        .map((element) => ({ id: element.dataset.betterldCookedId, post: element.betterldCookedPost || byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
+        // 普通楼层按 postId 取已登记的原站模型，只有嵌入的 Boost 正文才带自己的模型数据。
+        .map((element) => element.betterldCookedPost
+          ? { id: element.dataset.betterldCookedId, post: element.betterldCookedPost }
+          : { id: element.dataset.betterldCookedId, postId: byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)).id });
       if (bodies.length) document.dispatchEvent(new CustomEvent("betterld:reply-cooked-mount", { detail: JSON.stringify({ topicId: tree.topicId, bodies }) }));
       const solvedSlots = [...tree.content.querySelectorAll(".betterld-reply-tree__solution-action, .betterld-reply-tree__solutions")]
         .filter((element) => !element.dataset.betterldMenuMounted)
         .map((element) => ({ id: element.dataset.betterldMenuId, summary: element.classList.contains("betterld-reply-tree__solutions"),
-          post: byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)) }));
+          postId: byNumber.get(Number(element.closest("[data-post-number]").dataset.postNumber)).id }));
       if (solvedSlots.length) document.dispatchEvent(new CustomEvent("betterld:reply-solved-mount", {
         detail: JSON.stringify({ topicId: tree.topicId, slots: solvedSlots })
       }));

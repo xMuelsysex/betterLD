@@ -354,7 +354,6 @@
     read,
     readImport,
     record,
-    folderId,
     folderName,
     uniqueFolderId,
     merge,

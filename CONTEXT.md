@@ -78,7 +78,7 @@
 - **Definition**：首页与搜索阅读卡均已废弃，统一采用 Material 3 原生条目；搜索结果自身的命中摘要与高亮保留。
 
 ### Markdown Opening Preview
-- **Definition**：首页已停用首帖 Markdown 预览。手动预览以真实网页为权威；Markdown 渲染器留给项目既有使用路径。
+- **Definition**：首页已停用首帖 Markdown 预览，历史自建 Markdown 渲染器及加载依赖已移除。手动预览以真实网页为权威；帖子导出的 HTML→Markdown 转换是独立有效路径，继续保留。
 
 ### Card Presentation Style
 - **Definition**：`topicListAppearance` 提供 `material`（美化后，默认）与 `original`（美化前／原站样式），统一控制首页、搜索结果、帖底推荐与相关列表；设置位于「页面 → 主题列表 → 列表样式」。旧阅读网格布局键读入时忽略。
