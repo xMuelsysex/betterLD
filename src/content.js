@@ -5998,8 +5998,7 @@
     return available < replyTreeLoadAhead(tree);
   }
 
-  function scheduleReplyTreeBody(tree, direction) {
-    const source = tree.retryBatch || replyTreeBodyBatch(tree, direction);
+  function scheduleReplyTreeBody(tree, direction, source = tree.retryBatch || replyTreeBodyBatch(tree, direction)) {
     if (!source) return null;
     const batch = { ...source, ids: replyTreeMissingIds(tree, source) };
     if (!batch.ids.length) {
@@ -6017,7 +6016,7 @@
       generation,
       priority: config.topicRequestPriority.body,
       isNeeded: () => replyTreeTaskActive(tree, generation) && replyTreeMissingIds(tree, batch).length > 0
-        && (Boolean(tree.retryBatch) || (!tree.prefetch.stalled && direction === tree.bodyLoadDirection
+        && (batch.neighborhood || Boolean(tree.retryBatch) || (!tree.prefetch.stalled && direction === tree.bodyLoadDirection
           && (!continuation || (replyTreePrefetchActive(tree) && replyTreeBufferNeeded(tree, direction))))),
       canStart: () => !tree.tasks.some((pending) => pending.kind === "jump" && !pending.cancelled),
       run: (entry) => loadReplyTreeBody(tree, entry, batch, queuedAt)
@@ -6028,7 +6027,7 @@
     if (!tree.posts.size) tree.status.textContent = "正在读取回复…";
     const prefetch = tree.prefetch;
     const before = new Set(replyTreeReadableBodies(tree).map(({ id }) => id));
-    if (prefetch.remaining > 0) prefetch.remaining -= 1;
+    if (!batch.neighborhood && prefetch.remaining > 0) prefetch.remaining -= 1;
     try {
       const params = new URLSearchParams();
       replyTreeMissingIds(tree, batch).forEach((id) => params.append("post_ids[]", id));
@@ -6048,10 +6047,10 @@
       mergeReplyTreePosts(tree, posts, { overwrite: false });
       const missing = replyTreeMissingIds(tree, batch);
       // 完成后仅在当前方向、阅读意图仍有效且正文缓冲不足时继续有限补批。
-      tree.bodyLoadBlocked = batch.direction === tree.bodyLoadDirection;
+      if (!batch.neighborhood) tree.bodyLoadBlocked = batch.direction === tree.bodyLoadDirection;
       tree.bodyLoadScrollTop = pageScrollTop();
       renderReplyTree(tree);
-      if (tree.prefetch === prefetch) {
+      if (!batch.neighborhood && tree.prefetch === prefetch) {
         prefetch.loadMs = performance.now() - queuedAt;
         const readable = replyTreeReadableBodies(tree);
         if (!readable.some(({ id }) => !before.has(id))) {
@@ -6443,6 +6442,18 @@
     applyReplyTreeJump(tree, record, post, "");
   }
 
+  function scheduleReplyTreeJumpNeighborhood(tree, post) {
+    const index = tree.stream.indexOf(post.id);
+    const size = config.replyTreePageSize;
+    const start = Math.max(0, Math.min(index - Math.floor(size / 2), tree.stream.length - size));
+    // 目标已先定位；只补一页双侧邻域，按当前流身份取相邻帖而非实际楼号加减。
+    const ids = tree.stream.slice(start, start + size).filter((id) => !tree.loaded.has(id));
+    if (!ids.length) return;
+    scheduleReplyTreeBody(tree, tree.bodyLoadDirection, {
+      key: `body:around:${post.id}`, ids, direction: tree.bodyLoadDirection, neighborhood: true
+    });
+  }
+
   function applyReplyTreeJump(tree, record, post, errorMessage) {
     record.state = "settled";
     if (post) record.postNumber = post.post_number;
@@ -6468,6 +6479,7 @@
         scrollReplyTreeCard(tree, post);
         tree.targetLocated = true;
         tree.status.textContent = "";
+        scheduleReplyTreeJumpNeighborhood(tree, post);
       } else if (errorMessage && state.replyTree === tree) {
         tree.status.textContent = errorMessage;
       }
