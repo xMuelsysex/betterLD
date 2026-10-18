@@ -5577,10 +5577,16 @@
       cancelReplyTreeTasks(tree, (pending) => pending.priority > config.topicRequestPriority.body);
     }
     scheduleMetadataRequest(async () => {
-      tree.activeTask = entry;
-      tree.busy = true;
-      syncReplyTreeStatusTimer(tree);
       try {
+        // 排队期间原站可能已补到正文；先同步现有模型，再核对任务，避免按旧缓存重复出网。
+        if (tree.bridgeReady && entry.active()) {
+          document.dispatchEvent(new CustomEvent("betterld:reply-sync", { detail: JSON.stringify({ topicId: tree.topicId }) }));
+        }
+        syncReplyTreeData(tree);
+        if (!entry.active() || !entry.isNeeded()) return;
+        tree.activeTask = entry;
+        tree.busy = true;
+        syncReplyTreeStatusTimer(tree);
         await entry.run(entry);
       } catch (error) {
         // 取消不是错误；其他异常必须暴露，不能静默成“已处理”。

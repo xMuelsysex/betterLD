@@ -1205,22 +1205,11 @@
       if (document.querySelector('.container.posts[data-betterld-reply-tree-active="true"]')
         && [...cookedHosts.values()].some((entry) => entry.element.isConnected
           && String(entry.post.topic_id) === topicId && entry.post.polls?.length && !entry.ownsPost)) syncTreePolls(owner, topic);
-      const posts = new Map(stream.posts.map((post) => [String(post.id), post]));
-      const streamIds = new Set(stream.stream.map(String));
-      for (const entry of postMenuHosts.values()) {
-        if (entry.ownsPost && String(entry.post.topic_id) === topicId && streamIds.has(String(entry.post.id)) && !posts.has(String(entry.post.id))) {
-          posts.set(String(entry.post.id), entry.post);
-        }
-      }
-      // 树登记的楼层不在 posts/stream 里（storePost 只登记 identityMap），按 id 取回同一模型。
-      for (const id of treeRegisteredPostIds) {
-        if (posts.has(id)) continue;
-        const post = stream.findLoadedPost(id);
-        if (post) posts.set(id, post);
-      }
+      // loadedPosts 覆盖整个原站 identityMap：既包括当前窗口，也包括原站翻页后留下的缓存和树登记楼层。
       const changedPosts = [];
       const snapshots = new Map();
-      for (const [id, post] of posts) {
+      for (const post of stream.loadedPosts) {
+        const id = String(post.id);
         // 原始字符串直接比较；嵌套字段核对完整内容，保留中间楼原位编辑/回应。
         // 完整对象投影只在变化楼层执行，未变 cooked 不做转义和跨世界序列化。
         const snapshot = snapshotPost(post);
