@@ -23,7 +23,6 @@
   "background": {
     "scripts": [
       "betterld.config.js",
-      "src/data-consent.js",
       "src/offline-assets.js",
       "src/webdav.js",
       "src/external-search.js",
@@ -44,7 +43,6 @@
       ],
       "js": [
         "betterld.config.js",
-        "src/data-consent.js",
         "src/settings.js",
         "src/external-search.js",
         "src/library-entry.js",
@@ -72,12 +70,7 @@
   ],
   "action": {
     "default_title": "betterLD 设置",
-    "default_popup": "src/options.html",
-    "default_icon": {
-      "16": "src/icons/icon-16.png",
-      "32": "src/icons/icon-32.png",
-      "48": "src/icons/icon-48.png"
-    }
+    "default_popup": "src/options.html"
   },
   "options_ui": {
     "page": "src/options.html",
@@ -95,8 +88,7 @@
         "src/settings.js",
         "src/library-entry.js",
         "src/library-store.js",
-        "src/user-marks.js",
-        "src/data-consent.js"
+        "src/user-marks.js"
       ],
       "matches": [
         "https://linux.do/*",
@@ -107,27 +99,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "betterld@linux.do",
-      "strict_min_version": "140.0",
-      "data_collection_permissions": {
-        "required": [
-          "websiteContent",
-          "websiteActivity",
-          "browsingActivity",
-          "personalCommunications"
-        ],
-        "optional": [
-          "searchTerms",
-          "authenticationInfo",
-          "technicalAndInteraction"
-        ]
-      }
+      "strict_min_version": "109.0"
     }
-  },
-  "icons": {
-    "16": "src/icons/icon-16.png",
-    "32": "src/icons/icon-32.png",
-    "48": "src/icons/icon-48.png",
-    "96": "src/icons/icon-96.png",
-    "128": "src/icons/icon-128.png"
   }
 }

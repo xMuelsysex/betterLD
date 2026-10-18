@@ -4,11 +4,11 @@
 
 ### betterLD
 - **Definition**：面向 LinuxDo 用户的浏览器美化插件。
-- **Rules/Invariants**：页面美化仅影响当前用户；用户主动触发的回复、回应、投票、Boost、书签及图片上传等沿用原站组件、接口与账户权限，可改变相应原站数据。
+- **Rules/Invariants**：插件服务于当前用户的浏览体验，不改变 LinuxDo 服务端数据或其他用户看到的内容。
 
 ### Supported Browser
 - **Definition**：betterLD 首版覆盖 Chrome 和 Firefox 浏览器的桌面视口。
-- **Rules/Invariants**：两种浏览器的桌面端都属于交付范围；Firefox 最低版本为 140，使用浏览器内置数据传输同意。移动端不属于精确适配范围；版本及兼容参数以根 manifest 为准。
+- **Rules/Invariants**：两种浏览器的桌面端都属于首版交付范围；移动端不属于首版精确适配范围。
 
 ### LinuxDo Homepage
 - **Definition**：论坛首页及最新、分类、标签等主题列表。

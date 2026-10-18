@@ -19,7 +19,6 @@
   const settingsApi = globalThis.BETTERLD_SETTINGS;
   const libraryStore = globalThis.BETTERLD_LIBRARY_STORE;
   const stickerStore = globalThis.BETTERLD_STICKER_STORE;
-  const dataConsent = globalThis.BETTERLD_DATA_CONSENT;
   const ruleGroupKeys = (config?.topicRuleGroups || []).map((group) => group.key);
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
@@ -38,9 +37,6 @@
   }
   if (!stickerStore?.readBackup || !config.stickerLibrary?.dbName) {
     throw new Error("betterLD settings could not initialize: sticker store is unavailable");
-  }
-  if (!dataConsent) {
-    throw new Error("betterLD settings could not initialize: data consent helper is unavailable");
   }
 
   // 网页内设置与扩展页都通过后台读取，保持扩展表情库为唯一数据源。
@@ -81,14 +77,12 @@
   let externalSearchPermissionButton;
   let externalSearchPermissionStatus;
   let externalSearchPermissionBusy = false;
-  let syncConsentBusy = false;
   let topicExportOrigins = [];
   let topicExportGrantBusy = false;
   let stickerOrigins = [];
   let stickerOriginGrantBusy = false;
   const canRequestExternalSearchPermission = !isEmbedded && typeof api.permissions?.request === "function";
   const canRequestWebdavPermission = !isEmbedded && typeof api.permissions?.request === "function";
-  const canRequestSyncPermission = !isEmbedded && typeof api.permissions?.request === "function";
   const canRequestTopicExportPermission = !isEmbedded && typeof api.permissions?.request === "function";
   const canRequestStickerPermission = !isEmbedded && typeof api.permissions?.request === "function";
 
@@ -220,12 +214,10 @@
     };
   }
 
-  async function syncSet(value) {
+  function syncSet(value) {
     if (!api.storage?.sync) {
       return Promise.reject(new Error("浏览器不支持 storage.sync"));
     }
-    // 数据收集授权被撤销后不得再上传：写入前先确认，缺失直接抛错。
-    await dataConsent.require("sync");
     if (firefoxApi) {
       return api.storage.sync.set(value);
     }
@@ -969,12 +961,9 @@
     "导航项": "Navigation items",
     "操作栏项目": "Action rail items",
     "图片会压缩后保存在扩展本地，不会上传到 LinuxDo。": "Images are compressed and stored locally in the extension; nothing is uploaded to LinuxDo.",
-    "导出的 JSON 不包含本地壁纸正文、WebDAV 密码与页面内容。": "Exported JSON excludes local wallpaper bodies, the WebDAV password, and page content.",
+    "导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。": "Exported JSON excludes wallpaper bodies, account information, and page content.",
     "恢复默认会立即覆盖当前全部设置，包含壁纸来源与卡片布局。": "Restoring defaults immediately overwrites all current settings, including wallpaper source and card layout.",
     "本地壁纸和搜索历史不会同步。": "Local wallpapers and search history are never synced.",
-    "本地壁纸和搜索历史不会同步；WebDAV 地址与用户名会经浏览器同步。": "Local wallpapers and search history are never synced; the WebDAV address and username are synced through the browser.",
-    "同步设置会经浏览器账号上传：包含 WebDAV 地址与用户名，不含 WebDAV 密码、本地壁纸正文与搜索历史。启用需要数据收集授权。": "Synced settings are uploaded through the browser account: they include the WebDAV address and username, and exclude the WebDAV password, local wallpaper bodies, and search history. Enabling requires data collection consent.",
-    "重新申请同步授权": "Request sync consent again",
     "保存前会执行 CSSOM、选择器和属性白名单校验。": "CSSOM, selector, and property allowlist validation runs before saving.",
     "只接受 HTTPS 图片地址。": "Only HTTPS image URLs are accepted.",
     "按高度位置调整 betterLD 自有卡片阴影的透明度。": "Adjusts betterLD card shadow opacity by height position.",
@@ -1150,7 +1139,7 @@
     { key: "enableHorizontalNavigationScroll", type: "toggle", label: "允许导航横向滚动", help: "只作用于主题导航。" },
     { key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "提供可发现的返回首页路径。" },
     { key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入框、编辑器和可编辑元素聚焦时不触发。" },
-    { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "同步设置会经浏览器账号上传：包含 WebDAV 地址与用户名，不含 WebDAV 密码、本地壁纸正文与搜索历史。启用需要数据收集授权。" },
+    { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" },
     { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "指向规则备份文件的完整地址；只接受 https://，本机地址可用 http://。", wide: true },
     { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "留空则不发送认证头。" },
     { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" },
@@ -1171,7 +1160,6 @@
   const updateStatus = document.querySelector("#update-status");
   const clearSearchHistory = document.querySelector("#clear-search-history");
   const syncNow = document.querySelector("#sync-now");
-  const syncGrant = document.querySelector("#sync-grant");
   const aboutStorage = document.querySelector("#about-storage");
   const settingsImportFile = document.querySelector("#settings-import-file");
   const rulesImportFile = document.querySelector("#rules-import-file");
@@ -2129,10 +2117,9 @@
     syncExternalSearchControl(state.settings.externalSearchEngine);
     setStatusMessage(externalSearchPermissionStatus, `等待 ${entry.label} 访问授权…`);
     try {
-      // 必须在用户选择或按钮点击的同步调用链中申请权限；Firefox 在同一次 request 里
-      // 一并申请该引擎搜索词的数据收集授权（searchTerms）。
-      const granted = await dataConsent.request("externalSearch", [`${new URL(entry.url).origin}/*`]);
-      if (!granted) throw new Error("所选搜索引擎的访问权限或数据收集授权未获批准");
+      // 必须在用户选择或按钮点击的同步调用链中申请权限。
+      const granted = await api.permissions.request({ origins: [`${new URL(entry.url).origin}/*`] });
+      if (!granted) throw new Error("所选搜索引擎的访问权限未获授权");
       syncExternalSearchControl(engine);
       await save(readForm());
       setStatusMessage(externalSearchPermissionStatus, `已启用 ${entry.label} 外部搜索，访问权限已授予。`, "success");
@@ -2145,41 +2132,33 @@
     }
   }
 
-  // 地址来自当前表单（readForm 已校验 https 与本机 http）。
-  function webdavFormValues() {
-    const values = readForm();
-    if (!values.webdavUrl) {
-      throw new Error("请先填写 WebDAV 地址");
+  async function requestWebdavPermission(url) {
+    if (!api.permissions?.request || !api.permissions?.contains) {
+      throw new Error("当前环境不支持权限申请，请在扩展设置页或工具栏弹窗中使用 WebDAV");
     }
-    return values;
+    const origin = `${new URL(url).origin}/*`;
+    if (await api.permissions.contains({ origins: [origin] })) {
+      return;
+    }
+    const granted = await api.permissions.request({ origins: [origin] });
+    if (!granted) {
+      throw new Error("未授予该地址的访问权限");
+    }
   }
 
-  // 规则备份权限：在点击的同步调用链里先发起精确 origin 与凭据数据收集授权（authenticationInfo）的申请，
-  // 返回 Promise 由调用方在保存与网络请求前等待，不在 await 之后才发请求。
-  function requestWebdavPermission(url) {
-    return dataConsent.request("webdav", [`${new URL(url).origin}/*`]);
+  async function webdavSettings() {
+    await save(readForm());
+    const settings = state.settings;
+    if (!settings.webdavUrl) {
+      throw new Error("请先填写 WebDAV 地址");
+    }
+    await requestWebdavPermission(settings.webdavUrl);
+    return settings;
   }
 
   async function webdavUpload() {
-    // 嵌入设置没有权限 API：不在这里直接申请，交给扩展设置页的同一项处理。
-    if (!canRequestWebdavPermission) {
-      await openWebdavSettings("rules", "上传规则");
-      return;
-    }
-    let values;
     try {
-      values = webdavFormValues();
-    } catch (error) {
-      setStatusMessage(maintenanceStatus, `WebDAV 上传失败：${error.message}`, "error");
-      return;
-    }
-    try {
-      const permission = requestWebdavPermission(values.webdavUrl);
-      if (!await permission) {
-        throw new Error("未授予该地址的访问权限");
-      }
-      await save(values);
-      const settings = state.settings;
+      const settings = await webdavSettings();
       const response = await sendRuntimeMessage({
         type: "webdav",
         method: "PUT",
@@ -2198,27 +2177,11 @@
   }
 
   async function webdavDownload() {
-    if (!canRequestWebdavPermission) {
-      await openWebdavSettings("rules", "下载规则");
-      return;
-    }
     if (!globalThis.confirm("下载的规则会追加到现有各组规则之后并自动去重，是否继续？")) {
       return;
     }
-    let values;
     try {
-      values = webdavFormValues();
-    } catch (error) {
-      setStatusMessage(maintenanceStatus, `WebDAV 下载失败：${error.message}`, "error");
-      return;
-    }
-    try {
-      const permission = requestWebdavPermission(values.webdavUrl);
-      if (!await permission) {
-        throw new Error("未授予该地址的访问权限");
-      }
-      await save(values);
-      const settings = state.settings;
+      const settings = await webdavSettings();
       const response = await sendRuntimeMessage({
         type: "webdav",
         method: "GET",
@@ -2503,29 +2466,21 @@
     }
   }
 
-  // 嵌入设置没有 permissions API：按外部搜索的方式开扩展设置页并定位到对应 WebDAV 地址字段。
-  // 规则备份与收藏备份共用这一个入口，只区分字段与动作文案。
-  const webdavSettingsFields = {
-    rules: { hash: "webdavUrl", label: "WebDAV 地址（规则备份）" },
-    library: { hash: "libraryWebdavUrl", label: "收藏备份 WebDAV 地址" }
-  };
-
-  async function openWebdavSettings(target, action) {
-    const field = webdavSettingsFields[target];
+  // 嵌入设置没有 permissions API：按外部搜索的方式开扩展设置页并定位到收藏备份地址。
+  async function openLibraryWebdavSettings(action) {
     try {
-      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: field.hash });
+      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "libraryWebdavUrl" });
       if (!response?.ok) throw new Error(response?.error || "扩展设置页未能打开");
-      setStatusMessage(maintenanceStatus, `已打开扩展设置页的「${field.label}」。请在扩展页面完成${action}，访问权限会在那里的点击中申请。`, "success");
+      setStatusMessage(maintenanceStatus, `已打开扩展设置页的「收藏备份 WebDAV 地址」。请在扩展页面完成${action}，访问权限会在那里的点击中申请。`, "success");
     } catch (error) {
       setStatusMessage(maintenanceStatus, `打开扩展设置页失败：${error instanceof Error ? error.message : "未知错误"}。可点击浏览器工具栏的 betterLD 图标，进入「高级 → 同步与缓存」。`, "error");
     }
   }
 
-  // 收藏备份权限：必须在点击的同步调用链里先调用 request，再等待结果；
-  // Firefox 在同一次 request 里申请凭据数据收集授权（authenticationInfo）。
+  // 收藏备份权限：必须在点击的同步调用链里先调用 request，再等待结果。
   function requestLibraryWebdavPermission(url) {
     const origin = `${new URL(url).origin}/*`;
-    return dataConsent.request("webdav", [origin]).then((granted) => {
+    return api.permissions.request({ origins: [origin] }).then((granted) => {
       if (!granted) throw new Error("未授予该地址的访问权限");
     });
   }
@@ -2544,7 +2499,7 @@
 
   async function libraryWebdavUpload() {
     if (!canRequestWebdavPermission) {
-      await openWebdavSettings("library", "上传收藏库");
+      await openLibraryWebdavSettings("上传收藏库");
       return;
     }
     let values;
@@ -2583,7 +2538,7 @@
 
   async function libraryWebdavDownload() {
     if (!canRequestWebdavPermission) {
-      await openWebdavSettings("library", "下载收藏库");
+      await openLibraryWebdavSettings("下载收藏库");
       return;
     }
     let values;
@@ -2888,7 +2843,7 @@
     }
   }
 
-  const settingsHashField = { "#externalSearchEngine": "externalSearchEngine", "#webdavUrl": "webdavUrl", "#libraryWebdavUrl": "libraryWebdavUrl", "#syncEnabled": "syncEnabled" }[location.hash];
+  const settingsHashField = { "#externalSearchEngine": "externalSearchEngine", "#libraryWebdavUrl": "libraryWebdavUrl" }[location.hash];
   renderFieldDefinitions();
   addRangeLimits();
   renderStructuredEditors();
@@ -2960,25 +2915,6 @@
       return;
     }
     updateDependencies();
-    if (event.target.name === "syncEnabled") {
-      if (!event.target.checked) {
-        commitSettings();
-        return;
-      }
-      if (!dataConsent.firefox) {
-        // Chrome 与预览没有数据收集授权，按原路径直接保存。
-        commitSettings();
-        return;
-      }
-      if (!canRequestSyncPermission) {
-        // Firefox 网页内设置没有权限 API：保持原值，交给扩展设置页的同一项处理。
-        event.target.checked = state.settings.syncEnabled;
-        openSyncSettings();
-        return;
-      }
-      requestSyncConsent();
-      return;
-    }
     if (event.target.name === "externalSearchEngine") {
       const engine = event.target.value;
       if (engine === "off") {
@@ -3147,44 +3083,6 @@
       setStatusMessage(maintenanceStatus, `搜索历史清空失败：${error instanceof Error ? error.message : "操作失败"}`, "error");
     }
   });
-
-  // 同步授权：Firefox 的数据收集授权被撤销后，在扩展页的点击里重新申请；
-  // 授权被拒时保持原值，不写入设置也不上传。
-  function requestSyncConsent() {
-    if (syncConsentBusy) return;
-    syncConsentBusy = true;
-    setStatusMessage(maintenanceStatus, "等待同步数据收集授权…");
-    // 必须在切换开关或点击按钮的同步调用链里发起。
-    const permission = dataConsent.request("sync");
-    permission.then(async (granted) => {
-      if (!granted) {
-        controlMap.get("syncEnabled").checked = state.settings.syncEnabled;
-        setStatusMessage(maintenanceStatus, "未授予同步所需的数据收集授权，同步保持原状态。", "error");
-        return;
-      }
-      await commitSettings();
-    }).catch((error) => {
-      controlMap.get("syncEnabled").checked = state.settings.syncEnabled;
-      setStatusMessage(maintenanceStatus, `同步授权失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
-    }).finally(() => {
-      syncConsentBusy = false;
-    });
-  }
-
-  // 网页内设置没有权限 API：不在这里改开关，交给扩展设置页的同一项处理。
-  async function openSyncSettings() {
-    try {
-      const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "syncEnabled" });
-      if (!response?.ok) throw new Error(response?.error || "扩展设置页未能打开");
-      setStatusMessage(maintenanceStatus, "已打开扩展设置页的「启用浏览器同步」。请在扩展页面开启并允许数据收集授权。", "success");
-    } catch (error) {
-      setStatusMessage(maintenanceStatus, `打开扩展设置页失败：${error instanceof Error ? error.message : "未知错误"}。可点击浏览器工具栏的 betterLD 图标，进入「高级 → 同步与缓存」。`, "error");
-    }
-  }
-
-  // 同步数据收集授权只存在于 Firefox 扩展页，其他环境没有可申请的授权。
-  syncGrant.hidden = !dataConsent.supported;
-  syncGrant.addEventListener("click", requestSyncConsent);
 
   syncNow.addEventListener("click", async () => {
     if (!state.settings.syncEnabled) {

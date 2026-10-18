@@ -9,7 +9,6 @@
     if (!globalThis.BETTERLD_STICKER_STORE) importScripts("sticker-store.js");
     if (!globalThis.BETTERLD_STICKER_DB) importScripts("sticker-db.js");
     if (!globalThis.BETTERLD_WEBDAV) importScripts("webdav.js");
-    if (!globalThis.BETTERLD_DATA_CONSENT) importScripts("data-consent.js");
     // 只借 searchUrl 构造引擎请求地址；后台没有 DOMParser，HTML 解析留在内容脚本
     if (!globalThis.BETTERLD_EXTERNAL_SEARCH) importScripts("external-search.js");
   }
@@ -24,7 +23,6 @@
   const stickerDb = globalThis.BETTERLD_STICKER_DB.createStickerDb(indexedDB);
   const externalSearch = globalThis.BETTERLD_EXTERNAL_SEARCH;
   const webdav = globalThis.BETTERLD_WEBDAV.createWebdavApi(fetch, config.webdavMaxBodyLength);
-  const dataConsent = globalThis.BETTERLD_DATA_CONSENT;
   if (!api?.runtime?.onMessage || !api.tabs?.create) {
     return;
   }
@@ -49,8 +47,6 @@
     if (!granted) {
       return { ok: false, error: "缺少该地址的访问权限，请在设置窗口重新保存 WebDAV 地址" };
     }
-    // 凭据属于 authenticationInfo：发送用户名/密码前必须确认数据收集授权。
-    await dataConsent.require("webdav");
     return webdav.request({
       method: message.method,
       url: message.url,
@@ -123,7 +119,7 @@
   }
 
   // 设置页深链只接受已知字段，避免任意 hash 被当成定位目标
-  const settingsHashTargets = new Set(["externalSearchEngine", "webdavUrl", "libraryWebdavUrl", "syncEnabled", "stickerOrigins", "topicExportOffline"]);
+  const settingsHashTargets = new Set(["externalSearchEngine", "libraryWebdavUrl", "stickerOrigins", "topicExportOffline"]);
 
   async function handleOpenSettingsAt(message, sender) {
     if (!isTrustedSender(sender)) return { ok: false, error: "请求来源无效" };
@@ -144,8 +140,6 @@
     if (!granted) {
       return { ok: false, error: `缺少 ${label} 的访问权限，请在设置 → 页面 → 搜索 → 外部搜索中打开扩展授权页，或点击「重新申请访问权限」` };
     }
-    // 搜索词会发送给外部引擎（searchTerms）：发送前必须确认数据收集授权。
-    await dataConsent.require("externalSearch");
     const timeoutMs = config.externalSearch.timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
