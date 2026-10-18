@@ -2682,7 +2682,7 @@
       return url.protocol === "https:" && [location.origin, base.origin].includes(url.origin)
         && /^\/(user_avatar|letter_avatar)\//.test(url.pathname) ? url.href : "";
     } catch (error) {
-      console.warn("[betterLD] 列表头像路径无效", error);
+      console.warn("[betterLD] 头像路径无效", error);
       return "";
     }
   }
@@ -3821,11 +3821,6 @@
     return `${config.replyTreeEmojiBaseUrl}${encodeURIComponent(replyTreeReactionSettings(tree).emojiSet)}/${encodeURIComponent(name)}.png`;
   }
 
-  function replyTreeAvatarPath(template) {
-    const path = String(template || "").replace("{size}", "48");
-    return /^\/(user_avatar|letter_avatar)\//.test(path) ? path : "";
-  }
-
   const replyTreeTimeFormatter = new Intl.RelativeTimeFormat("zh-CN", { numeric: "always" });
   const replyTreeTimeUnits = [
     ["year", 365 * 24 * 60 * 60],
@@ -3968,7 +3963,7 @@
           person.href = href;
           person.dataset.userCard = username;
           const avatar = createElement("img", "betterld-reply-tree__users-avatar");
-          const avatarPath = replyTreeAvatarPath(user.avatar_template);
+          const avatarPath = topicAvatarUrl(user.avatar_template, 48);
           if (avatarPath) avatar.src = avatarPath;
           avatar.alt = "";
           avatar.loading = "lazy";
@@ -4221,7 +4216,7 @@
 
   // 原站编辑器的头像是当前用户的 48px avatar_template（显示尺寸 24px），直接从预载用户数据取，不自造一份。
   function currentUserAvatarPath() {
-    return replyTreeAvatarPath(preloadedCurrentUser()?.avatar_template);
+    return topicAvatarUrl(preloadedCurrentUser()?.avatar_template, 48);
   }
 
   // 原站 Boost 编辑器是挂在触发器旁的 DMenu 浮层（当前用户头像 + 文本域 + 提交/取消按钮）：
@@ -4411,7 +4406,7 @@
       const bubble = createElement("span", "discourse-boosts__bubble");
       bubble.dataset.boostId = String(boost.id);
       const username = cleanText(boost.user?.username);
-      const avatarPath = replyTreeAvatarPath(boost.user?.avatar_template);
+      const avatarPath = topicAvatarUrl(boost.user?.avatar_template, 48);
       if (avatarPath) {
         const avatar = createElement("img", "avatar");
         avatar.src = avatarPath;
@@ -4928,7 +4923,7 @@
       card.dataset.topicId = tree.topicId;
       const avatarWrap = createElement("div", "topic-avatar betterld-reply-tree__avatar-wrap");
       const avatar = createElement("img", "betterld-reply-tree__avatar");
-      const avatarPath = replyTreeAvatarPath(post.avatar_template);
+      const avatarPath = topicAvatarUrl(post.avatar_template, 48);
       if (avatarPath) avatar.src = avatarPath;
       avatar.alt = "";
       avatar.loading = "lazy";

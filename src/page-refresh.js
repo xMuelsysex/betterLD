@@ -99,28 +99,24 @@
     return Math.max(1, Math.ceil(timeline.input.valueAsNumber * timeline.lastFloor));
   }
 
-  function floorTimelineDate(timeline, floor) {
+  function floorTimelineDate(timeline, floor, position) {
     const stream = timeline.topic.postStream;
     // loadedPosts覆盖原帖分页和树已登记的identityMap模型，翻页后仍读同一楼层身份。
     const post = stream.loadedPosts.find((entry) => entry.post_number === floor);
-    let createdAt = post?.created_at;
-    const omittedFloors = timeline.lastFloor - stream.stream.length;
-    if (!createdAt && stream.hasNoFilters && !stream.isMegaTopic && omittedFloors >= 0) {
-      // 表按流序号而非楼号编码。删楼使序号偏移时，只有整个可能范围同属一天才显示。
-      const firstIndex = Math.max(1, floor - omittedFloors);
-      const lastIndex = Math.min(floor, stream.stream.length);
-      const daysAgo = stream.closestDaysAgoFor(firstIndex);
-      const lastDaysAgo = stream.closestDaysAgoFor(lastIndex);
-      if (firstIndex <= lastIndex && daysAgo === lastDaysAgo && typeof daysAgo === "number" && Number.isFinite(daysAgo) && daysAgo >= 0) {
-        createdAt = new Date();
-        createdAt.setDate(createdAt.getDate() - daysAgo);
+    let date = post?.created_at ? new Date(post.created_at) : null;
+    if (!date) {
+      // 原站日期表按当前流的轨道进度编码，不是实际楼号；删楼不应使整段预览消失。
+      const total = stream.filteredPostsCount;
+      const index = Math.max(1, Math.min(total, Math.floor(total * position) + 1));
+      const daysAgo = stream.closestDaysAgoFor(index);
+      if (typeof daysAgo === "number" && Number.isFinite(daysAgo) && daysAgo >= 0) {
+        date = new Date();
+        date.setDate(date.getDate() - daysAgo);
       }
     }
-    timeline.date.title = createdAt ? (post?.created_at ? "楼层发布时间" : "原站时间轴分组日期，非精确发布时间") : "";
-    if (!createdAt) return "";
-    const date = window.moment(createdAt);
-    const format = date.year() === window.moment().year() ? "long_no_year_no_time" : "timeline_date";
-    return date.format(window.require("discourse-i18n").i18n(`dates.${format}`));
+    timeline.date.title = date ? (post?.created_at ? "楼层发布时间" : "原站时间轴进度分组日期，非该楼精确发布时间") : "";
+    if (!date) return "";
+    return window.require("discourse/components/topic-timeline/container").timelineDate(date);
   }
 
   function renderFloorTimeline(timeline, floor, position = timeline.lastFloor > 1 ? (floor - 1) / (timeline.lastFloor - 1) : 0) {
@@ -133,7 +129,7 @@
     const label = `${floor} / ${timeline.lastFloor}`;
     if (timeline.input.getAttribute("aria-valuetext") !== label) timeline.input.setAttribute("aria-valuetext", label);
     timeline.input.setAttribute("aria-valuenow", value);
-    const date = floorTimelineDate(timeline, floor);
+    const date = floorTimelineDate(timeline, floor, position);
     if (timeline.date.textContent !== date) timeline.date.textContent = date;
     timeline.date.hidden = !date;
     const progress = String(position);
