@@ -4559,6 +4559,7 @@
       const number = owner(event.target);
       if (!number) return;
       event.preventDefault();
+      const scrollTop = pageScrollTop();
       const tail = event.target.closest('[data-reply-tail-after]');
       if (tail) {
         const after = Number(tail.dataset.replyTailAfter);
@@ -4582,6 +4583,9 @@
       tree.compensating = true;
       try {
         renderReplyTree(tree);
+        // 收放只改变分支，不把视口跟随新出现的子楼或重测后的控件。
+        if (pageScrollTop() !== scrollTop) window.scrollTo({ top: scrollTop, behavior: 'instant' });
+        tree.bodyLoadScrollTop = pageScrollTop();
       } finally {
         window.setTimeout(() => {
           if (state.replyTree !== tree) return;

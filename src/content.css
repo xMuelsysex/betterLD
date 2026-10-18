@@ -3924,6 +3924,8 @@ body.betterld-shell .post-stream[data-betterld-reply-source="true"] {
 
 /* 回复关系由 Discourse 的 reply_to_post_number 提供；竖干与弧线仅属于树状阅读视图。 */
 .betterld-reply-tree {
+  /* 树内位置由显式阅读锚点管理，展开子楼不再交给浏览器选择自动滚动锚点。 */
+  overflow-anchor: none;
   box-sizing: border-box;
   margin: 18px 0 24px;
   padding: 16px;
