@@ -4158,7 +4158,7 @@ body.betterld-shell #user-card .betterld-user-marks :is(.betterld-user-marks__to
 .betterld-user-marks__status { margin: 6px 0 0; font-size: 12px; color: var(--betterld-on-surface-variant); }
 
 .betterld-reply-tree__footer:empty { display: none; }
-body.betterld-shell .betterld-reply-tree__footer > :is(.topic-map.--bottom, .topic-status-info) {
+body.betterld-shell .betterld-reply-tree__footer > :is(.topic-map.--bottom, .topic-status-info, .topic-timer-info) {
   width: 100%;
   max-width: none;
   margin: 16px 0 0;

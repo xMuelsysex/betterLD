@@ -6585,7 +6585,7 @@
     return tree.ownerUsername || preloadedReplyTopic(tree.topicId)?.details?.created_by?.username || "";
   }
 
-  const replyTreeFooterSelectors = [".topic-status-info", ".topic-map.--bottom"];
+  const replyTreeFooterSelectors = [".topic-timer-info", ".topic-status-info", ".topic-map.--bottom"];
 
   function restoreReplyTreeFooter(tree) {
     // 原生节点由原站维护；还原后再释放树底板，不克隆控件或丢失事件。
@@ -6620,10 +6620,14 @@
       tree.footerSources.set(selector, { element: source, marker });
       tree.footer.append(source);
     }
-    // 状态区可能晚于统计出现；只在顺序变化时移动，避免插件自身反复触发观察器。
-    const status = tree.footerSources.get(".topic-status-info")?.element;
-    const map = tree.footerSources.get(".topic-map.--bottom")?.element;
-    if (status && map && status.nextElementSibling !== map) map.before(status);
+    // 原生提示可能晚到；沿同一顺序归位，只移动顺序发生变化的节点。
+    let next = null;
+    for (const selector of [...replyTreeFooterSelectors].reverse()) {
+      const element = tree.footerSources.get(selector)?.element;
+      if (!element) continue;
+      if (next && element.nextElementSibling !== next) next.before(element);
+      next = element;
+    }
   }
 
   function syncReplyTreeFilterBar(tree) {
@@ -7565,7 +7569,7 @@
     }
   });
 
-  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, .topic-status-info, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
+  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, .topic-status-info, .topic-timer-info, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
   function ownedNode(node) {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return Boolean(element?.closest("[data-betterld-owned], .betterld-topic-row__info, .betterld-topic-empty"));
