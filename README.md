@@ -95,6 +95,6 @@ npm run package # 原位更新 dist/betterLD/
 - 领域术语与不变量见 `CONTEXT.md`，开发约定见 `AGENTS.md`。
 - [实际功能、接口与架构审计](docs/architecture-interface-audit.md)：功能入口、公开方法、消息/事件、数据流及有源码依据的收敛建议；第 11 节记录已实施的行为等价收敛与保留项。
 
-## 免责声明
+## 友情链接 
+[LINUX DO](https://linux.do)
 
-本项目为个人使用的第三方美化扩展，与 LinuxDo 官方无关。内置壁纸版权归各自作者所有，仅作默认背景展示。
