@@ -1779,7 +1779,9 @@
     }
 
     const idMatch = url.pathname.match(/^\/t\/[^/]+\/(\d+)/) || url.pathname.match(/^\/t\/(\d+)/);
-    const title = cleanText(link.textContent || item.querySelector(".link-top-line")?.textContent) || "未命名主题";
+    const titleContent = link.cloneNode(true);
+    titleContent.querySelectorAll(".sr-only").forEach((node) => node.remove());
+    const title = cleanText(titleContent.textContent) || "未命名主题";
     return { href: url.href, id: idMatch?.[1] || "", title };
   }
 
@@ -2311,15 +2313,30 @@
     dialog.style.height = `${width / aspectRatio}px`;
   }
 
+  function syncTopicPreviewHeader() {
+    if (window === window.top) return;
+    const drawer = window.frameElement.closest("[data-betterld-topic-drawer]");
+    const topicUrl = safeTopicUrl(location.href);
+    if (!drawer || !topicUrl) return;
+    drawer.querySelector(".betterld-topic-drawer__open").href = topicUrl;
+    const title = document.querySelector(`#topic-title h1[data-topic-id="${topicIdFromPath()}"] .fancy-title`);
+    if (title) drawer.querySelector(".betterld-topic-drawer__title").textContent = cleanText(title.textContent);
+  }
+
   function openTopicDrawer(card) {
-    const drawer = ensureTopicDrawer();
-    if (!drawer) {
-      showActionStatus("原帖预览不可用");
-      return;
-    }
     const topicUrl = safeTopicUrl(card.dataset.topicHref);
     if (!topicUrl) {
       showActionStatus("原帖链接无效");
+      return;
+    }
+    // 预览内的推荐帖和菜单共用当前 frame，不再创建下一层抽屉。
+    if (window !== window.top) {
+      location.assign(topicUrl);
+      return;
+    }
+    const drawer = ensureTopicDrawer();
+    if (!drawer) {
+      showActionStatus("原帖预览不可用");
       return;
     }
     closeCardMenus();
@@ -3544,6 +3561,7 @@
 
   function syncHomepage() {
     if (!pageActive()) return;
+    syncTopicPreviewHeader();
     syncTopicExport();
     syncExternalSearch();
     if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
