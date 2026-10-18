@@ -21,7 +21,7 @@
 - 版本同步为 1.0.1，沿用现有设置与存储。更新后在 `about:debugging` 重新载入实际加载 `dist/betterLD/` 的 Firefox 扩展，再刷新 LinuxDo 标签页；Chrome 在扩展管理页重新加载该目录。
 - 本轮完成语法、静态差异及打包文件检查；跳楼邻域一次定位、上侧补齐、分支原位展开、预览内切帖及局部刷新保板的实际浏览器效果仍未确认，用户当前 Firefox 会话重载状态未核实。上述条目记录实现调整，不代表现场问题已经验收消除。
 - 网络较慢、队列预算或站点限流时仍需等待；用户报告的 5–6 秒等待尚未实测缩短。长楼层偶发闪烁、标签页持续转圈的原因仍未定位。
-- 本次仅推送版本与源码分支，不创建 `v1.0.1` tag 或 GitHub Release；扩展「检查更新」依赖最新 Release，此次分支更新不会让该入口提示 1.0.1。
+- 正式版本以 `v1.0.1` tag 和同名 GitHub Release 发布；扩展「检查更新」通过最新 Release 识别 1.0.1。
 
 ## [1.0.0] - 2026-10-18
 
@@ -87,7 +87,7 @@
 - 更新 README，说明当前布局、树正文组件复用、作者名称省略、导出与扩展重载方式。
 - 升级后重新载入扩展，再刷新 LinuxDo 标签页。固定加载目录仍为 `dist/betterLD/`。
 
-[1.0.1]: https://github.com/xMuelsysex/betterLD/compare/v1.0.0...main
+[1.0.1]: https://github.com/xMuelsysex/betterLD/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/xMuelsysex/betterLD/compare/v0.2.5...v1.0.0
 [0.2.5]: https://github.com/xMuelsysex/betterLD/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/xMuelsysex/betterLD/compare/v0.2.3...v0.2.4
