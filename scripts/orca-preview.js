@@ -434,8 +434,9 @@ function buildInjection(port) {
     }
     return response.text();
   };
-  const [configCode, settingsCode, styleCode, contentCode] = await Promise.all([
+  const [configCode, dataConsentCode, settingsCode, styleCode, contentCode] = await Promise.all([
     sourceText("betterld.config.js"),
+    sourceText("src/data-consent.js"),
     sourceText("src/settings.js"),
     sourceText("src/content.css"),
     sourceText("src/content.js")
@@ -456,6 +457,7 @@ function buildInjection(port) {
   };
 
   runScript(configCode);
+  runScript(dataConsentCode);
   runScript(settingsCode);
   const config = globalThis.BETTERLD_CONFIG;
   if (!config?.storageKey || !config.wallpaperLocalStorageKey || !config.settingsDefaults) {

@@ -31,7 +31,7 @@
 
 **参数集中且冻结。** 所有运行参数与设置默认值集中在 `betterld.config.js`，以 `Object.freeze` 发布的单一 `globalThis.BETTERLD_CONFIG` 对象提供：路由轮询周期、设置同步防抖、列表宽度、回复加载节奏、壁纸模式与内置图库、设置项上下限。不通过环境变量注入参数，也不存在第二份默认值。
 
-**纯精确覆盖，不改站点数据。** LinuxDo 原有 DOM 只做精确覆盖和可恢复替换；原生列表节点由 Discourse 管理，路由切换不留下替代网格。插件只影响当前用户的浏览体验，不改变服务端数据，也不改变其他用户看到的内容。
+**精确覆盖，原站交互沿用原站权限。** LinuxDo 原有 DOM 只做精确覆盖和可恢复替换；原生列表节点由 Discourse 管理，路由切换不留下替代网格。页面美化只影响当前用户；用户主动回复、回应、投票、Boost、书签或上传表情等操作仍通过原站组件与接口提交，遵循原站账号权限。
 
 **列表元信息零额外请求。** 作者、头像、活动时间与统计只取自站点已下载的预载/Discourse 模型。缺字段保持缺失；列表滚动、停顿与悬停都不读取首帖正文，也不为作者补发主题 JSON。原站行和链接保持原位，插件只追加幂等信息栏，筛选、字号和显隐设置继续生效。
 
@@ -51,7 +51,7 @@
 
 **幂等与自恢复。** 内容脚本以 `globalThis.__betterldContentScriptActive` 防重入；DOM 变更由 `MutationObserver` 触发，插件自身写入期间置 `mutating` 标志避免自激循环，写入结束经 160ms 防抖同步。
 
-**双浏览器单份清单。** 一份 MV3 `manifest.json` 同时覆盖 Chrome 与 Firefox 桌面端（`browser_specific_settings.gecko`，`strict_min_version: 109.0`）；运行时以 `globalThis.browser || globalThis.chrome` 适配扩展 API 差异。
+**双浏览器单份源码。** 根 MV3 `manifest.json` 供本地加载；官方商店上传清单按平台保留对应后台入口。Firefox 最低版本为 140，使用浏览器内置的数据传输同意界面；运行时以 `globalThis.browser || globalThis.chrome` 适配扩展 API 差异。
 
 ## 目录结构
 
@@ -68,11 +68,16 @@ src/options.js         设置读写、壁纸选择与本地图片压缩
 src/options.css        设置页样式
 ```
 
+## 官方商店与隐私
+
+Firefox Add-ons 免费上架正在准备，尚无公开商店条目；Chrome 网上应用店因需注册费已取消本轮上架，继续支持本地加载。发布资料与上传要求见 [商店提交说明](docs/store-submission.md)，数据处理方式见 [隐私政策](PRIVACY.md)，项目采用 [MIT 许可](LICENSE)。Firefox 要求 140 或更高版本；外部搜索、WebDAV 和浏览器同步的可选数据传输需要相应授权。商店审核通过前继续使用下述本地加载方式。
+
 ## 本地加载
 
 ```bash
 npm run check   # JavaScript 语法检查
 npm run package # 原位更新 dist/betterLD/
+npm run package:stores # 更新固定包，并生成 Chrome / Firefox 上传 ZIP（需要 Python 3）
 ```
 
 - **Chrome**：打开 `chrome://extensions`，启用开发者模式，加载已解压的扩展程序 → 选择 `dist/betterLD/`。
@@ -82,6 +87,7 @@ npm run package # 原位更新 dist/betterLD/
 
 ## 升级与已知情况
 
+- 商店准备版本沿用 1.0.1，Firefox 最低版本提升至 140；首次安装展示数据传输声明。可选外部搜索、WebDAV 和浏览器同步需要授权，拒绝或撤销时相应发送会失败；真实授权及撤销交互尚待确认。用户当前 Firefox 会话尚未核实重载。
 - 1.0.1 沿用现有设置与存储。Firefox 在 `about:debugging` 重新载入实际加载 `dist/betterLD/` 的扩展，再刷新 LinuxDo 标签页；Chrome 在扩展管理页重新加载该目录。仅覆盖磁盘文件不会更新已驻留的内容脚本与样式。
 - 本轮完成既有 JavaScript 语法、差异及固定包文件检查；跳楼邻域一次定位、上侧补齐、非一级展开原位、预览内切帖及局部刷新保板的真实浏览器交互仍待确认，当前 Firefox 会话的重载状态也未核实。
 - 网络较慢、队列预算或站点限流时仍需等待；此前报告的 5–6 秒等待尚未实测缩短。长楼层偶发闪烁及标签页持续转圈的原因尚未定位。

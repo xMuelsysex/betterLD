@@ -203,6 +203,13 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   libraryPanelGapPx: 12,
   libraryTitleMaxLength: 500,
   webdavMaxBodyLength: 1024 * 1024,
+  // Firefox 内建数据收集授权按功能范围申请；范围名与 manifest 的
+  // gecko.data_collection_permissions.optional 声明一一对应，不另维护第二份类别表。
+  dataCollectionScopes: Object.freeze({
+    externalSearch: Object.freeze(["searchTerms"]),
+    webdav: Object.freeze(["authenticationInfo"]),
+    sync: Object.freeze(["authenticationInfo", "technicalAndInteraction"])
+  }),
   externalSearch: Object.freeze({
     nativeStateTimeoutMs: 1500,
     timeoutMs: 15000,
@@ -649,7 +656,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "maintenance",
           title: "同步与缓存",
-          description: "浏览器同步只投影设置，不包含本地壁纸正文、搜索历史与 WebDAV 凭据。",
+          description: "浏览器同步只投影设置：包含 WebDAV 地址与用户名，不含本地壁纸正文、搜索历史与 WebDAV 密码。",
           keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword", "libraryWebdavUrl"]
         },
         {
@@ -661,7 +668,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "data",
           title: "导入与导出",
-          description: "导出内容不包含本地壁纸正文、账号信息或页面内容。",
+          description: "导出内容不包含本地壁纸正文、WebDAV 密码与页面内容。",
           keys: []
         },
         {

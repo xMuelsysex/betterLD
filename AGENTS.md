@@ -35,7 +35,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - 版本号语义与 tag/Release 规则以 `/home/muelsyse/AGENTS.md`「版本号与发布」为权威；本项目的绑定是扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，去掉前导 `v`、缺段按 0 与 manifest 版本比较，所以 tag 必须与 manifest 的纯数字版本一致。
 - 开发包不带任何标识后缀：开发期间沿用基线正式版本，区分构建只靠分支与加载路径（Chrome `chrome://extensions` 的目录、Firefox `about:debugging` 的加载路径）；不为区分工作树反复递增正式版本，也不写 `version_name` 或额外标识文件。
 - `manifest.json` 的 `version` 保持浏览器兼容的纯数字格式，禁止追加后缀。
-- 打包工具（`scripts/package.js`）只把 `manifest.json`、`betterld.config.js` 与 `src/` 拷贝进各工作树的 `dist/`，不改写版本也不生成标识；主人明确指定版本后，由整合者在 `package.json` 与 `manifest.json` 同步，打包沿用该版本。
+- 打包工具（`scripts/package.js`）只把 `manifest.json`、`betterld.config.js`、`LICENSE`、`PRIVACY.md` 与 `src/` 拷贝进各工作树的 `dist/`，不改写版本也不生成标识；主人明确指定版本后，由整合者在 `package.json` 与 `manifest.json` 同步，打包沿用该版本。
 - 每个工作树只写自己的固定 `dist/betterLD/`，开发包不覆盖主目录包；生成目录不参与源码合并。合入主分支后更新主目录固定包，并报告正式版本、路径和浏览器重载状态。
 
 ### 版本更新流程
@@ -65,6 +65,8 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - 本项目 `.pi/` 记录保持本地归档，沿用现有忽略规则；不执行 `git add -f`、暂存或提交这些记录，不为归档修改忽略规则，并保留主目录已有改动与暂存状态。
 
 ## 专项规范索引
+
+- 官方商店分发与审核材料：`docs/store-submission.md`。Firefox 最低 140、项目 MIT 许可；`PRIVACY.md` 为隐私声明权威。`npm run package:stores` 从固定包生成 Chrome / Firefox 固定名上传 ZIP，只投影平台 manifest 后台入口，业务源码保持同一份。账号登录、条款确认、付款和身份核验由发布者本人完成，材料准备、提交审核、审核通过及公开上架分别记录。
 
 - 现行规范总览：`.pi/specs/project-overview.md`。进入新模块或梳理项目约束时先读，用于定位产品契约、工程规则、废弃方案和证据记录；不替代各权威文件，也不代表功能已全部验收。
 - 帖子界面开发与交付约束：`.pi/specs/topic-ui-development.md`。修改时间轴、树状回复、正文引用、楼层操作栏或帖底统计前先读；涵盖授权范围、CSS 层叠、原站模型与组件生命周期、预览证据和打包交付。产品语义仍以 `CONTEXT.md` 为权威；该规范不新增测试、版本调整、提交或发布授权。需要将讨论和用户纠正沉淀为新规范时，可调用通用 Pi skill `/skill:spec-summary`；该 skill 负责生成规范，不是帖子界面的实现技能。

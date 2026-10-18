@@ -252,10 +252,11 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">同步</p>
-                      <p class="settings-group-card__desc">本地壁纸和搜索历史不会同步。</p>
+                      <p class="settings-group-card__desc">本地壁纸和搜索历史不会同步；WebDAV 地址与用户名会经浏览器同步。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="sync-now" class="settings-button settings-button--tonal" type="button">立即同步</button>
+                          <button id="sync-grant" class="settings-button settings-button--tonal" type="button">重新申请同步授权</button>
                         </div>
                       </div>
                     </div>
@@ -285,7 +286,7 @@
                   <section class="settings-panel" data-panel="advanced" data-subpanel="data" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">设置文件</p>
-                      <p class="settings-group-card__desc">导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。</p>
+                      <p class="settings-group-card__desc">导出的 JSON 不包含本地壁纸正文、WebDAV 密码与页面内容。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="export-settings" class="settings-button settings-button--tonal" type="button">导出设置</button>
@@ -425,6 +426,7 @@
     <p id="settings-status" class="settings-toast" role="status" aria-live="polite" hidden></p>
 
     <script src="../betterld.config.js"></script>
+    <script src="data-consent.js"></script>
     <script src="settings.js"></script>
     <script src="library-entry.js"></script>
     <script src="library-store.js"></script>
