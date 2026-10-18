@@ -4838,7 +4838,7 @@
 
   function renderReplyTree(tree) {
     if (!tree.context) return;
-    if (!pageActive() || !tree.bridgeReady) {
+    if (!pageActive() || !tree.bridgeReady || tree.wait.pendingJump?.state === 'neighborhood') {
       tree.renderPending = true;
       return;
     }
@@ -6018,7 +6018,7 @@
       kind: "body",
       key: batch.key,
       generation,
-      priority: config.topicRequestPriority.body,
+      priority: batch.neighborhood ? config.topicRequestPriority.jump : config.topicRequestPriority.body,
       isNeeded: () => replyTreeTaskActive(tree, generation) && replyTreeMissingIds(tree, batch).length > 0
         && (batch.neighborhood || Boolean(tree.retryBatch) || (!tree.prefetch.stalled && direction === tree.bodyLoadDirection
           && (!continuation || (replyTreePrefetchActive(tree) && replyTreeBufferNeeded(tree, direction))))),
@@ -6075,6 +6075,11 @@
           ? `核对并重读后，帖子 ID ${missing.join("、")} 仍未返回正文；点击“重试加载回复”定点重读。`
           : batch.reconcile ? `帖子 ID ${missing.join("、")} 仍在楼层列表中，正在定点重读正文…`
             : `帖子 ID ${missing.join("、")} 未返回正文，正在核对楼层列表…`;
+        if (exhausted && tree.wait.pendingJump?.state === 'neighborhood') {
+          const record = tree.wait.pendingJump;
+          ackReplyTreeJump(tree, record, `楼层跳转未完成：${tree.status.textContent}`);
+          tree.wait.pendingJump = record;
+        }
         return;
       }
       clearReplyTreeBodyRetry(tree);
@@ -6082,6 +6087,11 @@
       if (!entry.stillCurrent()) return;
       tree.retryBatch = batch;
       handleReplyTreeTaskError(tree, error, "回复续载失败");
+      if (tree.autoLoadPaused && tree.wait.pendingJump?.state === 'neighborhood') {
+        const record = tree.wait.pendingJump;
+        ackReplyTreeJump(tree, record, `楼层跳转未完成：${error.message}`);
+        tree.wait.pendingJump = record;
+      }
     }
   }
 
@@ -6205,9 +6215,26 @@
       scheduleReplyTreeTopic(tree);
       return;
     }
-    if (!tree.stream.length) return;
+    if (!tree.stream.length) {
+      const pending = tree.wait.pendingJump;
+      if (pending) ackReplyTreeJump(tree, pending, '当前阅读范围没有可跳转的回复');
+      for (const task of tree.tasks) {
+        if (task.kind === 'jump') ackReplyTreeJump(tree, task.jump, '当前阅读范围没有可跳转的回复');
+      }
+      cancelReplyTreeTasks(tree, (task) => task.kind === 'jump' || task.kind === 'body');
+      tree.retryBatch = null;
+      if (tree.renderPending) renderReplyTree(tree);
+      return;
+    }
     if (tree.wait.pendingJump) {
-      scheduleReplyTreeJump(tree, tree.wait.pendingJump);
+      const record = tree.wait.pendingJump;
+      if (record.state === 'neighborhood') {
+        if (tree.retryBatch) scheduleReplyTreeBody(tree, tree.retryBatch.direction);
+        else {
+          const post = replyTreePostByTarget(tree, record.postNumber, record.postId);
+          applyReplyTreeJump(tree, record, post, post ? '' : '目标楼层已不可访问');
+        }
+      } else scheduleReplyTreeJump(tree, record);
       return;
     }
     // 模型/主帖刚到齐时唤醒已登记的跳楼，不让正文或父楼抢先改变读段。
@@ -6215,8 +6242,6 @@
       drainMetadataQueue();
       return;
     }
-    // 跳楼邻域是尚未完成的阅读意图，先补双侧缺口，再按滚动方向继续。
-    if (tree.neighborhoodPostId && !tree.retryBatch && scheduleReplyTreeJumpNeighborhood(tree)) return;
     // 正文优先：沿用户滚动方向补当前窗口相邻一批，不跨回其他缓存读段。
     const reading = replyTreeWindow(tree);
     const direction = tree.bodyLoadDirection;
@@ -6358,9 +6383,9 @@
 
   // 跳转回执只发一次：同一个 requestId 不会因为冷却重试而被重复确认。
   function ackReplyTreeJump(tree, record, errorMessage) {
+    if (tree.wait.pendingJump === record) tree.wait.pendingJump = null;
     if (record.acked) return;
     record.acked = true;
-    if (tree.wait.pendingJump === record) tree.wait.pendingJump = null;
     if (!record.requestId) return;
     document.dispatchEvent(new CustomEvent("betterld:reply-jumped", {
       detail: JSON.stringify({ topicId: tree.topicId, requestId: record.requestId, postNumber: record.postNumber || 0, error: errorMessage })
@@ -6371,14 +6396,13 @@
     return { postNumber: Number(postNumber) || 0, postId: postId || 0, requestId: requestId || "", acked: false, state: "pending" };
   }
 
-  // 已缓存的楼层直接定位：不发请求，也不占用树的忙碌状态。
+  // 缓存目标与双侧邻域都就绪才直接定位；缺正文沿共用队列准备。
   function requestReplyTreeJump(tree, postNumber, postId, requestId) {
     const record = createReplyTreeJump(postNumber, postId, requestId);
     if (tree.streamReady && !tree.stream.length) {
       ackReplyTreeJump(tree, record, "当前阅读范围没有可跳转的回复");
       return;
     }
-    tree.neighborhoodPostId = 0;
     cancelReplyTreeTasks(tree, (pending) => pending.kind === "jump" || pending.kind === "body");
     tree.retryBatch = null;
     if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "跳转请求已被新的跳转取代");
@@ -6421,9 +6445,14 @@
       return;
     }
     try {
-      const endpoint = record.postId
-        ? `/t/${tree.topicId}/posts.json?post_ids[]=${record.postId}`
-        : `/t/${tree.topicId}/${record.postNumber}.json`;
+      let endpoint = `/t/${tree.topicId}/${record.postNumber}.json`;
+      if (record.postId) {
+        if (!tree.stream.includes(record.postId)) throw new Error('目标回复已不在当前阅读范围');
+        const batch = replyTreeJumpNeighborhood(tree, record.postId);
+        const params = new URLSearchParams();
+        (batch ? batch.ids : [record.postId]).forEach((id) => params.append('post_ids[]', id));
+        endpoint = `/t/${tree.topicId}/posts.json?${params}`;
+      }
       const data = await shareTopicFetch(endpoint);
       if (!entry.active()) return;
       if (!Array.isArray(data?.post_stream?.posts)) throw new Error("跳转楼层数据格式不正确");
@@ -6449,46 +6478,44 @@
     applyReplyTreeJump(tree, record, post, "");
   }
 
-  function scheduleReplyTreeJumpNeighborhood(tree) {
-    const postId = tree.neighborhoodPostId;
+  function replyTreeJumpNeighborhood(tree, postId) {
     const index = tree.stream.indexOf(postId);
-    if (index < 0) {
-      tree.neighborhoodPostId = 0;
-      return false;
-    }
     const size = config.replyTreePageSize;
     const start = Math.max(0, Math.min(index - Math.floor(size / 2), tree.stream.length - size));
-    // 只保留目标身份；每次沿当前流重核双侧缺口，已缓存正文直接复用。
     const ids = tree.stream.slice(start, start + size).filter((id) => !tree.loaded.has(id));
-    if (!ids.length) {
-      tree.neighborhoodPostId = 0;
-      return false;
-    }
-    scheduleReplyTreeBody(tree, tree.bodyLoadDirection, {
-      key: `body:around:${postId}`, ids, direction: tree.bodyLoadDirection, neighborhood: true
-    });
-    return true;
+    return ids.length ? {
+      key: `body:around:${postId}`, ids, direction: 'forward', neighborhood: true
+    } : null;
   }
 
   function applyReplyTreeJump(tree, record, post, errorMessage) {
     record.state = "settled";
-    if (post) record.postNumber = post.post_number;
+    if (post) {
+      record.postNumber = post.post_number;
+      record.postId = post.id;
+    }
     if (post && !tree.stream.includes(post.id)) {
       errorMessage = `楼层 #${post.post_number} 不在当前筛选结果中，请点击“返回全部回复”查看。`;
       post = null;
     }
     try {
       if (post && state.replyTree === tree) {
+        const batch = replyTreeJumpNeighborhood(tree, post.id);
+        if (batch) {
+          // 准备期只合并数据，不切阅读锚点、不滚动、不提前确认成功。
+          record.state = 'neighborhood';
+          tree.wait.pendingJump = record;
+          tree.status.textContent = `正在准备 #${post.post_number} 附近的回复…`;
+          scheduleReplyTreeBody(tree, batch.direction, batch);
+          return;
+        }
         clearReplyTreeWait(tree);
         // 命中楼成为阅读窗口锚点：后续正文围绕它续载，而不是从流首缺口补过来。
         tree.anchorId = post.id;
-        tree.neighborhoodPostId = post.id;
         resetReplyTreePrefetch(tree);
         tree.bodyLoadBlocked = false;
         tree.bodyLoadDirection = 'forward';
         tree.autoLoadPaused = false;
-        // 数据补齐不依赖本次卡片投影成功；加载意图保留到当前双侧邻域完整。
-        scheduleReplyTreeJumpNeighborhood(tree);
         expandReplyBranchPath(tree, post, new Map([...tree.posts.values()].map((entry) => [entry.post_number, entry])));
         // 主动跳楼自己决定滚动位置，跳过锚点补偿。
         tree.skipAnchorRestore = true;
@@ -6795,7 +6822,6 @@
       tree.parentLoadPaused = false;
       tree.parentRetryNumber = 0;
       tree.anchorId = "";
-      tree.neighborhoodPostId = 0;
       tree.retryBatch = null;
       tree.autoLoadPaused = false;
       tree.wait.until = 0;
@@ -7036,7 +7062,6 @@
     tree.parentScanAt = 0;
     // 阅读窗口锚点、任务队列与等待状态都属于本树实例，不跨树共享。
     tree.anchorId = previous?.anchorId || "";
-    tree.neighborhoodPostId = 0;
     tree.tasks = [];
     tree.activeTask = null;
     tree.wait = { until: 0, retryUsed: false, pendingJump: null };
