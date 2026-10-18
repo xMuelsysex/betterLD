@@ -4493,6 +4493,7 @@
   }
 
   function replyTreePostGraph(tree) {
+    if (!tree.stream.length) return { posts: [], streamNumbers: new Set(), contextNumbers: new Set(), byNumber: new Map() };
     const reading = replyTreeWindow(tree);
     const windowIds = reading && !reading.empty ? tree.stream.slice(reading.lo, reading.hi + 1) : [];
     // 缓存可有多个不相连的读段；只投影当前窗口，避免上翻掉回帖首缓存。
@@ -5812,7 +5813,26 @@
     return changed;
   }
 
-  // 阅读窗口：围绕锚点（跳楼/深链命中或当前阅读楼）的连续已加载区间，stream 索引是唯一权威顺序。
+  // 所有权威换流共用身份更新，缓存可保留，但不能继续赋予旧成员阅读位置。
+  function setReplyTreeStream(tree, stream) {
+    const previous = tree.stream;
+    const ids = new Set(stream);
+    if (tree.anchorId && !ids.has(tree.anchorId)) {
+      const index = previous.indexOf(tree.anchorId);
+      let adjacent;
+      // 删除当前锚点时沿旧流找最近仍存在的邻帖，避免退回帖首缓存段。
+      for (let distance = 1; index >= 0 && distance < previous.length && adjacent === undefined; distance += 1) {
+        const offsets = tree.bodyLoadDirection === 'backward' ? [-distance, distance] : [distance, -distance];
+        adjacent = offsets.map((offset) => previous[index + offset]).find((id) => ids.has(id));
+      }
+      tree.anchorId = adjacent ?? "";
+    }
+    if (tree.positionedPost && !ids.has(tree.positionedPost.postId)) tree.positionedPost = null;
+    tree.stream = stream;
+    tree.streamReady = true;
+  }
+
+  // 阅读窗口围绕当前锚点，stream 索引是连续范围的唯一权威顺序。
   function replyTreeWindow(tree) {
     const stream = tree.stream;
     if (!stream.length) return null;
@@ -5854,7 +5874,7 @@
       generation,
       priority: config.topicRequestPriority.body,
       isNeeded: () => replyTreeTaskActive(tree, generation)
-        && (!tree.stream.length || ![...tree.posts.values()].some((post) => post.post_number === 1)),
+        && (!tree.streamReady || (tree.stream.length > 0 && ![...tree.posts.values()].some((post) => post.post_number === 1))),
       run: (entry) => loadReplyTreeTopic(tree, entry)
     });
   }
@@ -5874,10 +5894,11 @@
         if (state.preloadedReplyFilterKey === tree.filterViewKey && Array.isArray(preloaded?.post_stream?.posts)) nearbyPosts = preloaded.post_stream.posts;
       }
       const stream = data?.post_stream?.stream;
-      if (!Array.isArray(stream) || !Array.isArray(data?.post_stream?.posts) || !data.post_stream.posts.some((post) => post.post_number === 1)) {
+      if (!Array.isArray(stream) || !Array.isArray(data?.post_stream?.posts)
+        || (stream.length > 0 && !data.post_stream.posts.some((post) => post.post_number === 1))) {
         throw new Error("主题回复数据格式不正确");
       }
-      tree.stream = stream;
+      setReplyTreeStream(tree, stream);
       if (data.details?.created_by?.username) tree.ownerUsername = data.details.created_by.username;
       if (data.title) tree.title = cleanText(data.title);
       mergeReplyUserBadges(tree, data.user_badges);
@@ -6017,10 +6038,10 @@
       if (!posts) throw new Error("回复分页数据格式不正确");
       if (batch.reconcile) {
         const stream = data.post_stream.stream;
-        if (String(data.id) !== tree.topicId || !Array.isArray(stream) || !stream.length || stream.some((id) => !Number.isInteger(id))) {
+        if (String(data.id) !== tree.topicId || !Array.isArray(stream) || stream.some((id) => !Number.isInteger(id))) {
           throw new Error("核对回复失败：原站未返回有效楼层列表");
         }
-        tree.stream = stream;
+        setReplyTreeStream(tree, stream);
       }
       mergeReplyUserBadges(tree, data.user_badges);
       // 只登记真实带正文的返回；漏返回或没正文的楼层用 loaded 判定为缺口，不假装成功。
@@ -6177,10 +6198,11 @@
       || tree.contentContainer.hidden || tree.filterBusy
       || topicFilterStateKey(topicStreamFiltersFromUrl()) !== tree.filterViewKey) return;
     if (tree.wait.until) return;
-    if (!tree.stream.length || ![...tree.posts.values()].some((post) => post.post_number === 1)) {
+    if (!tree.streamReady || (tree.stream.length > 0 && ![...tree.posts.values()].some((post) => post.post_number === 1))) {
       scheduleReplyTreeTopic(tree);
       return;
     }
+    if (!tree.stream.length) return;
     if (tree.wait.pendingJump) {
       scheduleReplyTreeJump(tree, tree.wait.pendingJump);
       return;
@@ -6236,21 +6258,24 @@
   }
 
   function replyTreeCurrentPost(tree) {
-    if (tree.positionedPost && tree.positionedPost.scrollY === pageScrollTop()) return { ...tree.positionedPost, visible: true };
+    if (tree.positionedPost && tree.stream.includes(tree.positionedPost.postId) && tree.posts.has(tree.positionedPost.postId)
+      && tree.positionedPost.scrollY === pageScrollTop()) return { ...tree.positionedPost, visible: true };
     tree.positionedPost = null;
     const headerHeight = document.querySelector('.d-header')?.offsetHeight || 0;
     const cards = tree.content.querySelectorAll('.betterld-reply-tree__card');
+    const streamIds = new Set(tree.stream);
     let visible;
     for (const card of cards) {
+      if (!streamIds.has(Number(card.dataset.postId))) continue;
       const bounds = card.getBoundingClientRect();
       if (card.getClientRects().length && bounds.bottom > headerHeight && bounds.top < innerHeight) {
         visible = card;
         break;
       }
     }
-    const postNumber = Number(visible?.parentElement.dataset.postNumber) || 1;
-    const postId = [...tree.posts.values()].find((post) => post.post_number === postNumber)?.id;
-    // visible 为假时不能拿默认的首帖当阅读锚点，否则首帖会错误改变正文窗口边界。
+    const postNumber = Number(visible?.parentElement.dataset.postNumber) || 0;
+    const postId = visible ? Number(visible.dataset.postId) : undefined;
+    // 没有流内可见楼时上报未知，不把首帖或流外上下文当作阅读位置。
     const bounds = visible?.getBoundingClientRect();
     const ratio = bounds ? Math.max(0, Math.min(1, (headerHeight - bounds.top) / bounds.height)) : 0;
     return { postNumber, postId, ratio, visible: Boolean(visible) };
@@ -6259,6 +6284,7 @@
   // 实时同步只合并原站模型与流；正文由阅读窗口按需续载，不在这里自己发请求。
   function syncReplyTreeData(tree) {
     if (!pageActive() || tree.busy || !tree.pendingData) return;
+    if (tree.filterBusy) return;
     const data = tree.pendingData;
     tree.pendingData = null;
     // 与任务同一世代：筛选切换后遗留的旧世代批次不再消费。
@@ -6271,7 +6297,6 @@
     // 权限与忽略列表以桥的原站投影为唯一来源；桥没给时保持未知，不在这里推断。
     const contextChanged = Boolean(data.context && JSON.stringify(tree.context) !== JSON.stringify(data.context));
     if (data.context) tree.context = data.context;
-    if (tree.filterBusy) return;
     const currentUrlFilters = topicStreamFiltersFromUrl();
     if (tree.filterTransition && topicFilterStateKey(tree.filterTransition) === topicFilterStateKey(currentUrlFilters)) tree.filterTransition = null;
     if (tree.filterTransition && topicFilterStateKey(currentUrlFilters) !== tree.filterTransitionFrom) tree.filterTransition = null;
@@ -6290,9 +6315,8 @@
       tree.userFilters = data.userFilters;
     }
     applyTopicReadingFilterView(tree);
-    if (tree.contentContainer.hidden || !data.stream.length) return;
     const streamChanged = JSON.stringify(tree.stream) !== JSON.stringify(data.stream);
-    tree.stream = data.stream;
+    setReplyTreeStream(tree, data.stream);
     const streamIds = new Set(tree.stream);
     const badgesChanged = mergeReplyUserBadges(tree, data.user_badges);
     let changed = streamChanged || badgesChanged || contextChanged;
@@ -6314,7 +6338,10 @@
     }
     // 原站实时流可能已移除缺失ID，或模型已补到正文；旧失败批次不再阻断续读。
     if (tree.retryBatch && !replyTreeMissingIds(tree, tree.retryBatch).length) clearReplyTreeBodyRetry(tree);
-    if (changed && tree.posts.size) renderReplyTree(tree);
+    if (changed) {
+      if (tree.contentContainer.hidden) tree.renderPending = true;
+      else renderReplyTree(tree);
+    }
     updateReplyTreeMore(tree);
     scheduleReplyTreeWake(tree);
   }
@@ -6342,6 +6369,10 @@
   // 已缓存的楼层直接定位：不发请求，也不占用树的忙碌状态。
   function requestReplyTreeJump(tree, postNumber, postId, requestId) {
     const record = createReplyTreeJump(postNumber, postId, requestId);
+    if (tree.streamReady && !tree.stream.length) {
+      ackReplyTreeJump(tree, record, "当前阅读范围没有可跳转的回复");
+      return;
+    }
     cancelReplyTreeTasks(tree, (pending) => pending.kind === "jump" || pending.kind === "body");
     tree.retryBatch = null;
     if (tree.wait.pendingJump) ackReplyTreeJump(tree, tree.wait.pendingJump, "跳转请求已被新的跳转取代");
@@ -6707,7 +6738,7 @@
     if (tree.bridgeReady) document.dispatchEvent(new CustomEvent('betterld:reply-read-state-request', {
       detail: JSON.stringify({ topicId: tree.topicId })
     }));
-    if (tree.posts.size) renderReplyTree(tree);
+    if (tree.posts.size || tree.renderPending) renderReplyTree(tree);
     maybeLoadMoreReplyTree(tree);
   }
 
@@ -6725,6 +6756,8 @@
       closeReplyReactionPicker(tree);
       tree.boostExpanded.clear();
       tree.stream = [];
+      tree.streamReady = false;
+      tree.positionedPost = null;
       tree.loaded.clear();
       tree.posts.clear();
       tree.orphanContextIds.clear();
@@ -6961,6 +6994,7 @@
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
     const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    tree.streamReady = previous ? previous.streamReady : false;
     tree.footerSources = new Map();
     tree.boostExpanded = new Set();
     tree.orphanContextIds = previous?.orphanContextIds || new Set();

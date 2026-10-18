@@ -101,10 +101,12 @@
     return { index, postId, floor: stream.findLoadedPost(postId)?.post_number };
   }
 
-  function floorTimelineIndex(timeline, floor) {
+  function floorTimelineIndex(timeline, floor, postId) {
     const stream = timeline.topic.postStream;
-    const post = stream.loadedPosts.find((entry) => entry.post_number === floor);
-    return post ? stream.progressIndexOfPost(post) : 0;
+    if (stream.isMegaTopic) return floor;
+    const id = postId ?? stream.loadedPosts.find((entry) => entry.post_number === floor)?.id;
+    // 缓存包含筛选外上下文及已移除楼层；只有当前流成员才有阅读序位。
+    return stream.stream.indexOf(id) + 1;
   }
 
   function floorAtTimelinePosition(timeline) {
@@ -131,21 +133,23 @@
   }
 
   function renderFloorTimeline(timeline, floor, position, index = floorTimelineIndex(timeline, floor)) {
-    if (index < 1) return;
-    if (position === undefined) position = timeline.totalPosts > 1 ? (index - 1) / (timeline.totalPosts - 1) : 0;
+    if (position === undefined) position = index > 0 && timeline.totalPosts > 1 ? (index - 1) / (timeline.totalPosts - 1) : 0;
     const value = floor ? String(floor) : "";
     if (timeline.input.valueAsNumber !== position) timeline.input.value = String(position);
     // 聚焦编辑或保留非法输入时不重写楼号输入，避免吞掉用户键入的内容。
     if (!timeline.numberEditing && !timeline.numberDirty && !timeline.numberError && timeline.numberInput.value !== value) timeline.numberInput.value = value;
     renderFloorTotal(timeline);
-    const progressNumber = String(index);
+    const progressNumber = index > 0 ? String(index) : "—";
     if (timeline.current.textContent !== progressNumber) timeline.current.textContent = progressNumber;
-    timeline.current.title = floor ? `实际楼号 #${floor}，点击输入楼号跳转` : `第 ${index} 条回复，实际楼号将在加载后显示`;
-    const label = `${index} / ${timeline.totalPosts}${floor ? `，实际楼号 #${floor}` : ""}`;
+    timeline.current.title = index < 1 ? "当前楼层不在此回复流中，点击输入实际楼号跳转"
+      : floor ? `实际楼号 #${floor}，点击输入楼号跳转` : `第 ${index} 条回复，实际楼号将在加载后显示`;
+    const label = `${progressNumber} / ${timeline.totalPosts}${floor ? `，实际楼号 #${floor}` : ""}`;
     if (timeline.input.getAttribute("aria-valuetext") !== label) timeline.input.setAttribute("aria-valuetext", label);
-    timeline.input.setAttribute("aria-valuenow", progressNumber);
-    const date = floorTimelineDate(timeline, floor, index);
+    if (index > 0) timeline.input.setAttribute("aria-valuenow", String(index));
+    else timeline.input.removeAttribute("aria-valuenow");
+    const date = index > 0 ? floorTimelineDate(timeline, floor, index) : "";
     if (timeline.date.textContent !== date) timeline.date.textContent = date;
+    if (index < 1) timeline.date.title = "";
     timeline.date.hidden = !date;
     const progress = String(position);
     if (timeline.element.style.getPropertyValue("--betterld-floor-progress") !== progress) timeline.element.style.setProperty("--betterld-floor-progress", progress);
@@ -182,19 +186,34 @@
     timeline.numberDirty = false;
   }
 
+  function floorJumpInvalidation(timeline) {
+    const { pending } = timeline;
+    const stream = timeline.topic.postStream;
+    if (pending.filter !== stream.filter || JSON.stringify(pending.userFilters) !== JSON.stringify(stream.userFilters)
+      || (pending.postId && !stream.stream.includes(pending.postId))) {
+      return "阅读范围已改变或目标回复已移除，请重新选择。";
+    }
+    return "";
+  }
+
   function requestFloorJump(timeline, target, postId) {
     if (timeline.pending) return;
     clearFloorNumberError(timeline);
     timeline.editing = false;
     timeline.numberDirty = false;
     timeline.status.textContent = "";
+    timeline.preview = null;
+    if (postId && !timeline.topic.postStream.stream.includes(postId)) {
+      finishFloorJump(timeline, timeline.floor, "目标回复已不在当前阅读范围，请重新选择。");
+      return;
+    }
     if (target === timeline.floor && !postId && !timeline.active) {
       closeFloorNumberEditor(timeline);
       renderFloorTimeline(timeline, timeline.floor);
       return;
     }
     const requestId = crypto.randomUUID();
-    timeline.pending = { requestId, target, postId };
+    timeline.pending = { requestId, target, postId, filter: timeline.topic.postStream.filter, userFilters: [...timeline.topic.postStream.userFilters] };
     timeline.input.disabled = true;
     timeline.numberInput.disabled = true;
     timeline.current.disabled = true;
@@ -221,6 +240,7 @@
   function finishFloorJump(timeline, floor, error = "") {
     clearTimeout(timeline.timer);
     timeline.pending = null;
+    timeline.preview = null;
     timeline.input.disabled = timeline.totalPosts === 1;
     timeline.numberInput.disabled = false;
     timeline.current.disabled = false;
@@ -234,7 +254,7 @@
     const source = host?.querySelector(".timeline-scrollarea");
     const lastFloor = Number(topic.highest_post_number);
     const totalPosts = topic.postStream.filteredPostsCount;
-    if (!source || !Number.isInteger(totalPosts) || totalPosts < 1 || !Number.isInteger(lastFloor) || lastFloor < 1 || !Number.isInteger(floor) || floor < 1 || floor > lastFloor) {
+    if (!source || !Number.isInteger(totalPosts) || totalPosts < 1 || !Number.isInteger(lastFloor) || lastFloor < 1 || !Number.isInteger(floor) || floor < 0 || floor > lastFloor) {
       resetFloorTimeline();
       return;
     }
@@ -277,11 +297,12 @@
       element.append(input, form, status);
       source.after(element);
       host.classList.add("betterld-floor-timeline-active");
-      const timeline = { host, source, element, input, current, date, status, numberInput, total, topicId: String(topic.id), floor, lastFloor, totalPosts, editing: false, numberEditing: false, numberDirty: false, numberError: "", pending: null };
+      const timeline = { host, source, element, input, current, date, status, numberInput, total, topicId: String(topic.id), floor, lastFloor, totalPosts, editing: false, numberEditing: false, numberDirty: false, numberError: "", pending: null, preview: null };
       floorTimeline = timeline;
       input.addEventListener("input", () => {
         timeline.editing = true;
         const target = floorAtTimelinePosition(timeline);
+        timeline.preview = target;
         renderFloorTimeline(timeline, target.floor, input.valueAsNumber, target.index);
       });
       // 键盘同样沿当前回复流移动，跳过已删除的空楼号。
@@ -299,20 +320,24 @@
         }[event.key];
         if (index === undefined) return;
         event.preventDefault();
+        if (!currentIndex && !["Home", "End"].includes(event.key)) return;
         const target = floorTimelineTarget(timeline, index);
         requestFloorJump(timeline, target.floor, target.postId);
       });
       const cancelPreview = () => {
         timeline.editing = false;
+        timeline.preview = null;
         if (!timeline.pending) renderFloorTimeline(timeline, timeline.floor);
       };
       input.addEventListener("pointercancel", cancelPreview);
       input.addEventListener("blur", cancelPreview);
       input.addEventListener("change", () => {
-        const target = floorAtTimelinePosition(timeline);
+        const target = timeline.preview;
+        if (!target) return;
         requestFloorJump(timeline, target.floor, target.postId);
       });
       current.addEventListener("click", () => {
+        if (!timeline.numberDirty && !timeline.numberError) numberInput.value = timeline.floor ? String(timeline.floor) : "";
         current.hidden = true;
         numberInput.hidden = false;
         numberInput.focus();
@@ -357,7 +382,11 @@
     timeline.active = active;
     timeline.timeoutMs = timeoutMs;
     if (timeline.element.style.getPropertyValue("--betterld-floor-track-height") !== source.style.height) timeline.element.style.setProperty("--betterld-floor-track-height", source.style.height);
-    if (Number.isInteger(floor) && floor > 0 && floor <= lastFloor) timeline.floor = floor;
+    timeline.floor = floor;
+    if (timeline.pending) {
+      const error = floorJumpInvalidation(timeline);
+      if (error) finishFloorJump(timeline, timeline.floor, error);
+    }
     if (!active && timeline.pending && (timeline.pending.target === timeline.floor
       || (timeline.pending.postId && topic.postStream.findLoadedPost(timeline.pending.postId)?.post_number === timeline.floor))) finishFloorJump(timeline, timeline.floor);
     if (!timeline.editing && !timeline.pending) {
@@ -365,8 +394,11 @@
       renderFloorTimeline(timeline, timeline.floor);
     } else if (timeline.editing && !timeline.pending) {
       // 模型晚到时刷新当前拖动楼层的日期，保持指针位置和待选楼号。
-      const target = floorAtTimelinePosition(timeline);
-      renderFloorTimeline(timeline, target.floor, timeline.input.valueAsNumber, target.index);
+      const target = timeline.preview;
+      const index = floorTimelineIndex(timeline, target.floor, target.postId);
+      const floor = target.postId ? topic.postStream.findLoadedPost(target.postId)?.post_number : target.floor;
+      // 预览以帖子身份保持选择；流增删时只更新序位，不把旧百分比改指另一条回复。
+      renderFloorTimeline(timeline, floor, timeline.input.valueAsNumber, index);
     }
   }
 
@@ -382,8 +414,9 @@
     const { topicId, requestId, postNumber, error } = JSON.parse(event.detail);
     const timeline = floorTimeline;
     if (timeline?.topicId !== topicId || timeline.pending?.requestId !== requestId) return;
-    if (!error) timeline.floor = postNumber;
-    finishFloorJump(timeline, timeline.floor, error || "");
+    const message = error || floorJumpInvalidation(timeline);
+    if (!message) timeline.floor = postNumber;
+    finishFloorJump(timeline, timeline.floor, message);
   });
 
   // 原站楼号链接继续使用路由；树模式下直接按实际楼号定位。
