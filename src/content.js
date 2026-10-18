@@ -6566,42 +6566,51 @@
     return tree.ownerUsername || preloadedReplyTopic(tree.topicId)?.details?.created_by?.username || "";
   }
 
-  function restoreReplyTreeTopicMap(tree) {
-    if (!tree.topicMap) return;
+  const replyTreeFooterSelectors = [".topic-status-info", ".topic-map.--bottom"];
+
+  function restoreReplyTreeFooter(tree) {
     // 原生节点由原站维护；还原后再释放树底板，不克隆控件或丢失事件。
-    const { element, marker } = tree.topicMap;
-    const replacement = tree.topicContainer.querySelector(".topic-map.--bottom:not(.betterld-reply-tree__footer *)");
-    if (element.isConnected && marker.isConnected && !replacement) marker.replaceWith(element);
-    else {
-      element.remove();
-      marker.remove();
+    for (const [selector, { element, marker }] of tree.footerSources) {
+      const replacement = tree.topicContainer.querySelector(`${selector}:not(.betterld-reply-tree__footer *)`);
+      if (element.isConnected && marker.isConnected && !replacement) marker.replaceWith(element);
+      else {
+        element.remove();
+        marker.remove();
+      }
     }
-    tree.topicMap = null;
+    tree.footerSources.clear();
   }
 
-  function syncReplyTreeTopicMap(tree) {
-    const map = tree.topicContainer.querySelector(".topic-map.--bottom:not(.betterld-reply-tree__footer *)");
-    // 原站替换整个统计节点时丢弃旧挂载，不把过期控件还原成第二份。
-    if (tree.topicMap && (map || !tree.topicMap.marker.isConnected || !tree.topicMap.element.isConnected)) {
-      tree.topicMap.element.remove();
-      tree.topicMap.marker.remove();
-      tree.topicMap = null;
-    }
+  function syncReplyTreeFooter(tree) {
     if (tree.contentContainer.hidden) {
-      restoreReplyTreeTopicMap(tree);
+      restoreReplyTreeFooter(tree);
       return;
     }
-    if (!map) return;
-    const marker = document.createComment("betterLD topic-map original position");
-    map.before(marker);
-    tree.topicMap = { element: map, marker };
-    tree.footer.append(map);
+    for (const selector of replyTreeFooterSelectors) {
+      const source = tree.topicContainer.querySelector(`${selector}:not(.betterld-reply-tree__footer *)`);
+      const previous = tree.footerSources.get(selector);
+      // 原站替换节点时丢弃旧挂载，不把过期提示或控件还原成第二份。
+      if (previous && (source || !previous.marker.isConnected || !previous.element.isConnected)) {
+        previous.element.remove();
+        previous.marker.remove();
+        tree.footerSources.delete(selector);
+      }
+      if (!source) continue;
+      const marker = document.createComment(`betterLD ${selector} original position`);
+      source.before(marker);
+      tree.footerSources.set(selector, { element: source, marker });
+      tree.footer.append(source);
+    }
+    // 状态区可能晚于统计出现；只在顺序变化时移动，避免插件自身反复触发观察器。
+    const status = tree.footerSources.get(".topic-status-info")?.element;
+    const map = tree.footerSources.get(".topic-map.--bottom")?.element;
+    if (status && map && status.nextElementSibling !== map) map.before(status);
   }
 
   function syncReplyTreeFilterBar(tree) {
     // 原站筛选会拆掉旧流；保留旧底板引用供重建清理，不把它改写成 null。
     if (!tree.streamElement.isConnected) return;
-    syncReplyTreeTopicMap(tree);
+    syncReplyTreeFooter(tree);
     // 底板只包住回复区，原站时间轴和普通原帖容器不参与阅读材质。
     const container = tree.streamElement.parentElement;
     if (container !== tree.readingPanelContainer) {
@@ -6836,7 +6845,7 @@
       state.replyTree.readingPanelContainer.classList.remove("betterld-reading-panel");
       state.replyTree.topicContainer.removeAttribute("data-betterld-reading-active");
       document.dispatchEvent(new CustomEvent("betterld:reply-author-reset"));
-      restoreReplyTreeTopicMap(state.replyTree);
+      restoreReplyTreeFooter(state.replyTree);
       state.replyTree.panel.remove();
       document.dispatchEvent(new CustomEvent('betterld:timeline-reset'));
       document.dispatchEvent(new CustomEvent('betterld:reply-reading-release'));
@@ -6929,6 +6938,7 @@
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
     const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    tree.footerSources = new Map();
     tree.boostExpanded = new Set();
     tree.orphanContextIds = previous?.orphanContextIds || new Set();
     tree.parentErrors = previous?.parentErrors || new Map();
@@ -7536,7 +7546,7 @@
     }
   });
 
-  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
+  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, .topic-status-info, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
   function ownedNode(node) {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return Boolean(element?.closest("[data-betterld-owned], .betterld-topic-row__info, .betterld-topic-empty"));
