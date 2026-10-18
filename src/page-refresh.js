@@ -1646,11 +1646,20 @@
           const router = owner.lookup("service:router");
           if (router.currentRouteName.startsWith("topic.")) {
             const controller = owner.lookup("controller:topic");
-            await controller.model.postStream.refresh({
-              nearPost: controller.currentPostNumber || 1,
-              forceLoad: true,
-              refreshInPlace: true
+            const stream = controller.model.postStream;
+            let refresh;
+            window.require("@ember/runloop").join(() => {
+              const loaded = stream.loaded;
+              refresh = stream.refresh({
+                nearPost: controller.currentPostNumber || 1,
+                forceLoad: true,
+                refreshInPlace: true
+              });
+              // forceLoad 同步清 loaded；原站模板据此卸载整个帖子区。
+              // 同一 runloop 保留已有内容；请求更新与拒绝仍沿原站 refresh 返回。
+              if (loaded) stream.loaded = true;
             });
+            await refresh;
           } else {
             await router.refresh();
           }
