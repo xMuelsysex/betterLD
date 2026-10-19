@@ -3708,6 +3708,8 @@ html[data-betterld-search-page="true"][data-betterld-search-focused="true"][data
   backdrop-filter: blur(var(--betterld-surface-blur));
 }
 
+.betterld-search-more[hidden] { display: none; }
+
 .betterld-search-more:hover:not(:disabled) {
   border-color: var(--betterld-primary);
   color: var(--betterld-primary);

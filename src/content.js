@@ -987,7 +987,9 @@
           grid.append(card);
         }
         panel.insertBefore(grid, retry);
-        status.textContent = `补充 ${parsed.results.length} 个主题，过滤 ${parsed.filteredCount} 条重复、站外或非主题结果。外部索引可能过期，链接可见性由 LinuxDo 决定。`;
+        status.textContent = parsed.results.length
+          ? `补充 ${parsed.results.length} 个主题，过滤 ${parsed.filteredCount} 条重复、站外或非主题结果。外部索引可能过期，链接可见性由 LinuxDo 决定。`
+          : `${config.externalSearch.engines[engine].label} 未返回可展示的 LinuxDo 主题，已过滤 ${parsed.filteredCount} 条站外或非主题结果。可查看搜索引擎原始结果核对。`;
         const original = createElement("a", "", "查看搜索引擎原始结果");
         original.href = response.searchUrl;
         original.target = "_blank";
