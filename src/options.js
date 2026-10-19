@@ -851,7 +851,7 @@
 
   const staticTranslations = {
     "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。": "Background strength of reply trees, author-filtered replies and standalone reading controls: 0% transparent, 100% solid. Does not change ordinary original posts, text or buttons.",
-    "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When site search is empty, search with site:linux.do and show only LinuxDo topics in the site search entry format. Enabling requires access to the chosen engine; search terms are sent to it.",
+    "关闭 / Bing / DuckDuckGo。原站「相关结果」关闭且站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When the site’s Related results switch is off and site search is empty, search with site:linux.do and show only LinuxDo topics in the site search entry format. Enabling requires access to the chosen engine; search terms are sent to it.",
     "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。": "Choose Bing or DuckDuckGo and allow access in the browser permission dialog. If access was revoked, request it again below.",
     "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。": "In-page settings cannot show the browser permission dialog. Open the extension settings below, then choose Bing or DuckDuckGo and allow access.",
     "重新申请访问权限": "Request access again",
@@ -1118,7 +1118,7 @@
     { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
     { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后只隐藏命中项。", dependsOn: ["topicFilterEnabled", true] },
 
-    { key: "externalSearchEngine", type: "select", label: "外部搜索（站内无结果时）", help: "关闭 / Bing / DuckDuckGo。站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。" },
+    { key: "externalSearchEngine", type: "select", label: "外部搜索（站内无结果时）", help: "关闭 / Bing / DuckDuckGo。原站「相关结果」关闭且站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。" },
     { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
     { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
     { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },

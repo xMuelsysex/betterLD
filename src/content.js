@@ -968,9 +968,13 @@
     return card;
   }
 
+  function nativeRelatedResultsDisabled() {
+    return document.querySelector('.semantic-search__results-toggle[role="switch"]')?.getAttribute("aria-checked") === "false";
+  }
+
   async function syncExternalSearch() {
     const engine = state.currentSettings.externalSearchEngine;
-    if (!isSearchPage() || engine === "off") { clearExternalSearch(); return; }
+    if (!isSearchPage() || engine === "off" || !nativeRelatedResultsDisabled()) { clearExternalSearch(); return; }
     const href = location.href;
     const failedStateKey = `${engine}:state:${href}`;
     if (state.externalSearchBusy || (state.externalSearchKey === failedStateKey && state.externalSearchPanel?.isConnected)) return;
@@ -978,7 +982,7 @@
     try {
       const native = await readNativeSearchState();
       if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
-      if (!native.ready || !native.empty) { clearExternalSearch(); return; }
+      if (!native.ready || !native.empty || !nativeRelatedResultsDisabled()) { clearExternalSearch(); return; }
       const key = `${engine}:${native.query}`;
       if (key === state.externalSearchKey && state.externalSearchPanel?.isConnected) return;
       const view = createExternalSearchPanel(engine, `站内无结果，正在搜索 ${native.query} site:linux.do…`);
@@ -989,7 +993,7 @@
         const response = await sendRuntimeMessage({ type: "external-search", engine, query: native.query });
         if (!response?.ok) throw new Error(response?.error || "外部搜索没有返回结果");
         const current = await readNativeSearchState();
-        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine || !current.ready || !current.empty || current.query !== native.query) {
+        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine || !nativeRelatedResultsDisabled() || !current.ready || !current.empty || current.query !== native.query) {
           clearExternalSearch();
           return;
         }
@@ -1009,13 +1013,13 @@
         original.rel = "noopener noreferrer";
         panel.append(original);
       } catch (error) {
-        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
+        if (location.href !== href || engine !== state.currentSettings.externalSearchEngine || !nativeRelatedResultsDisabled()) { clearExternalSearch(); return; }
         status.textContent = `补充搜索失败：${error.message}`;
         retry.hidden = false;
         console.error("[betterLD] external search failed", error);
       }
     } catch (error) {
-      if (location.href !== href || engine !== state.currentSettings.externalSearchEngine) { clearExternalSearch(); return; }
+      if (location.href !== href || engine !== state.currentSettings.externalSearchEngine || !nativeRelatedResultsDisabled()) { clearExternalSearch(); return; }
       const view = createExternalSearchPanel(engine, `补充搜索暂不可用：无法确认站内搜索状态。${error.message}`);
       if (view) { state.externalSearchKey = failedStateKey; view.retry.hidden = false; }
       console.error("[betterLD] native search state read failed", error);
@@ -7480,6 +7484,9 @@
 
   const domObserver = new MutationObserver((records) => {
     if (!pageActive() || !state.settingsResolved) return;
+    if (records.some((record) => record.attributeName === "aria-checked" && record.target.matches('.semantic-search__results-toggle[role="switch"]'))) {
+      syncExternalSearch();
+    }
     const sources = records.filter(sourceMutation).filter((record) => {
       const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
       if (element?.closest(".topic-timeline")) {
@@ -7540,7 +7547,7 @@
     characterData: true,
     attributes: true,
     attributeOldValue: true,
-    attributeFilter: ["class", "style", "href", "src", "srcset", "data-topic-id", "data-user-card", "title", "hidden"]
+    attributeFilter: ["class", "style", "href", "src", "srcset", "data-topic-id", "data-user-card", "title", "hidden", "aria-checked"]
   });
 
   const modeObserver = new MutationObserver(applyColorMode);
