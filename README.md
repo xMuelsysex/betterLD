@@ -47,9 +47,9 @@
 
 **背景来源三选一，失效即回退。** 支持网站随机图（`picsum.photos` 按日期播种，每天固定一张）、内置图库（8 张，含 NASA、BML2019 等）和用户自定义（远程 URL 或本地图片）。本地图片经 canvas 压缩为 JPEG（quality 0.9，最长边 2560 × 1440，≤ 8MB）后存入 `browser.storage.local`。任何来源失效时回退到明暗对应的内置渐变，页面保持可用。
 
-**配色跟随真实主题状态。** `content.js` 通过 `MutationObserver` 监听 `documentElement` / `body` 上的 `class`、`style`、`data-color-scheme`、`data-theme`、`data-theme-name` 变化，并监听系统 `prefers-color-scheme`，据此切换背景、遮罩、卡片与文字的对比度。
+**配色跟随真实主题状态。** `startup.js` 在 `document_start` 提前读取设置并应用轻量外观，`content.js` 在 `document_end` 接入列表、搜索和回复树，两阶段共用 `appearance.js` 的视觉 Token 和配色逻辑。主脚本继续监听原站主题属性和系统 `prefers-color-scheme` 变化，更新背景、遮罩、卡片与文字的对比度。
 
-**幂等与自恢复。** 内容脚本以 `globalThis.__betterldContentScriptActive` 防重入；DOM 变更由 `MutationObserver` 触发，插件自身写入期间置 `mutating` 标志避免自激循环，写入结束经 160ms 防抖同步。
+**幂等与增量更新。** 内容脚本以 `globalThis.__betterldContentScriptActive` 防重入；首次增强直接消费已读取的实际设置，避免先按默认设置重复处理整页。DOM 变更只增强受影响的行，并定点同步“稍后再看”入口；后续 160ms 防抖核对模型和回复树，路由或设置变化仍执行完整列表同步。
 
 **双浏览器单份清单。** 一份 MV3 `manifest.json` 同时覆盖 Chrome 与 Firefox 桌面端（`browser_specific_settings.gecko`，`strict_min_version: 109.0`）；运行时以 `globalThis.browser || globalThis.chrome` 适配扩展 API 差异。
 
@@ -59,6 +59,8 @@
 CHANGELOG.md           按版本归档的更新日志
 manifest.json          Chrome / Firefox 共用的 Manifest V3 配置
 betterld.config.js     运行参数与设置默认值（唯一参数文件）
+src/startup.js         提前读取设置与首屏轻量外观准备
+src/appearance.js      首屏与即时设置共用的视觉 Token、明暗配色
 src/content.js         原生列表增强、搜索结果、网页预览、树状回复
 src/content.css        Material 3 风格 Token、原生列表、原生搜索结果、背景效果
 src/topic-library.js/.css 本地双分类收藏与 Material 3 面板

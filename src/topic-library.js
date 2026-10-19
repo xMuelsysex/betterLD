@@ -111,8 +111,8 @@
   }
 
   // 只同步条目按钮；分组管理与重试按钮没有 data-library-group，不属于收藏条目。
-  function syncButtons() {
-    document.querySelectorAll(".betterld-library-save[data-library-group]").forEach((button) => {
+  function syncButtons(buttons = document.querySelectorAll(".betterld-library-save[data-library-group]")) {
+    buttons.forEach((button) => {
       const group = button.dataset.libraryGroup;
       const id = button.dataset.libraryId;
       const selected = saved(group, { id });
@@ -531,7 +531,7 @@
   }
 
   function render() {
-    if (!panel) return;
+    if (!panel || panel.hidden) return;
     status.textContent = errorMessage;
     status.hidden = !status.textContent;
     status.dataset.error = String(Boolean(errorMessage));
@@ -693,10 +693,13 @@
     });
   }
 
-  function sync() {
+  function sync(rows) {
     if (!document.body) return;
     createPanel();
-    for (const row of document.querySelectorAll(".betterld-topic-row, .betterld-search-result")) {
+    const incremental = rows !== undefined;
+    const buttons = [];
+    for (const row of rows || document.querySelectorAll(".betterld-topic-row, .betterld-search-result")) {
+      if (!row.isConnected) continue;
       const host = row.querySelector(".betterld-topic-row__actions");
       const id = row.dataset.topicId;
       const title = row.querySelector("a.title, a.search-link")?.textContent.trim();
@@ -712,9 +715,16 @@
         };
         topicMetadata.set(id, { ...topicMetadata.get(id), ...metadata });
         attachButton(host, "later", { id, title, href: `${location.origin}/t/topic/${id}` });
+        buttons.push(host.querySelector('.betterld-library-save[data-library-group="later"]'));
       }
     }
     syncTopicButton();
+    if (incremental) {
+      const topicButton = document.querySelector(".betterld-library-topic-action");
+      if (topicButton) buttons.push(topicButton);
+      syncButtons(buttons);
+      return;
+    }
     const activeIds = new Set([
       ...library.later.map((topic) => topic.id), ...library.favorites.map((topic) => topic.id),
       ...[...document.querySelectorAll(".betterld-topic-row, .betterld-search-result")].map((row) => row.dataset.topicId),

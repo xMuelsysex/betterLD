@@ -44,6 +44,24 @@
       "js": [
         "betterld.config.js",
         "src/settings.js",
+        "src/appearance.js",
+        "src/startup.js"
+      ],
+      "css": [
+        "src/content.css",
+        "src/topic-library.css",
+        "src/topic-export.css",
+        "src/sticker-library.css"
+      ],
+      "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://linux.do/*",
+        "https://www.linux.do/*"
+      ],
+      "js": [
         "src/external-search.js",
         "src/library-entry.js",
         "src/library-store.js",
@@ -58,14 +76,8 @@
         "src/media.js",
         "src/content.js"
       ],
-      "css": [
-        "src/content.css",
-        "src/topic-library.css",
-        "src/topic-export.css",
-        "src/sticker-library.css"
-      ],
       "all_frames": true,
-      "run_at": "document_idle"
+      "run_at": "document_end"
     }
   ],
   "action": {

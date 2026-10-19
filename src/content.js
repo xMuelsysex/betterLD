@@ -8,6 +8,8 @@
 
   const config = globalThis.BETTERLD_CONFIG;
   const settingsApi = globalThis.BETTERLD_SETTINGS;
+  const appearance = globalThis.BETTERLD_APPEARANCE;
+  const startup = globalThis.BETTERLD_STARTUP;
   const api = globalThis.browser || globalThis.chrome;
   const firefoxApi = Boolean(globalThis.browser);
   const normalizeSettings = settingsApi?.normalizeSettings;
@@ -21,7 +23,7 @@
     "Discourse-Present": "true"
   });
 
-  if (!config || !settingsApi || typeof normalizeSettings !== "function" || !userMarksApi?.normalize || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
+  if (!config || !settingsApi || !appearance || !startup || typeof normalizeSettings !== "function" || !userMarksApi?.normalize || typeof mediaApi?.sync !== "function" || !api?.storage?.local) {
     console.error("[betterLD] content script could not initialize: extension API is unavailable");
     return;
   }
@@ -38,6 +40,7 @@
     settingsResolved: false,
     activeStorageArea: "local",
     syncTimer: 0,
+    syncLists: false,
     routeTimer: 0,
     dataTimer: 0,
     positionTimer: 0,
@@ -128,44 +131,10 @@
     });
   }
 
-  function syncGet(keys) {
-    if (!api.storage?.sync?.get) {
-      return Promise.reject(new Error("浏览器不支持 storage.sync"));
-    }
-    if (firefoxApi) {
-      return api.storage.sync.get(keys);
-    }
-
-    return new Promise((resolve, reject) => {
-      api.storage.sync.get(keys, (value) => {
-        const error = api.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-        resolve(value);
-      });
-    });
-  }
-
   async function getActiveSettings(localSettings = state.currentSettings) {
-    const normalizedLocal = normalizeSettings(localSettings);
-    if (!normalizedLocal.syncEnabled) {
-      state.activeStorageArea = "local";
-      return normalizedLocal;
-    }
-    try {
-      const stored = await syncGet([config.storageKey]);
-      const remoteSettings = stored?.[config.storageKey];
-      if (remoteSettings && typeof remoteSettings === "object") {
-        state.activeStorageArea = "sync";
-        return normalizeSettings(remoteSettings);
-      }
-    } catch (error) {
-      console.error("[betterLD] active sync settings read failed; using local settings", error);
-    }
-    state.activeStorageArea = "local";
-    return normalizedLocal;
+    const active = await startup.readActiveSettings(localSettings);
+    state.activeStorageArea = active.area;
+    return active.settings;
   }
 
   function storageSet(value) {
@@ -366,69 +335,7 @@
       state.wallpaperColorUrl = wallpaperUrl;
       state.wallpaperColor = null;
     }
-    const materialSupported = Boolean(
-      globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
-      || globalThis.CSS?.supports?.("-webkit-backdrop-filter", "blur(1px)")
-    );
-    root.dataset.betterldMaterial = materialSupported ? "ready" : "fallback";
-    root.dataset.betterldShadowMode = settings.shadowMode;
-    root.dataset.betterldFrostedGlass = String(settings.frostedGlassEnabled);
-    root.dataset.betterldShowTopicAvatar = String(settings.showTopicAvatar);
-    root.dataset.betterldShowTopicAuthor = String(settings.showTopicAuthor);
-    root.dataset.betterldShowTopicCategory = String(settings.showTopicCategory);
-    root.dataset.betterldShowTopicExcerpt = String(settings.showTopicExcerpt);
-    root.dataset.betterldShowTopicTags = String(settings.showTopicTags);
-    root.dataset.betterldShowTopicMeta = String(settings.showTopicMeta);
-    root.dataset.betterldShowTopicActivityTime = String(settings.showTopicActivityTime);
-    root.dataset.betterldShowTopicReplies = String(settings.showTopicReplies);
-    root.dataset.betterldShowTopicLikes = String(settings.showTopicLikes);
-    root.dataset.betterldShowTopicViews = String(settings.showTopicViews);
-    root.dataset.betterldShowTopicUnreadState = String(settings.showTopicUnreadState);
-    root.dataset.betterldShowTopicPinnedState = String(settings.showTopicPinnedState);
-    root.dataset.betterldShowTopicWatchedState = String(settings.showTopicWatchedState);
-    root.dataset.betterldTopicTitleSize = settings.topicTitleFontSize;
-    root.dataset.betterldTopicAuthorSize = settings.topicAuthorFontSize;
-    root.dataset.betterldTopicMetaSize = settings.topicMetaFontSize;
-    root.dataset.betterldFontScope = settings.fontScope;
-    root.dataset.betterldRemovePunctuationIndent = String(settings.removeChinesePunctuationIndent);
-    const fontFamily = settings.fontMode === "recommended"
-      ? config.fontRecommendedStack
-      : settings.fontMode === "custom"
-        ? settings.fontFamily
-        : "";
-    if (fontFamily) {
-      root.style.setProperty("--betterld-font-family", fontFamily);
-    } else {
-      root.style.removeProperty("--betterld-font-family");
-    }
-    root.style.setProperty("--betterld-mask-opacity", String(settings.maskOpacity));
-    root.style.setProperty("--betterld-background-blur", `${settings.blurPx}px`);
-    root.style.setProperty("--betterld-card-opacity", String(settings.cardOpacity));
-    root.style.setProperty("--betterld-reading-panel-alpha", String(settings.readingPanelBackgroundOpacity));
-    root.style.setProperty("--betterld-card-motion", `${config.topicCardMotion.durationMs}ms ${config.topicCardMotion.easing}`);
-    root.style.setProperty("--betterld-card-hover-spread", `${config.topicCardMotion.spreadPx}px`);
-    root.style.setProperty("--betterld-card-hover-opacity", String(config.topicCardMotion.hoverOpacity));
-    root.style.setProperty("--betterld-card-active-opacity", String(config.topicCardMotion.activeOpacity));
-    root.style.setProperty("--betterld-topic-list-max-width", `${config.topicListMaxWidthPx}px`);
-    root.style.setProperty("--betterld-topic-detail-width", `${config.topicDetailWidthPercent}%`);
-    root.style.setProperty("--betterld-topic-detail-max-width", `${config.topicDetailMaxWidthPx}px`);
-    root.style.setProperty("--betterld-reply-author-name-max-width", `${config.replyTreeAuthorNameMaxWidthEm}em`);
-    root.style.setProperty("--betterld-topic-timeline-space", `${config.topicTimelineSpacePx}px`);
-    root.style.setProperty("--betterld-surface-blur", settings.frostedGlassEnabled ? `${settings.surfaceBlurPx}px` : "0px");
-    root.style.setProperty("--betterld-header-blur-fade", `${config.headerBlurFadePx}px`);
-    root.style.setProperty("--betterld-sidebar-top-gap", `${config.sidebarTopGapPx}px`);
-    root.style.setProperty("--betterld-user-card-cover-mask-opacity", settings.userCardCoverMaskEnabled ? String(settings.userCardCoverMaskOpacity) : "0");
-    root.style.setProperty("--betterld-shadow-level-2", `0 ${2 * settings.shadowHeight}px 6px rgb(var(--betterld-shadow-color) / 0.10), 0 ${12 * settings.shadowHeight}px 28px rgb(var(--betterld-shadow-color) / 0.16)`);
-    root.style.setProperty("--betterld-shadow-level-2-hover", `0 ${4 * settings.shadowHeight}px 10px rgb(var(--betterld-shadow-color) / 0.12), 0 ${18 * settings.shadowHeight}px 36px rgb(var(--betterld-shadow-color) / 0.20)`);
-    if (settings.shadowMode === "custom") {
-      const curve = settings.shadowCurve || [];
-      const blurSizes = [12, 28, 56];
-      const offsets = [4, 12, 28].map((offset) => offset * settings.shadowHeight);
-      const shadow = curve.map((point, index) => `0 ${offsets[index]}px ${blurSizes[index]}px rgb(var(--betterld-shadow-color) / ${point.opacity})`).join(", ");
-      root.style.setProperty("--betterld-card-shadow", shadow);
-    } else {
-      root.style.removeProperty("--betterld-card-shadow");
-    }
+    appearance.apply(settings, state.wallpaperColor);
     root.style.removeProperty("--betterld-wallpaper-image");
     if (!Number(settings.wallpaperRemoteCacheDays) && state.remoteWallpaperCache) {
       state.remoteWallpaperCache = null;
@@ -436,7 +343,6 @@
         console.error("[betterLD] remote wallpaper cache removal failed", error);
       });
     }
-    applyColorMode();
     applyCustomCss(settings);
     resetFilterOverrides(settings);
     syncHomepage();
@@ -552,136 +458,12 @@
     }
   }
 
-  function relativeLuminance(rgb) {
-    const linear = rgb.map((value) => value / 255).map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
-    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
-  }
-
-  function wallpaperPrimary() {
-    const dark = document.documentElement.dataset.betterldMode === "dark";
-    const background = dark ? hexToRgb(state.currentSettings.darkModeBaseColor).split(" ").map(Number) : [255, 255, 255];
-    const base = relativeLuminance(background);
-    const rgb = [...state.wallpaperColor];
-    const target = dark ? 255 : 0;
-    // 逐步调整亮度，保留壁纸色相并保证强调文本的对比度。
-    while (true) {
-      const luminance = relativeLuminance(rgb);
-      if ((Math.max(base, luminance) + 0.05) / (Math.min(base, luminance) + 0.05) >= 4.5 || rgb.every((channel) => channel === target)) break;
-      rgb.forEach((channel, index) => { rgb[index] = channel + Math.sign(target - channel); });
-    }
-    return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
-  }
-
-  function themeFromValue(value) {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (!normalized) {
-      return "";
-    }
-    if (/(?:^|[-_\s])dark(?:$|[-_\s])/.test(normalized) || /(?:^|[-_\s])dark-mode(?:$|[-_\s])/.test(normalized)) {
-      return "dark";
-    }
-    if (/(?:^|[-_\s])light(?:$|[-_\s])/.test(normalized) || /(?:^|[-_\s])light-mode(?:$|[-_\s])/.test(normalized)) {
-      return "light";
-    }
-    return "";
-  }
-
-  function computedThemeValue(element) {
-    const scheme = element ? getComputedStyle(element).colorScheme.trim().toLowerCase() : "";
-    return scheme === "dark" || scheme === "light" ? scheme : "";
-  }
-
-  function hexToRgb(value) {
-    const color = String(value || "").trim().replace("#", "");
-    if (!/^(?:[\da-f]{3}|[\da-f]{6})$/i.test(color)) {
-      return "";
-    }
-    const expanded = color.length === 3 ? color.split("").map((part) => part + part).join("") : color;
-    return [0, 2, 4].map((offset) => Number.parseInt(expanded.slice(offset, offset + 2), 16)).join(" ");
-  }
-
-  function contrastColor(value) {
-    const rgb = hexToRgb(value).split(" ").map(Number);
-    if (rgb.length !== 3 || rgb.some((part) => !Number.isFinite(part))) {
-      return "#ffffff";
-    }
-    return relativeLuminance(rgb) > 0.179 ? "#000000" : "#ffffff";
-  }
-
-  function scheduledMode(settings) {
-    const start = String(settings.themeScheduleStart || "18:00").split(":").map(Number);
-    const end = String(settings.themeScheduleEnd || "07:00").split(":").map(Number);
-    const now = new Date();
-    const minutes = now.getHours() * 60 + now.getMinutes();
-    const startMinutes = start[0] * 60 + start[1];
-    const endMinutes = end[0] * 60 + end[1];
-    const inRange = startMinutes <= endMinutes
-      ? minutes >= startMinutes && minutes <= endMinutes
-      : minutes >= startMinutes || minutes <= endMinutes;
-    return inRange ? "dark" : "light";
-  }
-
-  function setThemeProperty(name, value) {
-    const style = document.documentElement.style;
-    if (style.getPropertyValue(name) === value) return;
-    if (value) style.setProperty(name, value);
-    else style.removeProperty(name);
-  }
-
   function applyThemeTokens(settings) {
-    const root = document.documentElement;
-    const fromWallpaper = settings.wallpaperThemeColor && state.wallpaperColor;
-    const primary = fromWallpaper ? wallpaperPrimary() : settings.themeColor;
-    root.dataset.betterldWallpaperColor = fromWallpaper ? "ready" : "manual";
-    const background = settings.darkModeBaseColor;
-    const primaryRgb = hexToRgb(primary);
-    const backgroundRgb = hexToRgb(background);
-    if (primaryRgb) {
-      setThemeProperty("--betterld-primary", primary);
-      setThemeProperty("--betterld-primary-rgb", primaryRgb.split(" ").join(", "));
-      setThemeProperty("--betterld-on-primary", contrastColor(primary));
-    }
-    if (root.dataset.betterldMode === "dark" && backgroundRgb) {
-      setThemeProperty("--betterld-background-rgb", backgroundRgb);
-    } else {
-      setThemeProperty("--betterld-background-rgb", "");
-    }
-    if (settings.useGradientThemeColorBackground && primary) {
-      setThemeProperty("--betterld-default-wallpaper", `radial-gradient(circle at 18% 12%, color-mix(in srgb, ${primary} 42%, transparent), transparent 34%), radial-gradient(circle at 86% 84%, color-mix(in srgb, ${primary} 30%, transparent), transparent 38%), linear-gradient(135deg, color-mix(in srgb, ${primary} 26%, rgb(var(--betterld-background-rgb))), rgb(var(--betterld-background-rgb)))`);
-    } else {
-      setThemeProperty("--betterld-default-wallpaper", "");
-    }
+    appearance.applyThemeTokens(settings, state.wallpaperColor);
   }
 
   function applyColorMode() {
-    const root = document.documentElement;
-    const body = document.body;
-    const explicitValues = [
-      root.dataset.colorScheme,
-      body?.dataset.colorScheme,
-      root.dataset.theme,
-      body?.dataset.theme,
-      root.dataset.themeName,
-      body?.dataset.themeName,
-      root.className,
-      body?.className
-    ];
-    const explicitMode = explicitValues.map(themeFromValue).find(Boolean) || "";
-    const computedMode = [computedThemeValue(root), computedThemeValue(body)]
-      .map(themeFromValue)
-      .find(Boolean) || "";
-    const prefersDark = Boolean(globalThis.matchMedia?.("(prefers-color-scheme: dark)")?.matches);
-    const configuredMode = state.currentSettings?.themeMode || "auto";
-    const detectedMode = explicitMode || computedMode || (prefersDark ? "dark" : "light");
-    const mode = configuredMode === "light" || configuredMode === "dark"
-      ? configuredMode
-      : configuredMode === "system"
-        ? (prefersDark ? "dark" : "light")
-        : configuredMode === "scheduled"
-          ? scheduledMode(state.currentSettings)
-          : detectedMode;
-    if (root.dataset.betterldMode !== mode) root.dataset.betterldMode = mode;
-    applyThemeTokens(state.currentSettings);
+    appearance.applyColorMode(state.currentSettings, state.wallpaperColor);
   }
 
   function currentPath() {
@@ -2837,7 +2619,7 @@
         state.topicListSync = null;
         if (state.topicListSyncAgain) {
           state.topicListSyncAgain = false;
-          scheduleSync();
+          scheduleSync({ lists: false });
         }
       });
     return state.topicListSync;
@@ -3559,15 +3341,17 @@
     }
   }
 
-  function syncHomepage() {
-    if (!pageActive()) return;
+  function syncHomepage({ lists = true } = {}) {
+    if (!pageActive() || !state.settingsResolved) return;
     syncTopicPreviewHeader();
     syncTopicExport();
     syncExternalSearch();
-    if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
-    else if (isSearchPage()) syncNativeSearchResults();
-    else if (isTopicListPage() || topicIdFromPath()) syncNativeTopicLists();
-    globalThis.BETTERLD_LIBRARY.sync();
+    if (lists) {
+      if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
+      else if (isSearchPage()) syncNativeSearchResults();
+      else if (isTopicListPage() || topicIdFromPath()) syncNativeTopicLists();
+      globalThis.BETTERLD_LIBRARY.sync();
+    }
     applyListControlsScrollState();
     scheduleFilterBinRender();
     return syncTopicListMetadata();
@@ -3641,13 +3425,17 @@
     return !document.hidden && !state.pageSuspended;
   }
 
-  function scheduleSync() {
-    if (!pageActive() || state.syncTimer) return;
+  function scheduleSync({ lists = true } = {}) {
+    if (!pageActive() || !state.settingsResolved) return;
+    state.syncLists ||= lists;
+    if (state.syncTimer) return;
     state.syncTimer = window.setTimeout(() => {
       state.syncTimer = 0;
       if (!pageActive()) return;
       checkRoute();
-      syncHomepage();
+      const lists = state.syncLists;
+      state.syncLists = false;
+      syncHomepage({ lists });
       syncSearchLoadMore(state.currentSettings, isSearchPage());
       syncReplyTree();
     }, config.syncDebounceMs);
@@ -3690,9 +3478,6 @@
     syncNavigationState();
     applyChromeSettings();
     syncFloatingActions();
-    if (topicListPage || isSearchPage() || topicIdFromPath()) {
-      scheduleSync();
-    }
   }
 
   function topicReplyUrl(topicId, postNumber) {
@@ -7198,7 +6983,7 @@
   // URL 探测保持轻量；列表/正文投影由相关 DOM 变化和独立慢核对驱动。
   // 返回本次是否已经记录了一次实际访问，供页面恢复可见时避免重复写入。
   function checkRoute() {
-    if (!pageActive()) return false;
+    if (!pageActive() || !state.settingsResolved) return false;
     applyTopicSort();
     enforceRefreshScrollTop();
     if (location.href === state.currentHref) return false;
@@ -7493,7 +7278,7 @@
   }
 
   function syncPageData() {
-    if (!pageActive()) return;
+    if (!pageActive() || !state.settingsResolved) return;
     checkRoute();
     checkDailyWallpaper();
     if (state.currentSettings.themeMode === "scheduled") applyColorMode();
@@ -7586,39 +7371,26 @@
 
   ensureSettingsTrigger();
   mediaApi.setAvatarResolver(resolveStaticAvatars);
-  applyVisualSettings(config.settingsDefaults);
-  seedPreloadedTopicList();
-  storageGet()
-    .then(async (stored) => {
-      state.localWallpaper = isStoredLocalWallpaper(stored[config.wallpaperLocalStorageKey])
-        ? stored[config.wallpaperLocalStorageKey]
-        : null;
-      state.remoteWallpaperCache = stored[config.wallpaperRemoteCacheKey]
-        && typeof stored[config.wallpaperRemoteCacheKey] === "object"
-        ? stored[config.wallpaperRemoteCacheKey]
-        : null;
-      // 站点限速按 IP 计，上一个页面撞上冷却时新页面要接着等，不能重新起一轮突发请求
-      const cooldown = stored[config.topicRequestCooldownStorageKey];
-      // 旧包仅保存截止时间，新包在同一键保存截止时间及连续失败次数。
-      const storedCooldown = Number(typeof cooldown === 'object' && cooldown ? cooldown.until : cooldown);
-      if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) {
-        state.metadataCooldownUntil = storedCooldown;
-      }
-      const failures = cooldown?.failures;
-      if (Number.isSafeInteger(failures) && failures >= 0) state.metadataRateLimitFailures = failures;
-      const activeSettings = await getActiveSettings(stored[config.storageKey]);
-      applyVisualSettings(activeSettings);
-      state.settingsResolved = true;
-      readUserMarks().catch((error) => console.error("[betterLD] user marks read failed", error));
-      scheduleSync();
-    })
-    .catch((error) => {
-      state.activeStorageArea = "local";
-      state.localWallpaper = null;
-      console.error("[betterLD] settings load failed; using defaults", error);
-      applyVisualSettings(config.settingsDefaults, { forceFallback: true });
-      state.settingsResolved = true;
-    });
+  startup.ready.then(({ stored, settings, area, error }) => {
+    state.localWallpaper = isStoredLocalWallpaper(stored[config.wallpaperLocalStorageKey])
+      ? stored[config.wallpaperLocalStorageKey] : null;
+    state.remoteWallpaperCache = stored[config.wallpaperRemoteCacheKey]
+      && typeof stored[config.wallpaperRemoteCacheKey] === "object"
+      ? stored[config.wallpaperRemoteCacheKey] : null;
+    // IP 冷却沿原记录跨页面存活，不因提前启动重新发起突发请求。
+    const cooldown = stored[config.topicRequestCooldownStorageKey];
+    const storedCooldown = Number(typeof cooldown === "object" && cooldown ? cooldown.until : cooldown);
+    if (Number.isFinite(storedCooldown) && storedCooldown > Date.now()) state.metadataCooldownUntil = storedCooldown;
+    if (Number.isSafeInteger(cooldown?.failures) && cooldown.failures >= 0) state.metadataRateLimitFailures = cooldown.failures;
+    state.activeStorageArea = area;
+    state.currentSettings = settings;
+    state.settingsResolved = true;
+    seedPreloadedTopicList();
+    updateRouteState();
+    applyVisualSettings(settings, { forceFallback: Boolean(error) });
+    readUserMarks().catch((error) => console.error("[betterLD] user marks read failed", error));
+    scheduleSync({ lists: false });
+  }).catch((error) => console.error("[betterLD] page initialization failed", error));
 
   api.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "sync" && changes[config.storageKey] && state.currentSettings.syncEnabled) {
@@ -7692,7 +7464,7 @@
   }
 
   const domObserver = new MutationObserver((records) => {
-    if (!pageActive()) return;
+    if (!pageActive() || !state.settingsResolved) return;
     const sources = records.filter(sourceMutation).filter((record) => {
       const element = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
       if (element?.closest(".topic-timeline")) {
@@ -7703,8 +7475,9 @@
     });
     if (!sources.length) return;
     // 新行及原站分批填入的标题/状态当轮增强，不等尾部扫描补齐。
+    const rows = new Set();
     if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || isSearchPage() || topicIdFromPath())) {
-      const rows = new Set();
+      const searchContainers = new Set();
       const containers = new Set();
       const rowSelector = ".topic-list-item, .latest-topic-list-item, .fps-result";
       const containerSelector = ".topic-list, .latest-topic-list, .fps-result-entries";
@@ -7730,16 +7503,21 @@
       rows.forEach((row) => {
         if (!row.isConnected || (topicIdFromPath() && !row.closest(".more-topics__lists"))) return;
         if (row.matches(".fps-result")) {
-          row.closest(".fps-result-entries")?.classList.add("betterld-search-results");
+          const container = row.closest(".fps-result-entries");
+          container?.classList.add("betterld-search-results");
+          if (container) searchContainers.add(container);
           enhanceSearchResult(row);
         } else {
           row.closest(".topic-list, .latest-topic-list")?.classList.add("betterld-topic-list");
           enhanceTopicRow(row);
         }
       });
-      if (rows.size) globalThis.BETTERLD_LIBRARY.sync();
+      searchContainers.forEach(syncFilterEmptyState);
     }
-    scheduleSync();
+    // 原站滚到页底才创建收藏入口，此时也可能没有列表行变化。
+    globalThis.BETTERLD_LIBRARY.sync(rows);
+    // 行已在本轮完成增强，尾部只核对模型/主题状态，不再遍历所有行。
+    scheduleSync({ lists: false });
   });
   domObserver.observe(document.documentElement, {
     childList: true,
@@ -7776,7 +7554,6 @@
   window.addEventListener("popstate", checkRoute);
   window.addEventListener("hashchange", checkRoute);
   state.currentHref = location.href;
-  updateRouteState();
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pausePageWork();
     else resumePageWork();

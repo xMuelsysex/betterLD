@@ -581,6 +581,9 @@ function buildInjection(port) {
   };
   injectStyle(document, nonce);
 
+  runScript(await sourceText("src/appearance.js"));
+  runScript(await sourceText("src/startup.js"));
+  await globalThis.BETTERLD_STARTUP.ready;
   runScript(await sourceText("src/external-search.js"));
   runScript(await sourceText("src/library-entry.js"));
   runScript(await sourceText("src/user-marks.js"));

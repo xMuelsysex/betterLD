@@ -12,7 +12,9 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 
 - `manifest.json`：Chrome / Firefox 共用的 Manifest V3 配置。
 - `betterld.config.js`：首版运行参数与设置默认值的唯一参数文件。
-- `src/content.js`：原生主题行增强、原生搜索增强、真实网页预览、树状回复和视觉设置应用。
+- `src/startup.js`：`document_start` 提前读取实际设置并准备轻量外观，主脚本复用同一次读取。
+- `src/appearance.js`：首屏与即时设置共用的视觉 Token 和明暗配色实现。
+- `src/content.js`：`document_end` 接入原生主题行增强、原生搜索增强、真实网页预览、树状回复和视觉设置应用。
 - `src/content.css`：Material 3 风格 Token、原生条目材质和背景效果。
 - `src/topic-export.js`、`src/topic-export.css`：HTML / Markdown 帖子导出与对话框；转换来源及完整 MIT 声明保留在模块头部。
 - `src/options.html`、`src/options.js`、`src/options.css`：扩展设置页与工具栏弹窗。
