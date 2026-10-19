@@ -1427,6 +1427,30 @@ body.betterld-shell :is(.select-kit-body, .d-modal__container, #dialog-holder .d
   box-shadow: var(--betterld-shadow-raised) !important;
 }
 
+/* 原站 select-kit 弹层打开时是 position: fixed；容器一旦靠 backdrop-filter 建立层叠上下文，
+   弹层就会被排在其后的卡片材质盖住（搜索页排序、群组页筛选）。这些容器的模糊改挂 ::before，
+   容器自身不再产生层叠上下文。 */
+body.betterld-shell :is(
+  .search-header, .search-info,
+  .groups-index .groups-header
+) {
+  position: relative;
+}
+
+body.betterld-shell :is(
+  .search-header, .search-info,
+  .groups-index .groups-header
+)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
+}
+
 body.betterld-shell :is(.badge-card, .show-badge .badge-title, .show-badge .badge-user) {
   border-radius: var(--betterld-radius-md) !important;
 }
@@ -1595,6 +1619,8 @@ html[data-betterld-wallpaper-state] body #main-outlet .group .user-content {
 
 body.betterld-shell .groups-index .groups-header {
   padding: 12px 16px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 body.betterld-shell .groups-index .groups-header-filters :is(input, .select-kit-header) {
@@ -3644,8 +3670,6 @@ body.betterld-search-page :is(.search-header, .search-info) {
   background: rgb(var(--betterld-surface-container-rgb) / 0.78) !important;
   box-shadow: var(--betterld-shadow-level-1);
   color: var(--betterld-on-surface);
-  -webkit-backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
-  backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
 }
 
 body.betterld-search-page .search-header :is(.search-bar, .search-filters) {
