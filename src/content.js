@@ -933,8 +933,8 @@
   }
 
   function createExternalSearchPanel(engine, message) {
-    const host = document.querySelector(".search-container");
-    if (!host) return null;
+    const results = document.querySelector(".search-container > .search-advanced");
+    if (!results) return null;
     state.externalSearchPanel?.remove();
     const panel = createElement("section", "betterld-external-search");
     const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · LinuxDo 补充结果`);
@@ -945,7 +945,8 @@
     retry.hidden = true;
     retry.addEventListener("click", () => { state.externalSearchKey = ""; syncExternalSearch(); });
     panel.append(heading, status, retry);
-    host.append(panel);
+    // 空搜索仍可能展示长列 AI 推荐，补充结果放在其前方而非整个搜索页末尾。
+    results.before(panel);
     state.externalSearchPanel = panel;
     return { panel, status, retry };
   }
