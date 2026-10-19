@@ -10,7 +10,7 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "user_signature", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -819,6 +819,25 @@
     const Container = window.require("discourse/components/render-glimmer-container").default;
     const curry = window.require("ember-curry-component").default;
     const join = window.require("@ember/runloop").join;
+    const siteSettings = owner.lookup("service:site-settings");
+    const NativeSignature = siteSettings.signatures_enabled
+      ? window.require("discourse/plugins/discourse-signatures/discourse/components/post-signature").default : null;
+    class TreeBody extends window.require("@glimmer/component").default {
+      get showSignature() {
+        return Boolean(NativeSignature && NativeSignature.shouldRender({ post: this.args.post }, {
+          currentUser: owner.lookup("service:current-user"), siteSettings
+        }));
+      }
+    }
+    // <@body />{{#if this.showSignature}}<NativeSignature @post={{@post}} />{{/if}}
+    // 签名位于原生正文出口之后；同一宿主负责更新/释放，不另包一层 DOM 或复制签名规则。
+    Component.setComponentTemplate(window.require("@ember/template-factory").createTemplateFactory({
+      id: null,
+      block: '[[[8,[30,1],null,null,null],[41,[30,0,["showSignature"]],[[[8,[32,0],null,[["@post"],[[30,2]]],null]],[]],null]],["@body","@post"],["if"]]',
+      moduleName: "betterld/tree-body",
+      scope: () => ({ NativeSignature }),
+      isStrictMode: true
+    }), TreeBody);
     for (const body of bodies) {
       const element = document.querySelector(`[data-betterld-cooked-id="${CSS.escape(body.id)}"]`);
       if (!element) continue;
@@ -854,7 +873,8 @@
           layout: Component.getComponentTemplate(Container),
           renderGlimmer: { _registrations: [{
             element,
-            component: curry(NativeBody, args, owner),
+            component: embedded || smallAction ? curry(NativeBody, args, owner)
+              : curry(TreeBody, { body: curry(NativeBody, args, owner), post }, owner),
             data: {}
           }] }
         });
