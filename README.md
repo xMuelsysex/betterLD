@@ -6,6 +6,14 @@
 
 当前版本：**[v1.0.2](https://github.com/xMuelsysex/betterLD/releases/tag/v1.0.2)** · [更新日志](CHANGELOG.md)
 
+## 效果预览
+
+以下为截图占位图，真实界面截图待补充。
+
+| 首页主题列表 | 树状回复 | 设置页 |
+| --- | --- | --- |
+| ![首页主题列表](docs/screenshots/home.png) | ![树状回复](docs/screenshots/reply-tree.png) | ![设置页](docs/screenshots/settings.png) |
+
 ## 核心功能
 
 | 功能 | 可以做什么 |
