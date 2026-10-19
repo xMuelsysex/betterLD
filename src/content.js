@@ -937,7 +937,7 @@
     if (!host) return null;
     state.externalSearchPanel?.remove();
     const panel = createElement("section", "betterld-external-search");
-    const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · 补充搜索结果`);
+    const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · LinuxDo 补充结果`);
     const status = createElement("p", "betterld-external-search__status", message);
     status.setAttribute("role", "status");
     const retry = createElement("button", "betterld-search-more", "重试补充搜索");
@@ -1000,8 +1000,8 @@
         }
         panel.insertBefore(grid, retry);
         status.textContent = parsed.results.length
-          ? `补充 ${parsed.results.length} 条搜索结果，过滤 ${parsed.filteredCount} 条重复或无效链接。外部索引可能过期，点击标题打开原网页。`
-          : `${config.externalSearch.engines[engine].label} 未返回可展示的网页结果，已过滤 ${parsed.filteredCount} 条重复或无效链接。可查看搜索引擎原始结果核对。`;
+          ? `补充 ${parsed.results.length} 个 LinuxDo 主题，过滤 ${parsed.filteredCount} 条站外、非主题、重复或无效链接。外部索引可能过期，点击标题打开原帖。`
+          : `${config.externalSearch.engines[engine].label} 未返回可展示的 LinuxDo 主题，已过滤 ${parsed.filteredCount} 条站外、非主题、重复或无效链接。可查看搜索引擎原始结果核对。`;
         const original = createElement("a", "", "查看搜索引擎原始结果");
         original.href = response.searchUrl;
         original.target = "_blank";

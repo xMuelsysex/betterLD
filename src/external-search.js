@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  // 外部引擎追加 site: 限定；保留实际返回的网页链接，展示时标明真实来源。
+  // 外部引擎追加 site: 限定；解析后仍只保留 LinuxDo 主题，展示时标明索引来源。
 
   function externalSearchConfig() {
     const external = globalThis.BETTERLD_CONFIG?.externalSearch;
@@ -105,7 +105,7 @@
     return (element?.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  // 返回 { results, filteredCount }；主题按 ID、其他网页按 URL 去重，只接受 HTTP(S) 链接。
+  // 返回 { results, filteredCount }；只接受 HTTPS LinuxDo 主题，并按主题 ID 去重。
   function parseResults(engine, html) {
     const entry = engineEntry(engine);
     const parser = parsers[engine];
@@ -142,17 +142,12 @@
         return;
       }
       const title = textOf(link);
-      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || !title) {
-        filteredCount += 1;
-        return;
-      }
       const id = topicId(url.href);
-      const key = id ? `topic:${id}` : `${url.origin}${url.pathname}${url.search}`;
-      if (seen.has(key)) {
+      if (!id || url.username || url.password || !title || seen.has(id)) {
         filteredCount += 1;
         return;
       }
-      seen.add(key);
+      seen.add(id);
       results.push({
         id,
         title,
