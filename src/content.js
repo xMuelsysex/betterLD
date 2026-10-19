@@ -937,7 +937,7 @@
     if (!host) return null;
     state.externalSearchPanel?.remove();
     const panel = createElement("section", "betterld-external-search");
-    const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · LinuxDo 补充结果`);
+    const heading = createElement("h2", "", `${config.externalSearch.engines[engine].label} · 补充搜索结果`);
     const status = createElement("p", "betterld-external-search__status", message);
     status.setAttribute("role", "status");
     const retry = createElement("button", "betterld-search-more", "重试补充搜索");
@@ -948,6 +948,23 @@
     host.append(panel);
     state.externalSearchPanel = panel;
     return { panel, status, retry };
+  }
+
+  function createExternalSearchResult(result, engine) {
+    const card = createElement("article", "betterld-external-search__card");
+    card.setAttribute("role", "listitem");
+    const main = createElement("div", "fps-topic");
+    const topic = createElement("div", "topic");
+    topic.setAttribute("role", "heading");
+    topic.setAttribute("aria-level", "3");
+    const title = createElement("a", "search-link betterld-topic-card__title", result.title);
+    title.href = result.href;
+    const excerpt = createElement("div", "blurb", result.excerpt);
+    const source = createElement("div", "betterld-topic-row__info", `外部索引 · ${config.externalSearch.engines[engine].label} · ${new URL(result.href).hostname}`);
+    topic.append(title);
+    main.append(topic, excerpt, source);
+    card.append(main);
+    return card;
   }
 
   async function syncExternalSearch() {
@@ -977,19 +994,14 @@
         }
         const parsed = globalThis.BETTERLD_EXTERNAL_SEARCH.parseResults(engine, response.html);
         const grid = createElement("div", "betterld-external-search__results");
+        grid.setAttribute("role", "list");
         for (const result of parsed.results) {
-          const card = createElement("article", "betterld-external-search__card");
-          const title = createElement("a", "", result.title);
-          title.href = result.href;
-          const excerpt = createElement("p", "", result.excerpt);
-          const source = createElement("small", "", `外部索引 · ${config.externalSearch.engines[engine].label}`);
-          card.append(title, excerpt, source);
-          grid.append(card);
+          grid.append(createExternalSearchResult(result, engine));
         }
         panel.insertBefore(grid, retry);
         status.textContent = parsed.results.length
-          ? `补充 ${parsed.results.length} 个主题，过滤 ${parsed.filteredCount} 条重复、站外或非主题结果。外部索引可能过期，链接可见性由 LinuxDo 决定。`
-          : `${config.externalSearch.engines[engine].label} 未返回可展示的 LinuxDo 主题，已过滤 ${parsed.filteredCount} 条站外或非主题结果。可查看搜索引擎原始结果核对。`;
+          ? `补充 ${parsed.results.length} 条搜索结果，过滤 ${parsed.filteredCount} 条重复或无效链接。外部索引可能过期，点击标题打开原网页。`
+          : `${config.externalSearch.engines[engine].label} 未返回可展示的网页结果，已过滤 ${parsed.filteredCount} 条重复或无效链接。可查看搜索引擎原始结果核对。`;
         const original = createElement("a", "", "查看搜索引擎原始结果");
         original.href = response.searchUrl;
         original.target = "_blank";

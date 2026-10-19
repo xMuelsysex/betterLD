@@ -5061,7 +5061,7 @@ body.betterld-shell .betterld-topic-list .topic-list-item > td.main-link {
 }
 body.betterld-shell .betterld-topic-list thead th:not(.default):not(.bulk-select),
 body.betterld-shell .betterld-topic-list .topic-list-item > td:not(.main-link):not(.bulk-select) { display: none !important; }
-body.betterld-shell :is(.betterld-topic-row .link-top-line, .betterld-search-result a.search-link) {
+body.betterld-shell :is(.betterld-topic-row .link-top-line, :is(.betterld-search-result, .betterld-external-search__card) a.search-link) {
   display: block;
   width: auto !important;
   height: auto !important;
@@ -5120,7 +5120,7 @@ body.betterld-shell :is(.betterld-topic-row, .betterld-search-result)[data-filte
 body.betterld-shell :is(.betterld-topic-row[data-filter-state="highlight"] > td, .betterld-search-result[data-filter-state="highlight"]) {
   border-color: var(--betterld-primary);
 }
-body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__title {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result, .betterld-external-search__card) .betterld-topic-card__title {
   display: inline;
   font-size: var(--betterld-list-title-size, 17px) !important;
   font-weight: 600 !important;
@@ -5255,7 +5255,7 @@ body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-
   z-index: 10;
   min-width: 176px;
 }
-body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) :is(button, a):focus-visible {
+body.betterld-shell :is(.betterld-topic-row, .betterld-search-result, .betterld-external-search__card) :is(button, a):focus-visible {
   outline: 2px solid var(--betterld-primary);
   outline-offset: 2px;
 }
@@ -5287,9 +5287,6 @@ body.betterld-has-library .betterld-action-status { bottom: 92px; }
 .betterld-external-search { margin-block: 24px; color: var(--betterld-on-surface); }
 .betterld-external-search h2 { font-size: 20px; }
 .betterld-external-search__results { display: flex; flex-direction: column; gap: 8px; }
-.betterld-external-search__card > a { color: var(--betterld-primary); font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
-.betterld-external-search__card p { margin-block: 12px; overflow-wrap: anywhere; }
-.betterld-external-search__card small,
 .betterld-external-search__status { color: var(--betterld-on-surface-variant); }
 
 html[data-betterld-topic-title-size="small"] { --betterld-list-title-size: 15px; }
@@ -5331,18 +5328,18 @@ body.betterld-search-page #main-outlet:has(.betterld-search-results) :is(.search
   margin-inline: 0 !important;
   padding-inline: 0;
 }
-body.betterld-shell .betterld-search-result {
+body.betterld-shell :is(.betterld-search-result, .betterld-external-search__card) {
   display: block;
   width: 100%;
   overflow: visible;
 }
 body.betterld-shell .betterld-search-result > .author { display: none; }
-body.betterld-shell .betterld-search-result .fps-topic {
+body.betterld-shell :is(.betterld-search-result, .betterld-external-search__card) .fps-topic {
   min-width: 0;
   width: 100%;
   padding: 0;
 }
-body.betterld-shell .betterld-search-result .blurb {
+body.betterld-shell :is(.betterld-search-result, .betterld-external-search__card) .blurb {
   max-width: none;
   width: auto;
   margin: 9px 0 0;
@@ -5371,7 +5368,7 @@ body.betterld-shell .betterld-search-result .ai-result__icon {
 body.betterld-shell .betterld-search-result:has(.ai-result__icon) a.search-link { padding-inline-end: 80px; }
 body.betterld-shell .betterld-search-result [hidden] { display: none !important; }
 body.betterld-shell .betterld-search-result .blurb .date,
-html[data-betterld-show-topic-excerpt="false"] .betterld-search-result .blurb { display: none !important; }
+html[data-betterld-show-topic-excerpt="false"] :is(.betterld-search-result, .betterld-external-search__card) .blurb { display: none !important; }
 
 /* 与首页同步尊重全站毛玻璃开关；末尾覆盖材质声明的同等优先级。 */
 html:is([data-betterld-frosted-glass="false"], [data-betterld-material="fallback"]) body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .betterld-external-search__card) {

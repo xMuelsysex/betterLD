@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  // 外部引擎只做 site: 限定检索；解析结果只保留 LinuxDo 主题链接。
+  // 外部引擎追加 site: 限定；保留实际返回的网页链接，展示时标明真实来源。
 
   function externalSearchConfig() {
     const external = globalThis.BETTERLD_CONFIG?.externalSearch;
@@ -105,7 +105,7 @@
     return (element?.textContent || "").replace(/\s+/g, " ").trim();
   }
 
-  // 返回 { results, filteredCount }；filteredCount 统计被剔除的候选条数（站外链接、非主题路径、重复主题）
+  // 返回 { results, filteredCount }；主题按 ID、其他网页按 URL 去重，只接受 HTTP(S) 链接。
   function parseResults(engine, html) {
     const entry = engineEntry(engine);
     const parser = parsers[engine];
@@ -129,17 +129,34 @@
     let filteredCount = 0;
     container.querySelectorAll(parser.items).forEach((item) => {
       const link = item.querySelector(parser.link);
-      const target = link ? parser.target(link.getAttribute("href") || "", entry.url) : "";
-      const id = topicId(target);
-      if (!id || seen.has(id)) {
+      const href = link?.getAttribute("href");
+      if (!href?.trim()) {
         filteredCount += 1;
         return;
       }
-      seen.add(id);
+      let url;
+      try {
+        url = new URL(parser.target(href, entry.url));
+      } catch {
+        filteredCount += 1;
+        return;
+      }
+      const title = textOf(link);
+      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || !title) {
+        filteredCount += 1;
+        return;
+      }
+      const id = topicId(url.href);
+      const key = id ? `topic:${id}` : `${url.origin}${url.pathname}${url.search}`;
+      if (seen.has(key)) {
+        filteredCount += 1;
+        return;
+      }
+      seen.add(key);
       results.push({
         id,
-        title: textOf(link),
-        href: `https://linux.do/t/topic/${id}`,
+        title,
+        href: url.href,
         excerpt: textOf(item.querySelector(parser.excerpt))
       });
     });
