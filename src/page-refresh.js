@@ -1686,8 +1686,9 @@
         && controller.usingDefaultSearchType && !controller.context && !controller.isPrivateMessage && !controller.isPMOnly);
       // 搜索命中帖的作者以原站搜索模型的 user_id 为准，不从用户名字符串反推。
       const authors = ready ? Object.fromEntries(model.posts.map((post) => [String(post.topic_id), post.user_id])) : {};
+      // resultCount 包含 AI 推荐及用户等其他结果，不能代表普通主题搜索是否命中。
       document.dispatchEvent(new CustomEvent("betterld:search-state", {
-        detail: JSON.stringify({ id, ready, query: ready ? term : "", empty: ready && controller.resultCount === 0, authors })
+        detail: JSON.stringify({ id, ready, query: ready ? term : "", empty: ready && model.posts.length === 0, authors })
       }));
     } catch (error) {
       document.dispatchEvent(new CustomEvent("betterld:search-state", { detail: JSON.stringify({ id, error: error.message }) }));
