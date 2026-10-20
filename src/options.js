@@ -781,7 +781,11 @@
     }
   }
 
+  const userPageAppearanceLabels = { material: "Material 3", original: "原版" };
+  const userPageAppearanceEnglishLabels = { material: "Material 3", original: "Original" };
+
   const enumLabels = {
+    ...Object.fromEntries(config.userPageAppearances.map(({ key }) => [key, userPageAppearanceLabels])),
     language: { "zh-CN": "简体中文", "en-US": "English" },
     themeMode: { auto: "跟随 LinuxDo", system: "跟随系统", light: "浅色", dark: "深色", scheduled: "按时间切换" },
     fontMode: { default: "系统默认", recommended: "推荐字体栈", custom: "自定义字体" },
@@ -811,6 +815,7 @@
   };
 
   const englishEnumLabels = {
+    ...Object.fromEntries(config.userPageAppearances.map(({ key }) => [key, userPageAppearanceEnglishLabels])),
     language: { "zh-CN": "Chinese (Simplified)", "en-US": "English" },
     wallpaperRemoteCacheDays: { "0": "Browser cache only", "1": "1 day", "7": "7 days", "30": "30 days" },
     themeMode: { auto: "Follow LinuxDo", system: "Follow system", light: "Light", dark: "Dark", scheduled: "Scheduled" },
@@ -841,6 +846,7 @@
   };
 
   const englishFieldLabels = {
+    ...Object.fromEntries(config.userPageAppearances.map(({ key, englishLabel }) => [key, `${englishLabel} appearance`])),
     externalSearchEngine: "External search (when site search is empty)",
     readingPanelBackgroundOpacity: "Reading panel background opacity",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
@@ -850,6 +856,9 @@
   };
 
   const staticTranslations = {
+    "活动与消息": "Activity and messages",
+    "各活动子页独立选择原版或 Material 3；消息样式覆盖全部消息分类。": "Choose Original or Material 3 for each activity page; the message style covers every message category.",
+    "独立切换此页列表与二级导航的样式；保留顶栏、壁纸、居中布局和原站操作。": "Choose this page’s list and secondary navigation style independently; keep the header, wallpaper, centered layout and native actions.",
     "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。": "Background strength of reply trees, author-filtered replies and standalone reading controls: 0% transparent, 100% solid. Does not change ordinary original posts, text or buttons.",
     "关闭 / Bing / DuckDuckGo。原站「相关结果」关闭且站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When the site’s Related results switch is off and site search is empty, search with site:linux.do and show only LinuxDo topics in the site search entry format. Enabling requires access to the chosen engine; search terms are sent to it.",
     "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。": "Choose Bing or DuckDuckGo and allow access in the browser permission dialog. If access was revoked, request it again below.",
@@ -1065,6 +1074,7 @@
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
     { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
 
+    ...config.userPageAppearances.map(({ key, label }) => ({ key, type: "select", label: `${label}外观`, help: "独立切换此页列表与二级导航的样式；保留顶栏、壁纸、居中布局和原站操作。" })),
     { key: "topicListAppearance", type: "select", label: "列表样式", help: "首页、搜索结果与帖子底部推荐统一选择美化后或原站样式；保留顶栏与壁纸设置。" },
     { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
     { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "显示主题发帖人。" },

@@ -12,6 +12,30 @@ const topicSortOrders = Object.freeze({
   created: "created"
 });
 
+const userPageAppearances = Object.freeze([
+  Object.freeze({ path: "activity", key: "userActivityAllAppearance", label: "全部活动", englishLabel: "All activity" }),
+  Object.freeze({ path: "activity/topics", key: "userActivityTopicsAppearance", label: "话题", englishLabel: "Topics" }),
+  Object.freeze({ path: "activity/replies", key: "userActivityRepliesAppearance", label: "回复", englishLabel: "Replies" }),
+  Object.freeze({ path: "activity/read", key: "userActivityReadAppearance", label: "已读", englishLabel: "Read" }),
+  Object.freeze({ path: "activity/drafts", key: "userActivityDraftsAppearance", label: "草稿", englishLabel: "Drafts" }),
+  Object.freeze({ path: "activity/likes-given", key: "userActivityLikesGivenAppearance", label: "赞", englishLabel: "Likes" }),
+  Object.freeze({ path: "activity/bookmarks", key: "userActivityBookmarksAppearance", label: "书签", englishLabel: "Bookmarks" }),
+  Object.freeze({ path: "activity/bookmarks-with-reminders", key: "userActivityBookmarkRemindersAppearance", label: "带提醒的书签", englishLabel: "Bookmarks with reminders" }),
+  Object.freeze({ path: "activity/pending", key: "userActivityPendingAppearance", label: "待审核帖子", englishLabel: "Pending posts" }),
+  Object.freeze({ path: "activity/payments", key: "userActivityPaymentsAppearance", label: "付款", englishLabel: "Payments" }),
+  Object.freeze({ path: "activity/shared-artifacts", key: "userActivitySharedArtifactsAppearance", label: "共享制品", englishLabel: "Shared artifacts" }),
+  Object.freeze({ path: "activity/assigned", key: "userActivityAssignedAppearance", label: "已指定", englishLabel: "Assigned" }),
+  Object.freeze({ path: "activity/boosts-given", key: "userActivityBoostsGivenAppearance", label: "Boosts", englishLabel: "Boosts" }),
+  Object.freeze({ path: "activity/reactions", key: "userActivityReactionsAppearance", label: "回应", englishLabel: "Reactions" }),
+  Object.freeze({ path: "activity/votes", key: "userActivityVotesAppearance", label: "投票", englishLabel: "Votes" }),
+  Object.freeze({ path: "activity/solved", key: "userActivitySolvedAppearance", label: "已解决", englishLabel: "Solved" }),
+  Object.freeze({ path: "activity/shared-ai-artifacts", key: "userActivitySharedAiArtifactsAppearance", label: "共享 AI 制品", englishLabel: "Shared AI artifacts" }),
+  Object.freeze({ path: "activity/shared-ai-conversations", key: "userActivitySharedAiConversationsAppearance", label: "共享 AI 对话", englishLabel: "Shared AI conversations" }),
+  Object.freeze({ path: "activity/portfolio", key: "userActivityPortfolioAppearance", label: "作品集", englishLabel: "Portfolio" }),
+  Object.freeze({ path: "messages", key: "userMessagesAppearance", label: "消息", englishLabel: "Messages" })
+]);
+const userPageAppearanceOptions = Object.freeze(["material", "original"]);
+
 const wallpaperDefaults = Object.freeze({
   wallpaper: "",
   wallpaperMode: wallpaperModes.none,
@@ -25,6 +49,7 @@ const wallpaperDefaults = Object.freeze({
 globalThis.BETTERLD_CONFIG = Object.freeze({
   homepagePath: "/",
   userProfilePath: "/u/",
+  userPageAppearances,
   topicSortOrderParam: "order",
   topicSortOrders,
   routePollMs: 500,
@@ -375,6 +400,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     fontScope: Object.freeze(["own", "managed"]),
     shadowMode: Object.freeze(["default", "none", "custom"]),
     topicListAppearance: Object.freeze(["material", "original"]),
+    ...Object.fromEntries(userPageAppearances.map(({ key }) => [key, userPageAppearanceOptions])),
     replyTreeNameMode: Object.freeze(["both", "nickname", "username"]),
     topicSortMode: Object.freeze(Object.keys(topicSortOrders)),
     topicTitleFontSize: Object.freeze(["responsive", "small", "base", "large"]),
@@ -495,6 +521,12 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
             "topicAuthorFontSize",
             "topicMetaFontSize"
           ]
+        },
+        {
+          id: "userPages",
+          title: "活动与消息",
+          description: "各活动子页独立选择原版或 Material 3；消息样式覆盖全部消息分类。",
+          keys: userPageAppearances.map(({ key }) => key)
         },
         {
           id: "replyTree",
@@ -735,6 +767,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
     showTopicPinnedState: true,
     showTopicWatchedState: true,
     topicListAppearance: "material",
+    ...Object.fromEntries(userPageAppearances.map(({ key }) => [key, "material"])),
     replyTreeNameMode: "both",
     userMarksEnabled: true,
     mediaBlockAutoplay: false,

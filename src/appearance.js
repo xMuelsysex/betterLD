@@ -135,8 +135,25 @@
     applyThemeTokens(settings, wallpaperColor);
   }
 
+  function userPageAppearance(settings) {
+    const match = location.pathname.match(/^\/u\/[^/]+\/(.*)/);
+    if (!match) return "";
+    const path = match[1].replace(/\/+$/, "");
+    const entry = config.userPageAppearances.find((item) => item.path === path
+      || (item.path === "messages" && path.startsWith("messages/")));
+    return entry ? settings[entry.key] : "";
+  }
+
+  function applyUserPageAppearance(settings) {
+    const mode = userPageAppearance(settings);
+    const root = document.documentElement;
+    if (mode) root.dataset.betterldUserPageAppearance = mode;
+    else delete root.dataset.betterldUserPageAppearance;
+  }
+
   // 首屏与即时设置共用同一份 Token 投影；这里不扫描或增强原站内容。
   function apply(settings, wallpaperColor) {
+    applyUserPageAppearance(settings);
     const root = document.documentElement;
     const materialSupported = Boolean(
       globalThis.CSS?.supports?.("backdrop-filter", "blur(1px)")
@@ -204,5 +221,5 @@
     applyColorMode(settings, wallpaperColor);
   }
 
-  globalThis.BETTERLD_APPEARANCE = Object.freeze({ apply, applyColorMode, applyThemeTokens });
+  globalThis.BETTERLD_APPEARANCE = Object.freeze({ apply, applyColorMode, applyThemeTokens, userPageAppearance, applyUserPageAppearance });
 })();

@@ -474,6 +474,11 @@
     return currentPath() === config.homepagePath;
   }
 
+  function topicListEnhancementEnabled() {
+    // 用户页保留原生信息与操作列，仅按独立设置切换 CSS 材质。
+    return !appearance.userPageAppearance(state.currentSettings) && state.currentSettings.topicListAppearance === "material";
+  }
+
   function isUserSpaceTopicListPage() {
     return /^\/u\/[^/]+\/activity\/(?:topics|read)$/.test(currentPath());
   }
@@ -1995,7 +2000,7 @@
   }
 
   function handleTopicCardClick(event, card, topicUrl) {
-    if (state.currentSettings.topicListAppearance !== "material") return;
+    if (!topicListEnhancementEnabled()) return;
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
     }
@@ -2587,7 +2592,7 @@
       const authorAvatar = topicAvatarUrl(metadata.author_avatar_template, 48) || undefined;
       globalThis.BETTERLD_LIBRARY.updateMetadata([{ ...metadata, authorAvatar }]);
     }
-    if (state.currentSettings.topicListAppearance !== "material") return new Set();
+    if (!topicListEnhancementEnabled()) return new Set();
     // 桥已完成身份投影；预载与模型计数共用同一统计展示规则。
     const entries = payload.entries.map(({ counts, ...entry }) => ({ ...entry, stats: topicStats(counts) }));
     if (!entries.length || `${location.pathname}${location.search}` !== route || state.metadataRoute !== route || state.metadataGeneration !== generation) {
@@ -2603,7 +2608,7 @@
   }
 
   function syncTopicListMetadata() {
-    if (!pageActive() || (state.currentSettings.topicListAppearance !== "material" && !topicIdFromPath())) return;
+    if (!pageActive() || (!topicListEnhancementEnabled() && !topicIdFromPath())) return;
     if (state.topicListSync) {
       state.topicListSyncAgain = true;
       return state.topicListSync;
@@ -3252,7 +3257,7 @@
         const metadataApplied = await metadataSync;
         if (location.href !== href) return;
         syncFloatingActions();
-        if (state.currentSettings.topicListAppearance === "material" && managedCards().length && metadataApplied !== true) {
+        if (topicListEnhancementEnabled() && managedCards().length && metadataApplied !== true) {
           showActionStatus("页面已刷新，主题信息尚未同步完成");
         } else {
           showActionStatus("已更新当前页面", "success");
@@ -3366,7 +3371,7 @@
     syncTopicExport();
     syncExternalSearch();
     if (lists) {
-      if (state.currentSettings.topicListAppearance === "original") restoreOriginalTopicLists();
+      if (!topicListEnhancementEnabled()) restoreOriginalTopicLists();
       else if (isSearchPage()) syncNativeSearchResults();
       else if (isTopicListPage() || topicIdFromPath()) syncNativeTopicLists();
       globalThis.BETTERLD_LIBRARY.sync();
@@ -3493,6 +3498,7 @@
     document.body?.classList.toggle("betterld-tags-page", tagsPage);
     document.documentElement.classList.toggle("betterld-search-page", isSearchPage());
     document.body?.classList.toggle("betterld-search-page", isSearchPage());
+    appearance.applyUserPageAppearance(state.currentSettings);
     applyColorMode();
     syncNavigationState();
     applyChromeSettings();
@@ -7498,7 +7504,7 @@
     if (!sources.length) return;
     // 新行及原站分批填入的标题/状态当轮增强，不等尾部扫描补齐。
     const rows = new Set();
-    if (state.currentSettings.topicListAppearance === "material" && (isTopicListPage() || isSearchPage() || topicIdFromPath())) {
+    if (topicListEnhancementEnabled() && (isTopicListPage() || isSearchPage() || topicIdFromPath())) {
       const searchContainers = new Set();
       const containers = new Set();
       const rowSelector = ".topic-list-item, .latest-topic-list-item, .fps-result";

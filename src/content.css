@@ -663,16 +663,16 @@ body.betterld-shell .navigation-container {
 }
 
 /* 导航已用底色标识选中项，移除原站及主题的重复下划线。 */
-body.betterld-shell :is(.nav-pills, .messages-nav) {
+body.betterld-shell :is(.nav-pills:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary *)), .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) {
   --d-nav-underline-height: 0px;
 }
 
-body.betterld-shell :is(.nav-pills, .messages-nav) > li > :is(a, button)::after {
+body.betterld-shell :is(.nav-pills:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary *)), .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > :is(a, button)::after {
   content: none !important;
   display: none !important;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) {
   min-width: 0;
   max-width: 100%;
   height: 48px;
@@ -692,13 +692,13 @@ body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pil
   scrollbar-width: none;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav)::-webkit-scrollbar {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav)))::-webkit-scrollbar {
   display: none;
 }
 
 /* 导航已位于材质容器内部时，由外层绘制一次表面。 */
 body.betterld-shell #main-outlet > .list-controls #navigation-bar.nav.nav-pills,
-body.betterld-shell #main-outlet .user-main .user-navigation .nav-pills {
+body.betterld-shell #main-outlet .user-main .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills {
   border: 0;
   background: transparent !important;
   box-shadow: none;
@@ -706,14 +706,14 @@ body.betterld-shell #main-outlet .user-main .user-navigation .nav-pills {
   backdrop-filter: none;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li {
   display: flex;
   flex: 0 0 auto;
   height: 40px;
   margin: 0 !important;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a {
   display: flex !important;
   align-items: center;
   justify-content: center;
@@ -731,27 +731,27 @@ body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pil
   transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard);
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li:not(.active) > a:hover,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a:not(.active):hover {
   background: color-mix(in srgb, var(--betterld-primary) 14%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li.active > a,
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a.active {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li.active > a,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a.active {
   background: var(--betterld-primary) !important;
   box-shadow: var(--betterld-shadow-active);
   color: var(--betterld-on-primary) !important;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:focus-visible {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: -3px;
 }
 
 /* 图标跟随文字颜色：站点只给 .d-icon 设了固定色（选中态用主色），
    在 betterLD 的主色胶囊上会与背景同色而完全看不见。 */
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a .d-icon {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a .d-icon {
   color: currentColor !important;
 }
 
@@ -1322,8 +1322,8 @@ html[data-betterld-wallpaper-state] body #main-outlet > .list-controls {
 
 /* 内容卡与浮层共用材质声明；只覆盖外壳，保留正文与第三方内容。 */
 body.betterld-shell :where(
-  .badge-card, .user-stream .item, .user-stream .user-stream-item, .follow-stream-item,
-  .post-list .post-list-item, .nested-post.--depth-0, .nested-view__topic-map,
+  .badge-card, .user-stream .item:not(:where(html[data-betterld-user-page-appearance] .user-main .user-content *)), .user-stream .user-stream-item:not(:where(html[data-betterld-user-page-appearance] .user-main .user-content *)), .follow-stream-item,
+  .post-list .post-list-item:not(:where(html[data-betterld-user-page-appearance] .user-main .user-content *)), .nested-post.--depth-0, .nested-view__topic-map,
   .discourse-boosts__bubble,
   .show-badge .badge-title, .show-badge .badge-user,
   :is(.login-fullpage, .signup-fullpage, .invites-show, .password-reset-page) :is(.login-body, .signup-body),
@@ -1941,7 +1941,7 @@ html[data-betterld-topic-preview="true"] body.betterld-shell #reply-control:not(
 }
 
 /* 资料页复用同一材质；通知列表仍由 Discourse 管理点击、筛选和已读状态。 */
-html[data-betterld-wallpaper-state] body .user-main :is(.collapsed-info .details, .user-navigation, #user-content) {
+html[data-betterld-wallpaper-state] body .user-main :is(.collapsed-info .details, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)), :is(#user-content, html[data-betterld-user-page-appearance="material"] .user-portfolio):not(:where(html[data-betterld-user-page-appearance="original"] .user-main .user-content))) {
   border: 1px solid rgb(var(--betterld-outline-rgb) / 0.28);
   border-radius: var(--betterld-radius-lg);
   background: rgb(var(--betterld-surface-container-rgb) / 0.72) !important;
@@ -1954,28 +1954,28 @@ html[data-betterld-wallpaper-state] body .user-main .collapsed-info .details {
   padding: 12px 16px;
 }
 
-html[data-betterld-wallpaper-state] body .user-main .user-navigation {
+html[data-betterld-wallpaper-state] body .user-main .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) {
   margin-top: 12px;
   padding: 4px 8px;
 }
 
-html[data-betterld-wallpaper-state] body .user-main .user-navigation .nav-pills > li > a {
+html[data-betterld-wallpaper-state] body .user-main .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills > li > a {
   border: 0 !important;
   border-radius: var(--betterld-radius-md);
   color: var(--betterld-on-surface-variant) !important;
 }
 
-html[data-betterld-wallpaper-state] body .user-main .user-navigation .nav-pills > li > a.active {
+html[data-betterld-wallpaper-state] body .user-main .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills > li > a.active {
   background: color-mix(in srgb, var(--betterld-primary) 20%, transparent) !important;
   color: var(--betterld-primary) !important;
 }
 
-html[data-betterld-wallpaper-state] body .user-main .user-navigation .nav-pills > li > a:focus-visible {
+html[data-betterld-wallpaper-state] body .user-main .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills > li > a:focus-visible {
   outline: var(--betterld-focus-width) solid var(--betterld-primary);
   outline-offset: -2px;
 }
 
-html[data-betterld-wallpaper-state] body .user-main #user-content {
+html[data-betterld-wallpaper-state] body .user-main :is(#user-content, html[data-betterld-user-page-appearance="material"] .user-portfolio):not(:where(html[data-betterld-user-page-appearance="original"] .user-main .user-content)) {
   margin-top: 16px !important;
   padding: 16px;
 }
@@ -3254,16 +3254,16 @@ body.betterld-shell #global-notice-alert-global-notice:hover {
   transform: translateY(-1px) !important;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) {
   animation: betterld-surface-enter 360ms ease-out 40ms backwards;
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a {
   transition: background var(--betterld-motion-standard), color var(--betterld-motion-standard), box-shadow var(--betterld-motion-standard), transform var(--betterld-motion-standard);
 }
 
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
-body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover {
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li:not(.active) > a:hover,
+body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a:not(.active):hover {
   transform: translateY(-1px) !important;
 }
 
@@ -3307,7 +3307,7 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
 
 @supports not (backdrop-filter: blur(1px)) {
   body.betterld-shell #global-notice-alert-global-notice,
-  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))),
   body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable,
   body.betterld-shell #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
   body.betterld-topic-page .category-heading,
@@ -3327,7 +3327,7 @@ body.betterld-categories-page .category-list > tbody > tr:hover {
 
 html[data-betterld-material="fallback"] body.betterld-shell :where(
   #global-notice-alert-global-notice,
-  :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
+  :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))),
   .show-more.has-topics > a.alert.alert-info.clickable,
   #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
   .category-heading,
@@ -3353,7 +3353,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
 
   body.betterld-shell :where(
     #global-notice-alert-global-notice,
-    :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav),
+    :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))),
     .show-more.has-topics > a.alert.alert-info.clickable,
     #main-outlet-wrapper #main-outlet > .list-controls.list-controls,
     .category-heading,
@@ -3385,8 +3385,8 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
   }
 
   body.betterld-shell #global-notice-alert-global-notice:hover,
-  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li:not(.active) > a:hover,
-  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a:not(.active):hover,
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li:not(.active) > a:hover,
+  body.betterld-shell :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a:not(.active):hover,
   body.betterld-shell .show-more.has-topics > a.alert.alert-info.clickable:hover,
   body.betterld-shell .topic-create-button__combo:hover,
   body:is(.betterld-categories-page) .category-list > tbody > tr:hover,
@@ -3399,7 +3399,7 @@ html[data-betterld-material="fallback"] body.betterld-shell :where(
   body.betterld-shell :where(
     #global-notice-alert-global-notice,
     #global-notice-alert-global-notice a,
-    :is(#navigation-bar.nav.nav-pills, .user-navigation .nav-pills, .messages-nav) > li > a,
+    :is(#navigation-bar.nav.nav-pills, .user-navigation:not(:where(html[data-betterld-user-page-appearance="original"] .user-navigation-secondary)) .nav-pills, .messages-nav:not(:where(html[data-betterld-user-page-appearance="original"] .messages-nav))) > li > a,
     .show-more.has-topics > a.alert.alert-info.clickable,
     .topic-create-button__combo,
     .topic-create-button__combo > .d-combo-button-button,
@@ -5050,6 +5050,59 @@ body.betterld-shell #main-outlet-wrapper #main-outlet:has(.user-main) > :is(#mai
   padding-inline: 0;
 }
 
+/* 活动与消息只美化原生列表，不接管首页信息栏或隐藏业务操作列。 */
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list .topic-list-body {
+  display: table-row-group !important;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list tr.topic-list-item {
+  display: table-row !important;
+  height: auto;
+  padding: 0 !important;
+  grid-template-columns: none;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list .topic-list-item > td {
+  display: table-cell !important;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list :is(th, td).main-link {
+  width: 100%;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list th {
+  background: transparent;
+  border: 0;
+  color: var(--betterld-on-surface-variant);
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.user-stream-item, .shared-artifacts__card, .shared-conversations__card) {
+  border: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
+  border-radius: var(--betterld-radius-lg);
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.stream-topic-title .title a, .topic-list .main-link a.title) {
+  color: var(--betterld-on-surface);
+  font-size: var(--betterld-list-title-size, 17px);
+  font-weight: 600;
+  line-height: 1.5;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.post-list-item__metadata, .topic-list .num) {
+  color: var(--betterld-on-surface-variant);
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .post-list-item__details { min-width: 0; }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .post-list-item__metadata { flex-wrap: wrap; gap: 8px; }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .user-stream-item .excerpt { margin-block-start: 12px; }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .empty-state__container { color: var(--betterld-on-surface-variant); }
+
 /* 原生主题列表：保留站点行、排序与分页，信息栏是唯一新增的内容。 */
 body.betterld-shell .betterld-topic-list {
   width: 100%;
@@ -5101,6 +5154,7 @@ body.betterld-shell .betterld-topic-list .topic-list-item {
   border: 0;
   box-shadow: none;
 }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.topic-list-item > td, .user-stream-item, .shared-artifacts__card, .shared-conversations__card),
 body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .betterld-external-search__card) {
   position: relative;
   z-index: 0;
@@ -5111,20 +5165,27 @@ body.betterld-shell :is(.betterld-topic-row > td, .betterld-search-result, .bett
   backdrop-filter: blur(var(--betterld-surface-blur)) saturate(135%);
   transition: background var(--betterld-card-motion);
 }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list-item > td:first-child,
 body.betterld-shell .betterld-topic-row > td:first-child {
   border-inline-start: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
   border-start-start-radius: 20px;
   border-end-start-radius: 20px;
 }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list-item > td:last-child,
 body.betterld-shell .betterld-topic-row > td:last-child,
 body.betterld-shell .betterld-topic-row > td.main-link {
   border-inline-end: 1px solid rgb(var(--betterld-outline-rgb) / 0.22);
   border-start-end-radius: 20px;
   border-end-end-radius: 20px;
 }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.topic-list-item:is(:hover, :focus-within) > td, .user-stream-item:is(:hover, :focus-within)),
 body.betterld-shell :is(.betterld-topic-row:is(:hover, :focus-within) > td, .betterld-search-result:is(:hover, :focus-within), .betterld-external-search__card:is(:hover, :focus-within)) {
   background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity)));
 }
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list-item > td:not(.main-link) {
+  padding-inline: 10px !important;
+}
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.topic-list-item:focus-within > td, .user-stream-item:focus-within, .shared-artifacts__card:focus-within, .shared-conversations__card:focus-within) { z-index: 1; }
 /* 单元格的磨砂创建独立绘制层，聚焦菜单所在行保持在后续行之上。 */
 body.betterld-shell :is(.betterld-topic-row:focus-within > td, .betterld-search-result:focus-within) { z-index: 1; }
 body.betterld-shell :is(.betterld-topic-row, .betterld-search-result)[hidden] { display: none !important; }
