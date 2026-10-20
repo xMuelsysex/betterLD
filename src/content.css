@@ -1782,7 +1782,8 @@ body.betterld-shell #main-outlet :is(.user-card, .group-card, .category-card):em
 
 /* 正文跨过侧栏轨道，以整个视口为中线；两侧对称预留侧栏与时间轴空间。 */
 body.betterld-shell #main-outlet-wrapper:has(.container.posts:is([data-betterld-reply-tree-active="true"], [data-betterld-reading-active="true"])),
-body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet-wrapper:has(.betterld-topic-list, .betterld-search-results) {
+body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet-wrapper:has(.betterld-topic-list, .betterld-search-results),
+body.betterld-shell #main-outlet-wrapper:has(.user-main) {
   padding-inline: 0;
 }
 
@@ -5001,8 +5002,9 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   }
 }
 
-/* 首页和主题列表跨过侧栏轨道，按整个视口中线布局。 */
-body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet:has(.betterld-topic-list, .betterld-search-results) {
+/* 列表与个人资料页跨过侧栏轨道，按整个视口中线布局。 */
+body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet:has(.betterld-topic-list, .betterld-search-results),
+body.betterld-shell #main-outlet:has(.user-main) {
   position: relative;
   grid-column: 1 / -1 !important;
   width: calc(100% - 48px) !important;
@@ -5013,15 +5015,17 @@ body:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outle
 }
 
 @media (min-width: 768px) {
-  body.has-sidebar-page:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet:has(.betterld-topic-list, .betterld-search-results) {
+  body.has-sidebar-page:is(.betterld-home, .betterld-topic-page, .betterld-search-page) #main-outlet:has(.betterld-topic-list, .betterld-search-results),
+  body.betterld-shell.has-sidebar-page #main-outlet:has(.user-main) {
     /* 可见侧栏在左或右都对称留位，列表与侧栏保持分离。 */
     width: calc(100% - (var(--d-sidebar-width) + 16px) * 2) !important;
   }
 }
 
-/* 首页及 latest 等列表路由与帖子阅读区共用外轨，上下模块铺满。 */
+/* 列表和个人资料页与帖子阅读区共用外轨，上下模块铺满。 */
 @media (min-width: 768px) {
-  html.desktop-view body:is(.betterld-home, .betterld-topic-page) #main-outlet-wrapper #main-outlet:has(.betterld-topic-list) {
+  html.desktop-view body:is(.betterld-home, .betterld-topic-page) #main-outlet-wrapper #main-outlet:has(.betterld-topic-list),
+  html.desktop-view body.betterld-shell #main-outlet-wrapper #main-outlet:has(.user-main) {
     width: min(var(--betterld-topic-detail-width), calc(100% - max(calc(var(--d-sidebar-width) + 16px), var(--betterld-topic-timeline-space)) * 2)) !important;
   }
 }
@@ -5034,6 +5038,15 @@ body:is(.betterld-home, .betterld-topic-page) #main-outlet-wrapper #main-outlet:
 }
 
 body:is(.betterld-home, .betterld-topic-page) #main-outlet-wrapper #main-outlet:has(.betterld-topic-list) > :is(#main-container, .welcome-banner, .above-main-container-outlet, .container.list-container.--topic-list) {
+  padding-inline: 0;
+}
+
+/* 用户资料内壳不再单独限宽；保留资料、导航及内容各自的内部排布。 */
+body.betterld-shell #main-outlet-wrapper #main-outlet:has(.user-main) > :is(#main-container, .container:has(> .user-main)) {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-inline: 0 !important;
   padding-inline: 0;
 }
 
