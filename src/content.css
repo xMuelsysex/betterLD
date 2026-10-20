@@ -5050,16 +5050,16 @@ body.betterld-shell #main-outlet-wrapper #main-outlet:has(.user-main) > :is(#mai
   padding-inline: 0;
 }
 
-/* 活动与消息只美化原生列表，不接管首页信息栏或隐藏业务操作列。 */
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list {
+/* 专用列表保留业务列；普通活动主题列表直接复用下方首页卡片。 */
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0 8px;
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list .topic-list-body {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) .topic-list-body {
   display: table-row-group !important;
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list tr.topic-list-item {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) tr.topic-list-item {
   display: table-row !important;
   height: auto;
   padding: 0 !important;
@@ -5069,13 +5069,13 @@ html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-ma
   box-shadow: none;
   backdrop-filter: none;
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list .topic-list-item > td {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) .topic-list-item > td {
   display: table-cell !important;
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list :is(th, td).main-link {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) :is(th, td).main-link {
   width: 100%;
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list th {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) th {
   background: transparent;
   border: 0;
   color: var(--betterld-on-surface-variant);
@@ -5102,6 +5102,14 @@ html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-ma
 html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .post-list-item__metadata { flex-wrap: wrap; gap: 8px; }
 html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .user-stream-item .excerpt { margin-block-start: 12px; }
 html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .empty-state__container { color: var(--betterld-on-surface-variant); }
+
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main #user-content:has(.betterld-topic-list) {
+  padding: 0;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none;
+  backdrop-filter: none;
+}
 
 /* 原生主题列表：保留站点行、排序与分页，信息栏是唯一新增的内容。 */
 body.betterld-shell .betterld-topic-list {
@@ -5182,7 +5190,7 @@ html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-ma
 body.betterld-shell :is(.betterld-topic-row:is(:hover, :focus-within) > td, .betterld-search-result:is(:hover, :focus-within), .betterld-external-search__card:is(:hover, :focus-within)) {
   background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb) / var(--betterld-card-opacity)));
 }
-html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list-item > td:not(.main-link) {
+html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content .topic-list:not(.betterld-topic-list) .topic-list-item > td:not(.main-link) {
   padding-inline: 10px !important;
 }
 html[data-betterld-user-page-appearance="material"] body.betterld-shell .user-main .user-content :is(.topic-list-item:focus-within > td, .user-stream-item:focus-within, .shared-artifacts__card:focus-within, .shared-conversations__card:focus-within) { z-index: 1; }

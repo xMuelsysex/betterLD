@@ -475,12 +475,13 @@
   }
 
   function topicListEnhancementEnabled() {
-    // 用户页保留原生信息与操作列，仅按独立设置切换 CSS 材质。
-    return !appearance.userPageAppearance(state.currentSettings) && state.currentSettings.topicListAppearance === "material";
+    const userAppearance = appearance.userPageAppearance(state.currentSettings);
+    if (userAppearance) return isUserSpaceTopicListPage() && userAppearance === "material";
+    return state.currentSettings.topicListAppearance === "material";
   }
 
   function isUserSpaceTopicListPage() {
-    return /^\/u\/[^/]+\/activity\/(?:topics|read)$/.test(currentPath());
+    return /^\/u\/[^/]+\/activity\/(?:topics|read|votes)$/.test(currentPath());
   }
 
   function isTopicListPage() {
@@ -498,14 +499,15 @@
     return currentPath() === "/categories";
   }
 
-  // 热门与最高有各自的排序语义，不接管
+  // 热门、最高及用户投票列表保留各自的排序语义。
   function hasOwnTopicRanking() {
     const path = currentPath();
-    return /^\/(?:hot|top)(?:\/|$)/.test(path) || /^\/l\/(?:hot|top)(?:\/|$)/.test(path);
+    return /^\/(?:hot|top)(?:\/|$)/.test(path) || /^\/l\/(?:hot|top)(?:\/|$)/.test(path)
+      || /^\/u\/[^/]+\/activity\/votes$/.test(path);
   }
 
   function isSortableTopicListPage() {
-    return isUserSpaceTopicListPage() || (isTopicListPage() && !hasOwnTopicRanking());
+    return isTopicListPage() && !hasOwnTopicRanking();
   }
 
   function topicIdFromPath(pathname = location.pathname) {
