@@ -70,6 +70,8 @@
     metadataRateLimitFailures: 0,
     topicListMetadata: new Map(),
     preloadedTopicListSeeded: false,
+    topicTimeFormatter: null,
+    topicTimeFormatterKey: "",
     topicLinks: new WeakSet(),
     topicListSync: null,
     topicListSyncAgain: false,
@@ -2416,7 +2418,8 @@
         authorAvatar: String(topic.creator_avatar_template || users.get(posters[0]?.user_id)?.avatar_template || ""),
         author: (typeof topic.creator === "string" ? cleanText(topic.creator) : "")
           || cleanText(users.get(posters[0]?.user_id)?.username),
-        activityAt: cleanText(topic.last_posted_at || topic.bumped_at || topic.created_at),
+        activityAt: cleanText(topic.last_posted_at || topic.bumped_at),
+        createdAt: cleanText(topic.created_at),
         stats: topicStats(topic),
         participants: posters
           .map((poster) => users.get(poster.user_id))
@@ -2550,6 +2553,7 @@
       if (card.dataset.filterActivity !== String(Date.parse(metadata.activityAt))) setTopicActivity(card, metadata.activityAt);
       applied = true;
     }
+    setTopicTimes(card, metadata);
     if (metadata.stats?.length) {
       setTopicStats(card, metadata.stats);
       applied = true;
@@ -2569,7 +2573,10 @@
     });
     document.querySelectorAll(".betterld-search-result").forEach((row) => {
       const metadata = state.topicListMetadata.get(row.dataset.topicId);
-      if (metadata) setTopicStats(row, metadata.stats);
+      if (metadata) {
+        setTopicStats(row, metadata.stats);
+        setTopicTimes(row, metadata);
+      }
       const badge = row.querySelector('[data-betterld-badge="watched"]');
       if (badge) badge.hidden = !metadata?.watched;
     });
@@ -2654,14 +2661,47 @@
   function setTopicActivity(card, activityAt) {
     const timestamp = activityAt ? Date.parse(activityAt) : Number.NaN;
     card.dataset.filterActivity = Number.isFinite(timestamp) ? String(timestamp) : "";
-    const time = card.querySelector(".betterld-topic-row__time");
-    if (time && Number.isFinite(timestamp)) {
-      time.dateTime = activityAt;
-      time.title = new Date(timestamp).toLocaleString();
-      time.textContent = `活跃于 ${replyTreeRelativeTime(timestamp)}`;
-      time.hidden = false;
-    }
     applyCardFilter(card);
+  }
+
+  function formatTopicTime(timestamp) {
+    const { topicTimeZone, topicTimeHourCycle } = state.currentSettings;
+    const key = `${topicTimeZone}/${topicTimeHourCycle}`;
+    if (state.topicTimeFormatterKey !== key) {
+      state.topicTimeFormatter = new Intl.DateTimeFormat(config.topicTimeFormat.locale, {
+        calendar: config.topicTimeFormat.calendar,
+        numberingSystem: config.topicTimeFormat.numberingSystem,
+        timeZone: topicTimeZone,
+        hourCycle: topicTimeHourCycle,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit"
+      });
+      state.topicTimeFormatterKey = key;
+    }
+    const parts = Object.fromEntries(state.topicTimeFormatter.formatToParts(timestamp).map(({ type, value }) => [type, value]));
+    return `${parts.year}/${parts.month}/${parts.day} ${parts.dayPeriod ? `${parts.dayPeriod} ` : ""}${parts.hour}:${parts.minute}:${parts.second}`;
+  }
+
+  function setTopicTimes(card, metadata) {
+    const times = card.querySelector(".betterld-topic-row__times");
+    if (!times) return;
+    for (const [part, value, label] of [["activity", metadata.activityAt, "活跃于"], ["created", metadata.createdAt, "发布于"]]) {
+      const time = times.querySelector(`[data-betterld-meta-part="${part}"]`);
+      const timestamp = value ? Date.parse(value) : Number.NaN;
+      time.hidden = !Number.isFinite(timestamp);
+      if (time.hidden) {
+        time.removeAttribute("datetime");
+        time.removeAttribute("title");
+        time.textContent = "";
+        continue;
+      }
+      const text = `${label} ${formatTopicTime(timestamp)}`;
+      const title = `${text}（${state.currentSettings.topicTimeZone}）`;
+      if (time.dateTime !== value) time.dateTime = value;
+      if (time.title !== title) time.title = title;
+      if (time.textContent !== text) time.textContent = text;
+    }
+    times.hidden = !times.querySelector("time:not([hidden])");
   }
 
   function setAuthor(card, author, stateName) {
@@ -3290,9 +3330,14 @@
     avatar.setAttribute("aria-label", "查看作者");
     const author = createElement("a", "betterld-topic-card__author trigger-user-card");
     author.hidden = true;
-    const time = createElement("time", "betterld-topic-row__time");
-    time.dataset.betterldMetaPart = "activity";
-    time.hidden = true;
+    const times = createElement("span", "betterld-topic-row__times");
+    times.hidden = true;
+    for (const part of ["activity", "created"]) {
+      const time = createElement("time", "betterld-topic-row__time");
+      time.dataset.betterldMetaPart = part;
+      time.hidden = true;
+      times.append(time);
+    }
     const participants = createElement("span", "betterld-topic-card__participants");
     participants.dataset.betterldTopicParticipants = "true";
     const posters = row.querySelector(".posters");
@@ -3305,7 +3350,7 @@
     status.hidden = true;
     const actions = createElement("span", "betterld-topic-row__actions");
     actions.append(stats, status, createCardMenu(row, row, topic));
-    info.append(avatar, author, time, participants, actions);
+    info.append(avatar, author, times, participants, actions);
     main.append(watched, info);
     return info;
   }
@@ -3429,10 +3474,10 @@
     if (Number.isFinite(activity) && row.dataset.filterActivity !== String(activity)) setTopicActivity(row, activityAt);
     if (!Number.isFinite(activity)) {
       row.dataset.filterActivity = "";
-      info.querySelector(".betterld-topic-row__time").hidden = true;
     }
     const metadata = state.topicListMetadata.get(topic.id);
     if (metadata) setTopicStats(row, metadata.stats);
+    setTopicTimes(row, metadata || {});
     const watched = main.querySelector('[data-betterld-badge="watched"]');
     const unwatched = !state.topicListMetadata.get(topic.id)?.watched;
     if (watched.hidden !== unwatched) watched.hidden = unwatched;

@@ -1634,7 +1634,8 @@
       authorAvatar: creatorAvatar || stringOrEmpty(firstPosterUser?.avatar_template ?? firstPosterUser?.avatarTemplate),
       author: cleanText(topic.creator?.username) || cleanText(firstPosterUser?.username),
       activityAt: cleanText(isoOrEmpty(topic.last_posted_at ?? topic.lastPostedAt)
-        || isoOrEmpty(topic.bumped_at ?? topic.bumpedAt) || isoOrEmpty(topic.created_at ?? topic.createdAt)),
+        || isoOrEmpty(topic.bumped_at ?? topic.bumpedAt)),
+      createdAt: cleanText(isoOrEmpty(topic.created_at ?? topic.createdAt)),
       counts: {
         posts_count: numberOrNull(topic.posts_count ?? topic.postsCount),
         reply_count: numberOrNull(topic.reply_count ?? topic.replyCount),

@@ -5259,7 +5259,14 @@ body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-
   font-size: var(--betterld-list-author-size, 13px);
   font-weight: 500;
 }
-body.betterld-shell .betterld-topic-row__time { font-size: inherit; }
+body.betterld-shell .betterld-topic-row__times {
+  display: inline-flex;
+  flex-direction: column;
+}
+body.betterld-shell .betterld-topic-row__time {
+  font-size: inherit;
+  white-space: nowrap;
+}
 body.betterld-shell :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__participants {
   display: inline-flex;
   align-items: center;
@@ -5345,8 +5352,8 @@ html[data-betterld-show-topic-avatar="false"] :is(.betterld-topic-row, .betterld
 html[data-betterld-show-topic-author="false"] :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-card__author,
 html[data-betterld-show-topic-category="false"] :is(.betterld-topic-row, .betterld-search-result) .badge-category__wrapper,
 html[data-betterld-show-topic-tags="false"] :is(.betterld-topic-row, .betterld-search-result) .discourse-tags,
-html[data-betterld-show-topic-meta="false"] :is(.betterld-topic-row, .betterld-search-result) :is(.betterld-topic-row__time, .betterld-topic-row__stats),
-html[data-betterld-show-topic-activity-time="false"] :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-row__time,
+html[data-betterld-show-topic-meta="false"] :is(.betterld-topic-row, .betterld-search-result) :is(.betterld-topic-row__times, .betterld-topic-row__stats),
+html[data-betterld-show-topic-activity-time="false"] :is(.betterld-topic-row, .betterld-search-result) .betterld-topic-row__times,
 html[data-betterld-show-topic-unread-state="false"] :is(.betterld-topic-row, .betterld-search-result) :is(.badge-notification, .new-topic),
 html[data-betterld-show-topic-pinned-state="false"] :is(.betterld-topic-row, .betterld-search-result) .topic-status .d-icon-thumbtack {
   display: none !important;
@@ -5385,7 +5392,7 @@ html[data-betterld-topic-meta-size="large"] { --betterld-list-meta-size: 14px; }
     inset-inline-end: 12px;
   }
   body.betterld-shell .betterld-topic-row__stats { gap: 8px; }
-  body.betterld-shell .betterld-topic-row__time { flex-basis: calc(100% - 40px); }
+  body.betterld-shell .betterld-topic-row__times { flex-basis: calc(100% - 40px); }
 }
 
 /* 搜索原生结果：标题、作者头像、摘要/命中高亮和楼层链接原样保留。 */

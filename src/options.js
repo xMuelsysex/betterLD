@@ -794,6 +794,8 @@
     topicListAppearance: { material: "美化后", original: "美化前（原站样式）" },
     replyTreeNameMode: { both: "昵称和用户名", nickname: "仅昵称", username: "仅用户名" },
     topicSortMode: { activity: "最新回复", created: "发布时间" },
+    topicTimeZone: { "Asia/Shanghai": "中国时间（Asia/Shanghai）", UTC: "协调世界时（UTC）" },
+    topicTimeHourCycle: { h23: "24 小时制", h12: "12 小时制" },
     topicTitleFontSize: { responsive: "响应式", small: "小", base: "标准", large: "大" },
     topicAuthorFontSize: { small: "小", base: "标准", large: "大" },
     topicMetaFontSize: { small: "小", base: "标准", large: "大" },
@@ -825,6 +827,8 @@
     topicListAppearance: { material: "Beautified", original: "Original site style" },
     replyTreeNameMode: { both: "Nickname and username", nickname: "Nickname only", username: "Username only" },
     topicSortMode: { activity: "Latest reply", created: "Publish time" },
+    topicTimeZone: { "Asia/Shanghai": "China time (Asia/Shanghai)", UTC: "Coordinated Universal Time (UTC)" },
+    topicTimeHourCycle: { h23: "24-hour", h12: "12-hour" },
     topicTitleFontSize: { responsive: "Responsive", small: "Small", base: "Base", large: "Large" },
     topicAuthorFontSize: { small: "Small", base: "Base", large: "Large" },
     topicMetaFontSize: { small: "Small", base: "Base", large: "Large" },
@@ -847,6 +851,9 @@
 
   const englishFieldLabels = {
     ...Object.fromEntries(config.userPageAppearances.map(({ key, englishLabel }) => [key, `${englishLabel} appearance`])),
+    showTopicActivityTime: "Show activity and publish times",
+    topicTimeZone: "List time zone",
+    topicTimeHourCycle: "Time format",
     externalSearchEngine: "External search (when site search is empty)",
     readingPanelBackgroundOpacity: "Reading panel background opacity",
     language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
@@ -856,6 +863,9 @@
   };
 
   const staticTranslations = {
+    "在原时间位置上下显示主题最近活跃和发布时间。": "Show the topic’s last activity above its publish time in the existing time position.",
+    "默认中国时间；按所选 IANA 时区转换日期与时间，自动遵循当地夏令时。": "Defaults to China time. Convert dates and times to the selected IANA time zone, including local daylight saving time.",
+    "24 小时制或带上午／下午的 12 小时制。": "24-hour time or 12-hour time with an AM/PM indicator.",
     "活动与消息": "Activity and messages",
     "各活动子页独立选择原版或 Material 3；消息样式覆盖全部消息分类。": "Choose Original or Material 3 for each activity page; the message style covers every message category.",
     "独立切换此页列表与二级导航的样式；保留顶栏、壁纸、居中布局和原站操作。": "Choose this page’s list and secondary navigation style independently; keep the header, wallpaper, centered layout and native actions.",
@@ -1019,6 +1029,11 @@
       }
       const input = field.querySelector("[data-setting-key]");
       input?.setAttribute("aria-label", text);
+      field.querySelectorAll("select option").forEach((option) => {
+        option.textContent = english
+          ? (englishEnumLabels[key]?.[option.value] || option.value)
+          : (enumLabels[key]?.[option.value] || option.value);
+      });
       const group = field.querySelector(".settings-segmented");
       if (group) {
         group.setAttribute("aria-label", text);
@@ -1082,7 +1097,9 @@
     { key: "showTopicExcerpt", type: "toggle", label: "显示搜索摘要", help: "显示搜索结果中的内容摘要。" },
     { key: "showTopicTags", type: "toggle", label: "显示主题标签", help: "控制原生主题行与搜索结果上的标签。" },
     { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "显示回复数、点赞数、浏览数与活动时间。" },
-    { key: "showTopicActivityTime", type: "toggle", label: "显示活动时间", help: "显示主题最近活动时间。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicActivityTime", type: "toggle", label: "显示活跃与发布时间", help: "在原时间位置上下显示主题最近活跃和发布时间。", dependsOn: ["showTopicMeta", true] },
+    { key: "topicTimeZone", type: "dropdown", label: "列表时间时区", help: "默认中国时间；按所选 IANA 时区转换日期与时间，自动遵循当地夏令时。" },
+    { key: "topicTimeHourCycle", type: "select", label: "时间制式", help: "24 小时制或带上午／下午的 12 小时制。" },
     { key: "showTopicReplies", type: "toggle", label: "显示回复数", help: "控制列表与搜索卡中的回复数。", dependsOn: ["showTopicMeta", true] },
     { key: "showTopicLikes", type: "toggle", label: "显示点赞数", help: "控制原生主题列表的对应统计。", dependsOn: ["showTopicMeta", true] },
     { key: "showTopicViews", type: "toggle", label: "显示浏览数", help: "控制原生主题列表的对应统计。", dependsOn: ["showTopicMeta", true] },
@@ -1220,6 +1237,18 @@
       track.setAttribute("aria-hidden", "true");
       wrapper.append(input, track);
       return { input, control: wrapper };
+    }
+
+    if (definition.type === "dropdown") {
+      const input = document.createElement("select");
+      input.className = "settings-select";
+      fieldOptions(definition).forEach(({ value, label }) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        input.append(option);
+      });
+      return { input, control: input };
     }
 
     if (definition.type === "select") {
