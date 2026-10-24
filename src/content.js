@@ -3503,7 +3503,7 @@
     state.syncTimer = window.setTimeout(() => {
       state.syncTimer = 0;
       if (!pageActive()) return;
-      checkRoute();
+      checkRoute({ schedule: false });
       const lists = state.syncLists;
       state.syncLists = false;
       syncHomepage({ lists });
@@ -4077,12 +4077,20 @@
     selection.addRange(range);
   }
 
+  let currentUserPreload;
+  let currentUserSnapshot = null;
+
   function preloadedCurrentUser() {
     const source = document.querySelector("#data-preloaded")?.textContent;
     if (!source) return null;
+    if (source === currentUserPreload) return currentUserSnapshot;
     try {
       const current = JSON.parse(source).currentUser;
-      return current ? JSON.parse(current) : null;
+      const user = current ? JSON.parse(current) : null;
+      // 同一预载的用户身份只解析一次；SPA 替换载荷后重新读取，解析失败仍明确报错。
+      currentUserPreload = source;
+      currentUserSnapshot = user;
+      return user;
     } catch (error) {
       console.error("[betterLD] 当前用户预载数据无效", error);
       return null;
@@ -5199,8 +5207,6 @@
         item.style.removeProperty('--betterld-branch-toggle-y');
         item.querySelector(":scope > .betterld-reply-tree__children")?.remove();
         const card = item.querySelector(':scope > .betterld-reply-tree__card');
-        tree.branchLayoutObserver.unobserve(card);
-        tree.branchLayoutObserver.unobserve(card.querySelector('.betterld-reply-tree__actions'));
         card.querySelectorAll(':scope > .betterld-reply-tree__line-hit').forEach((hit) => hit.remove());
       }
       return item;
@@ -5214,12 +5220,19 @@
       list.firstElementChild.style.removeProperty('--betterld-reply-trunk-end');
       list.firstElementChild.style.removeProperty('--betterld-reply-tail-y');
     }
-    // 重建观察范围，已替换或移出树的卡片即时释放。
-    tree.branchLayoutObserver.disconnect();
+    // 未变目标继续观察；新增或替换的卡片、操作栏仍接收初始尺寸通知。
+    const layoutTargets = new Set();
     for (const card of tree.content.querySelectorAll('.betterld-reply-tree__card')) {
-      tree.branchLayoutObserver.observe(card);
-      tree.branchLayoutObserver.observe(card.querySelector('.betterld-reply-tree__actions'));
+      layoutTargets.add(card);
+      layoutTargets.add(card.querySelector('.betterld-reply-tree__actions'));
     }
+    for (const target of tree.branchLayoutTargets) {
+      if (!layoutTargets.has(target)) tree.branchLayoutObserver.unobserve(target);
+    }
+    for (const target of layoutTargets) {
+      if (!tree.branchLayoutTargets.has(target)) tree.branchLayoutObserver.observe(target);
+    }
+    tree.branchLayoutTargets = layoutTargets;
     syncReplyReactionPopover(tree);
     if (focusedReactionTrigger && tree.reactionTrigger) tree.reactionTrigger.focus({ preventScroll: true });
     // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
@@ -6059,8 +6072,10 @@
 
   function updateReplyTreeMore(tree) {
     const remaining = Boolean(replyTreeBodyBatch(tree, 'forward'));
-    tree.more.hidden = !tree.autoLoadPaused && !remaining;
-    tree.more.textContent = tree.autoLoadPaused ? '重试加载回复' : '加载更多回复';
+    const hidden = !tree.autoLoadPaused && !remaining;
+    const label = tree.autoLoadPaused ? '重试加载回复' : '加载更多回复';
+    if (tree.more.hidden !== hidden) tree.more.hidden = hidden;
+    if (tree.more.textContent !== label) tree.more.textContent = label;
   }
 
   function maybeLoadMoreReplyTree(tree) {
@@ -6932,6 +6947,7 @@
     resetReplyTreePrefetch(tree);
     bindReplyBranchInteraction(tree);
     tree.branchLayouts = new WeakMap();
+    tree.branchLayoutTargets = new Set();
     tree.branchDirty = new WeakSet();
     tree.branchLayoutFrame = 0;
     tree.branchLayoutObserver = new ResizeObserver(() => scheduleReplyBranchLayout(tree));
@@ -7048,13 +7064,16 @@
     state.positionTimer = window.setTimeout(() => {
       state.positionTimer = 0;
       syncReplyTreePosition();
-      if (state.replyTree) maybeLoadMoreReplyTree(state.replyTree);
+      if (state.replyTree) {
+        updateReplyTreeMore(state.replyTree);
+        maybeLoadMoreReplyTree(state.replyTree);
+      }
     }, config.syncDebounceMs);
   }
 
   // URL 探测保持轻量；列表/正文投影由相关 DOM 变化和独立慢核对驱动。
   // 返回本次是否已经记录了一次实际访问，供页面恢复可见时避免重复写入。
-  function checkRoute() {
+  function checkRoute({ schedule = true } = {}) {
     if (!pageActive() || !state.settingsResolved) return false;
     applyTopicSort();
     enforceRefreshScrollTop();
@@ -7065,7 +7084,9 @@
     // 同一主题内的楼层与锚点变化只更新阅读楼层，不重复记为一次新访问。
     const sameTopic = Boolean(id) && id === topicIdFromPath(previousPathname);
     updateRouteState();
-    scheduleSync();
+    // 正在同步的批次直接吸收新路由，不再排第二次全列表扫描。
+    if (schedule) scheduleSync();
+    else state.syncLists = true;
     return !sameTopic;
   }
 
@@ -7472,7 +7493,7 @@
         console.error("[betterLD] synced settings local projection failed", error);
       });
       applyVisualSettings(merged);
-      scheduleSync();
+      scheduleSync({ lists: false });
       return;
     }
     if (areaName !== "local") {
@@ -7495,7 +7516,7 @@
         getActiveSettings(localSettings)
           .then((activeSettings) => {
             applyVisualSettings(activeSettings);
-            scheduleSync();
+            scheduleSync({ lists: false });
           })
           .catch((error) => {
             console.error("[betterLD] active settings read failed", error);
@@ -7618,7 +7639,6 @@
     const tree = state.replyTree;
     if (tree && !tree.compensating && !tree.contentContainer.hidden && pageScrollTop() !== tree.bodyLoadScrollTop) {
       noteReplyTreeScroll(tree, pageScrollTop());
-      updateReplyTreeMore(tree);
     }
     scheduleReplyPosition();
   }, { passive: true });
