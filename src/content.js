@@ -44,6 +44,9 @@
     routeTimer: 0,
     dataTimer: 0,
     positionTimer: 0,
+    navigationAnimation: null,
+    navigationMotionKey: navigationMotionKey(),
+    navigationMotionPending: false,
     pageSuspended: false,
     metadataRoute: `${location.pathname}${location.search}`,
     metadataGeneration: 0,
@@ -1447,7 +1450,7 @@
           showActionStatus("当前页面没有可用的主题切换入口");
         }
       } else if (key === "top") {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({ top: 0, behavior: reducedMotion.matches ? "instant" : "smooth" });
       } else if (key === "refresh") {
         refreshTopicsList();
       }
@@ -1470,7 +1473,7 @@
     }
     button.addEventListener("click", () => {
       if (showTop && pageScrollTop() > config.scrollTopThreshold) {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({ top: 0, behavior: reducedMotion.matches ? "instant" : "smooth" });
       } else if (showRefresh) {
         refreshTopicsList();
       }
@@ -3496,6 +3499,46 @@
     return !document.hidden && !state.pageSuspended;
   }
 
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  function navigationMotionKey() {
+    const topicId = topicIdFromPath();
+    return `${topicId ? `/t/${topicId}` : location.pathname}${location.search}`;
+  }
+
+  function cancelNavigationMotion() {
+    state.navigationAnimation?.cancel();
+    state.navigationAnimation = null;
+  }
+
+  function animateNavigationContent(element) {
+    cancelNavigationMotion();
+    if (!element || !pageActive() || reducedMotion.matches) return;
+    const motion = config.navigationMotion;
+    // 只淡入现有内容，不改变几何或为整页毛玻璃创建 transform 包含块。
+    const animation = element.animate([
+      { opacity: motion.fromOpacity },
+      { opacity: 1 }
+    ], { duration: motion.durationMs, easing: motion.easing });
+    state.navigationAnimation = animation;
+    animation.onfinish = () => {
+      if (state.navigationAnimation === animation) state.navigationAnimation = null;
+    };
+  }
+
+  reducedMotion.addEventListener("change", () => {
+    if (reducedMotion.matches) cancelNavigationMotion();
+  });
+
+  document.addEventListener("betterld:page-changed", () => {
+    const key = navigationMotionKey();
+    if (key === state.navigationMotionKey) return;
+    state.navigationMotionKey = key;
+    state.navigationMotionPending = pageActive();
+    checkRoute();
+    scheduleSync();
+  });
+
   function scheduleSync({ lists = true } = {}) {
     if (!pageActive() || !state.settingsResolved) return;
     state.syncLists ||= lists;
@@ -3509,6 +3552,11 @@
       syncHomepage({ lists });
       syncSearchLoadMore(state.currentSettings, isSearchPage());
       syncReplyTree();
+      if (state.navigationMotionPending) {
+        state.navigationMotionPending = false;
+        // 跳楼已经淡入目标时，保留更精确的目标动画。
+        if (!state.navigationAnimation) animateNavigationContent(document.querySelector("#main-outlet"));
+      }
     }, config.syncDebounceMs);
   }
 
@@ -6417,6 +6465,7 @@
     // 末楼可能无法贴到视口顶部；在用户实际滚动前保持刚命中的楼号。
     tree.bodyLoadScrollTop = pageScrollTop();
     tree.positionedPost = { postNumber: post.post_number, postId: post.id, scrollY: pageScrollTop() };
+    animateNavigationContent(card);
   }
 
   function syncReplyBookmark(tree, post, bookmarked, changed = false) {
@@ -7078,11 +7127,12 @@
     applyTopicSort();
     enforceRefreshScrollTop();
     if (location.href === state.currentHref) return false;
-    const previousPathname = new URL(state.currentHref, location.origin).pathname;
+    const previousUrl = new URL(state.currentHref, location.origin);
     state.currentHref = location.href;
     const id = topicIdFromPath();
     // 同一主题内的楼层与锚点变化只更新阅读楼层，不重复记为一次新访问。
-    const sameTopic = Boolean(id) && id === topicIdFromPath(previousPathname);
+    const sameTopic = Boolean(id) && id === topicIdFromPath(previousUrl.pathname);
+    if (!sameTopic || previousUrl.search !== location.search) cancelNavigationMotion();
     updateRouteState();
     // 正在同步的批次直接吸收新路由，不再排第二次全列表扫描。
     if (schedule) scheduleSync();
@@ -7386,6 +7436,8 @@
   }
 
   function pausePageWork() {
+    cancelNavigationMotion();
+    state.navigationMotionPending = false;
     document.dispatchEvent(new CustomEvent('betterld:reply-reading-release'));
     for (const key of ["routeTimer", "dataTimer"]) {
       clearInterval(state[key]);
@@ -7481,6 +7533,8 @@
     seedPreloadedTopicList();
     updateRouteState();
     applyVisualSettings(settings, { forceFallback: Boolean(error) });
+    // 各路由都订阅原站切换完成通知，不依赖首次进入主题才懒加载桥。
+    loadPageRefreshBridge().catch((error) => console.error("[betterLD] navigation bridge unavailable", error));
     readUserMarks().catch((error) => console.error("[betterLD] user marks read failed", error));
     scheduleSync({ lists: false });
   }).catch((error) => console.error("[betterLD] page initialization failed", error));

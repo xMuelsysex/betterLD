@@ -1797,4 +1797,14 @@
       }));
     }
   });
+
+  // 动效订阅独立于正文桥初始化，失败明确报告且不阻断原有功能。
+  try {
+    const navigationEvents = window.require('discourse/lib/get-owner').getOwnerWithFallback().lookup('service:app-events');
+    navigationEvents.on('page:changed', () => {
+      document.dispatchEvent(new CustomEvent('betterld:page-changed'));
+    });
+  } catch (error) {
+    console.error('[betterLD] navigation event subscription failed', error);
+  }
 })();
