@@ -90,8 +90,10 @@ HTML 文件不执行脚本；树视图导出保留父子连线，原帖视图导
 
 ```bash
 npm run check   # JavaScript 语法检查
-npm run package # 原位更新 dist/betterLD/
+npm run package # 原位更新 dist/betterLD/ 和 Chrome / Firefox ZIP
 ```
+
+打包使用 Node.js 与 Python 3 标准库，生成 `dist/betterLD-chrome.zip` 和 `dist/betterLD-firefox.zip`。使用 ZIP 时，先将新包解压覆盖实际加载目录，再按安装部分说明重新载入扩展与刷新页面。
 
 ### 目录结构
 

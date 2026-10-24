@@ -23,7 +23,7 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 
 - `npm run check`：执行 JavaScript 语法检查。
 - 每次任务改动完成并完成适用的检查与打包后，自动创建本地 Git 提交，无需再次询问；适用于主分支与功能工作树，不以更新版本号为前提。只提交本次任务相关文件，保留无关工作区改动与暂存状态；版本号仍按下节规则由主人决定。默认不推送；合并、打 tag、推送、发布与部署仍需主人明确授权，单次授权不延续到后续任务。
-- `npm run package`：每次完成扩展源码修改后自动将当前文件就地更新到固定测试包目录 `dist/betterLD/`，无需单独询问是否覆盖该生成包；保留该目录，不另建带版本或时间后缀的 ZIP。
+- `npm run package`：每次完成扩展源码修改后，自动就地更新固定目录 `dist/betterLD/`，并同步覆盖 `dist/betterLD-chrome.zip` 与 `dist/betterLD-firefox.zip`；使用本机 Python 3 标准库生成 ZIP，无需第三方依赖或额外覆盖确认。三份产物必须来自同一候选，逐文件直接核对，禁止只更新目录却报告两个 ZIP 已更新；不另建版本或时间后缀包。ZIP 用户需将新包解压至实际加载目录再重载扩展，仅覆盖 ZIP 本身不更新已加载文件。
 - Chrome：打开 `chrome://extensions`，启用开发者模式后加载 `dist/betterLD/`。
 - Firefox：打开 `about:debugging#/runtime/this-firefox`，临时加载 `dist/betterLD/manifest.json`；交付有实际改动的新包时重新打包，对实际加载路径的附加组件点击「重新载入」，再刷新已打开的 LinuxDo 标签页。正式包在 `about:addons` 核对版本；开发包靠加载路径区分（不带标识后缀）。版本按下节管理，不为区分工作树反复递增正式版本。版本已更新但页面未更新时，继续查内容脚本、用户设置和 CSS，而非重复打包。Firefox 已加载的内容脚本和样式留在内存中，仅覆盖磁盘文件不会更新页面。
 - 交付前从 `dist/betterLD/` 实际加载扩展验证改动：检查页面确有 `body.betterld-shell` 和目标样式/控件，并核对附加组件实际加载的路径；仅比对源码与打包文件或在全新浏览器里加载，不能证明用户当前 Firefox 会话已经重载。Orca 的 `npm run preview:orca` 使用独立设置存储，只能辅助调试。
@@ -37,8 +37,8 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 - 版本号语义与 tag/Release 规则以 `/home/muelsyse/AGENTS.md`「版本号与发布」为权威；本项目的绑定是扩展内「检查更新」读 `api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 tag 名，去掉前导 `v`、缺段按 0 与 manifest 版本比较，所以 tag 必须与 manifest 的纯数字版本一致。
 - 开发包不带任何标识后缀：开发期间沿用基线正式版本，区分构建只靠分支与加载路径（Chrome `chrome://extensions` 的目录、Firefox `about:debugging` 的加载路径）；不为区分工作树反复递增正式版本，也不写 `version_name` 或额外标识文件。
 - `manifest.json` 的 `version` 保持浏览器兼容的纯数字格式，禁止追加后缀。
-- 打包工具（`scripts/package.js`）只把 `manifest.json`、`betterld.config.js` 与 `src/` 拷贝进各工作树的 `dist/`，不改写版本也不生成标识；主人明确指定版本后，由整合者在 `package.json` 与 `manifest.json` 同步，打包沿用该版本。
-- 每个工作树只写自己的固定 `dist/betterLD/`，开发包不覆盖主目录包；生成目录不参与源码合并。合入主分支后更新主目录固定包，并报告正式版本、路径和浏览器重载状态。
+- 打包入口 `scripts/package.js` 将 `manifest.json`、`betterld.config.js` 与 `src/` 拷贝至固定目录，再调用 `scripts/package-browsers.py` 生成两浏览器 ZIP。资源清单以当前源码为准，Chrome manifest 去掉 background.scripts 与 browser_specific_settings，Firefox 去掉 background.service_worker；不恢复已撤回的商店文件，不改版本或生成标识。主人明确指定版本后，由整合者同步 `package.json` 与根 `manifest.json`，打包沿用该版本。
+- 每个工作树只写自己的固定目录和两份 ZIP，开发包不覆盖主目录包；生成产物不参与源码合并。合入主分支后更新主目录三份产物，并报告正式版本、路径和浏览器重载状态。
 
 ### 版本更新流程
 
