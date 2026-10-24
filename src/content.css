@@ -5671,7 +5671,7 @@ body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-prev
 }
 
 /* 原生辅助区域只覆盖外壳，不重排原帖楼层、菜单或编辑器。 */
-body.betterld-shell :where(.topic-map, .topic-status-info, .post-notice, .composer-popup, .emoji-picker, .fk-d-tooltip__inner-content) {
+body.betterld-shell :where(.topic-status-info, .post-notice, .composer-popup, .emoji-picker, .fk-d-tooltip__inner-content) {
   background-color: rgb(var(--betterld-surface-container-rgb) / .96) !important;
   color: var(--betterld-on-surface);
   border-color: rgb(var(--betterld-outline-rgb) / .3) !important;
