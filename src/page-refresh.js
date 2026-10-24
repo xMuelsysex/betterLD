@@ -10,7 +10,7 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "user_signature", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "user_signature", "badges_granted", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -446,6 +446,7 @@
       entry.user.off("status-changed", entry, entry.onStatus);
       if (entry.tracking) entry.user.statusManager.stopTrackingStatus();
       for (const view of entry.views) view.message?.destroy();
+      if (entry.badgeHost) releaseHostResources({ host: entry.badgeHost }, false);
       if (entry.ownsUser) entry.user.destroy();
       replyAuthors.delete(id);
     }
@@ -611,6 +612,38 @@
     if (group.childElementCount) author.append(group);
   }
 
+  function renderReplyGrantedBadges(author, data, entry, topic) {
+    if (!data.badges_granted?.length) return;
+    // 首次桥接可能先于正文挂载，仍通过既有登记入口取得同一个原站模型。
+    registerTreePosts(entry.owner, topic, [data]);
+    const post = resolveTreePost(topic, data.id).post;
+    const badges = post.badgesGranted;
+    if (!badges?.length) return;
+    const { i18n } = window.require("discourse-i18n");
+    const UserBadge = window.require("discourse/components/user-badge").default;
+    const Component = window.require("@ember/component");
+    const Container = window.require("discourse/components/render-glimmer-container").default;
+    const curry = window.require("ember-curry-component").default;
+    const group = document.createElement("span");
+    group.className = "user-badge-buttons";
+    const registrations = badges.map((badge) => {
+      const element = document.createElement("span");
+      element.className = `user-badge-button-${badge.slug}`;
+      group.append(element);
+      badge.description = i18n("post.badge_granted_tooltip", { username: post.username, badge_name: badge.name });
+      return { element, component: curry(UserBadge, { badge, showName: false, user: entry.user }, entry.owner), data: {} };
+    });
+    author.append(group);
+    const Host = Component.default.extend({
+      layout: Component.getComponentTemplate(Container),
+      renderGlimmer: { _registrations: registrations }
+    });
+    window.require("@ember/runloop").join(() => {
+      entry.badgeHost = Host.create(entry.owner.ownerInjection());
+      entry.badgeHost.appendTo(document.body);
+    });
+  }
+
   // 分页作者复用原站已有模型能力，不加入 postStream 或补发逐用户请求。
   function enhanceReplyAuthors(topicId) {
     const pending = document.querySelectorAll(".betterld-reply-tree__avatar-wrap[data-betterld-author-details]");
@@ -662,6 +695,7 @@
         entry.views.push(view);
         renderReplyAuthorStatus(entry, view);
       }
+      renderReplyGrantedBadges(author, post, entry, topic);
       renderReplyPosterBadges(author, post, posterBadgeSettings);
     }
   }
