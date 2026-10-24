@@ -89,8 +89,8 @@
   const sourceOptions = [
     { mode: modes.none, label: "内置渐变", description: "不使用图片" },
     { mode: modes.random, label: "网站随机图片", description: "每天固定一张" },
-    { mode: modes.builtin, label: "内置图片", description: "使用 BewlyCat 图片目录" },
-    { mode: modes.url, label: "远程图片", description: "输入 HTTPS URL" },
+    { mode: modes.builtin, label: "内置图片", description: "预置壁纸" },
+    { mode: modes.url, label: "远程图片", description: "输入 HTTPS 图片地址" },
     { mode: modes.local, label: "本地图片", description: "仅保存在本机" }
   ];
 
@@ -312,7 +312,7 @@
     try {
       url = new URL(input);
     } catch {
-      throw new Error("请输入有效的图片 URL");
+      throw new Error("请输入有效的图片地址");
     }
     if (url.protocol !== "https:") {
       throw new Error("背景图片必须使用 HTTPS 地址");
@@ -473,8 +473,8 @@
     state.settings = settings;
     state.language = settings.language;
     aboutStorage.textContent = settings.syncEnabled
-      ? "当前存储：本地设置 + 浏览器同步投影。"
-      : "当前存储：浏览器本地存储。";
+      ? "存储：本地与浏览器同步。"
+      : "存储：仅本机。";
     state.selectedWallpaperId = settings.wallpaperId;
     writeAdvancedSettings(settings);
     applyLanguage(settings.language);
@@ -563,7 +563,7 @@
     try {
       url = normalizeWallpaper(input);
     } catch (error) {
-      setStatusMessage(wallpaperStatus, error instanceof Error ? error.message : "请输入有效的图片 URL", "error");
+      setStatusMessage(wallpaperStatus, error instanceof Error ? error.message : "请输入有效的图片地址", "error");
       return;
     }
 
@@ -574,13 +574,13 @@
       if (probeId !== state.wallpaperProbeId) {
         return;
       }
-      setStatusMessage(wallpaperStatus, "图片已准备，保存设置后生效", "success");
+      setStatusMessage(wallpaperStatus, "图片已就绪", "success");
     };
     image.onerror = () => {
       if (probeId !== state.wallpaperProbeId) {
         return;
       }
-      setStatusMessage(wallpaperStatus, "图片加载失败，将使用安全渐变回退。", "error");
+      setStatusMessage(wallpaperStatus, "图片加载失败，改用渐变背景。", "error");
     };
     image.src = url;
   }
@@ -775,9 +775,9 @@
     if (value.syncEnabled) {
       await reconcileSyncSettings(value, previousSettings.syncEnabled ? metadata : { updatedAt: 0, origin: "" });
     }
-    setStatusMessage(status, "✓ 设置已保存。", "success");
+    setStatusMessage(status, "✓ 已保存并生效", "success");
     if (wallpaperStatus.dataset.status !== "error") {
-      setStatusMessage(wallpaperStatus, value.wallpaperMode === modes.none ? "✓ 已应用安全渐变。" : "✓ 已应用。", "success");
+      setStatusMessage(wallpaperStatus, value.wallpaperMode === modes.none ? "✓ 已应用渐变背景" : "✓ 已应用", "success");
     }
   }
 
@@ -788,13 +788,13 @@
     ...Object.fromEntries(config.userPageAppearances.map(({ key }) => [key, userPageAppearanceLabels])),
     language: { "zh-CN": "简体中文", "en-US": "English" },
     themeMode: { auto: "跟随 LinuxDo", system: "跟随系统", light: "浅色", dark: "深色", scheduled: "按时间切换" },
-    fontMode: { default: "系统默认", recommended: "推荐字体栈", custom: "自定义字体" },
-    fontScope: { own: "仅 betterLD 内容", managed: "已管理页面正文" },
+    fontMode: { default: "系统默认", recommended: "推荐字体", custom: "自定义字体" },
+    fontScope: { own: "仅 betterLD 内容", managed: "受管页面正文" },
     shadowMode: { default: "默认阴影", none: "关闭阴影", custom: "自定义阴影" },
     topicListAppearance: { material: "美化后", original: "美化前（原站样式）" },
     replyTreeNameMode: { both: "昵称和用户名", nickname: "仅昵称", username: "仅用户名" },
     topicSortMode: { activity: "最新回复", created: "发布时间" },
-    topicTimeZone: { "Asia/Shanghai": "中国时间（Asia/Shanghai）", UTC: "协调世界时（UTC）" },
+    topicTimeZone: { "Asia/Shanghai": "中国时间", UTC: "协调世界时（UTC）" },
     topicTimeHourCycle: { h23: "24 小时制", h12: "12 小时制" },
     topicTitleFontSize: { responsive: "响应式", small: "小", base: "标准", large: "大" },
     topicAuthorFontSize: { small: "小", base: "标准", large: "大" },
@@ -811,7 +811,7 @@
     topicFilterMode: { hide: "隐藏命中项", dim: "淡化命中项", highlight: "高亮命中项", include: "只显示命中项" },
     topicFilterMatchMode: { contains: "包含关键词", whole: "完整词匹配", regex: "正则表达式" },
     externalSearchEngine: { off: "关闭", bing: "Bing", duckduckgo: "DuckDuckGo" },
-    searchResultsPaginationMode: { scroll: "滚动加载", pagination: "分页" },
+    searchResultsPaginationMode: { scroll: "滚动加载", pagination: "按钮加载" },
     searchPageWallpaperMode: { inherit: "继承全局", builtin: "内置图片", url: "远程图片" },
     touchOptimization: { auto: "自动", on: "开启", off: "关闭" }
   };
@@ -844,7 +844,7 @@
     topicFilterMode: { hide: "Hide matches", dim: "Dim matches", highlight: "Highlight matches", include: "Show matches only" },
     topicFilterMatchMode: { contains: "Contains keyword", whole: "Whole word", regex: "Regular expression" },
     externalSearchEngine: { off: "Off", bing: "Bing", duckduckgo: "DuckDuckGo" },
-    searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Pagination" },
+    searchResultsPaginationMode: { scroll: "Infinite scroll", pagination: "Load more button" },
     searchPageWallpaperMode: { inherit: "Inherit global", builtin: "Built-in image", url: "Remote image" },
     touchOptimization: { auto: "Automatic", on: "On", off: "Off" }
   };
@@ -854,34 +854,34 @@
     showTopicActivityTime: "Show activity and publish times",
     topicTimeZone: "List time zone",
     topicTimeHourCycle: "Time format",
-    externalSearchEngine: "External search (when site search is empty)",
+    externalSearchEngine: "External search supplement",
     readingPanelBackgroundOpacity: "Reading panel background opacity",
-    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Liquid segment indicator", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
+    language: "Settings language", themeMode: "Theme mode", themeScheduleStart: "Dark mode starts", themeScheduleEnd: "Dark mode ends", themeColor: "Manual theme color", wallpaperThemeColor: "Extract theme color from wallpaper", darkModeBaseColor: "Dark base color", useGradientThemeColorBackground: "Use theme-color gradient", liquidSegmentIndicatorEnabled: "Option switch animation", frostedGlassEnabled: "Enable frosted glass", sidebarCoverBlurEnabled: "Sidebar cover blur", userCardCoverMaskEnabled: "User card cover overlay", userCardCoverMaskOpacity: "User card cover transparency", surfaceBlurPx: "Surface blur", shadowMode: "Shadow mode", shadowHeight: "Shadow height", fontMode: "Font preference", fontScope: "Font scope", fontFamily: "Custom font family", removeChinesePunctuationIndent: "Remove Chinese punctuation indent", customCssEnabled: "Enable custom CSS", customCss: "Custom CSS", wallpaperUrl: "Image URL", maskOpacity: "Page overlay", blurPx: "Background blur", cardOpacity: "Card opacity", wallpaperRemoteCacheDays: "Remote wallpaper cache", applyToUnmanagedPages: "Apply shell visuals to unmanaged pages",
     topicListAppearance: "Topic list appearance", topicNavigationAlignment: "Topic navigation alignment", topicNavigationSticky: "Sticky topic navigation", showTopicNavigationCounts: "Show navigation counts", headerVisible: "Show Header", headerVisualMode: "Header visual", autoHideHeader: "Auto-hide Header", sidebarPosition: "Sidebar position", autoHideSidebar: "Auto-hide Sidebar", showSettingsTrigger: "Show settings entry", showThemeToggle: "Show theme toggle", actionRailEnabled: "Enable action rail", actionRailPosition: "Action rail position", actionRailVisibility: "Action rail visibility", actionRailGlow: "Action rail glow", showBackToTopButton: "Show back-to-top", showRefreshButton: "Show refresh", separateNavigationActions: "Separate navigation actions",
-    topicFilterEnabled: "Enable topic filter",topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", libraryWebdavUrl: "Library backup WebDAV URL", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search pagination", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
-    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close drawer on overlay click", drawerCloseOnEscape: "Close drawer with Escape", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync", userMarksEnabled: "Enable user marks", replyTreeNameMode: "Reply author name"
+    topicFilterEnabled: "Enable topic filter",topicFilterMode: "Filter match behavior", topicFilterMatchMode: "Filter match mode", topicFilterMaxAgeDays: "Hide stale topics (days)", topicFilterHideLv1: "Hide Lv1 topics", topicFilterHideLv2: "Hide Lv2 topics", topicFilterHideLv3: "Hide Lv3 topics", topicFilterBinEnabled: "Keep filtered topics bin", webdavUrl: "WebDAV URL", webdavUsername: "WebDAV username", webdavPassword: "WebDAV password", libraryWebdavUrl: "Library backup WebDAV URL", searchHistoryEnabled: "Save search history", searchRecommendationEnabled: "Enable search recommendations", searchFocusDimming: "Search focus dimming", searchFocusBlur: "Search focus blur", searchResultsPaginationMode: "Search result loading", searchPageWallpaperMode: "Search page wallpaper", searchPageWallpaperId: "Search built-in wallpaper ID", searchPageWallpaperUrl: "Search remote wallpaper URL",
+    topicCardOpenMode: "Topic card open mode", navigationOpenMode: "Navigation link open mode", searchOpenMode: "Search link open mode", notificationOpenMode: "Notification link open mode", drawerCloseOnOverlay: "Close preview on overlay click", drawerCloseOnEscape: "Close preview with Esc", touchOptimization: "Touch optimization", enableHorizontalNavigationScroll: "Allow horizontal navigation scroll", showHomeButtonInTouchMode: "Show home button in touch mode", shortcutsEnabled: "Enable shortcuts", syncEnabled: "Enable browser sync", userMarksEnabled: "Enable user marks", replyTreeNameMode: "Reply author name"
   };
 
   const staticTranslations = {
-    "在原时间位置上下显示主题最近活跃和发布时间。": "Show the topic’s last activity above its publish time in the existing time position.",
-    "默认中国时间；按所选 IANA 时区转换日期与时间，自动遵循当地夏令时。": "Defaults to China time. Convert dates and times to the selected IANA time zone, including local daylight saving time.",
-    "24 小时制或带上午／下午的 12 小时制。": "24-hour time or 12-hour time with an AM/PM indicator.",
+    "分两行显示最近活跃时间与发布时间。": "Show last activity and publish time on separate lines.",
+    "默认中国时间，自动适配所选时区的夏令时。": "Defaults to China time; adjusts for local daylight saving time.",
+    "12 小时制会显示上午／下午。": "12-hour time includes AM/PM.",
     "活动与消息": "Activity and messages",
-    "各活动子页独立选择原版或 Material 3；消息样式覆盖全部消息分类。": "Choose Original or Material 3 for each activity page; the message style covers every message category.",
-    "独立切换此页列表与二级导航的样式；保留顶栏、壁纸、居中布局和原站操作。": "Choose this page’s list and secondary navigation style independently; keep the header, wallpaper, centered layout and native actions.",
-    "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。": "Background strength of reply trees, author-filtered replies and standalone reading controls: 0% transparent, 100% solid. Does not change ordinary original posts, text or buttons.",
-    "关闭 / Bing / DuckDuckGo。原站「相关结果」关闭且站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。": "Off / Bing / DuckDuckGo. When the site’s Related results switch is off and site search is empty, search with site:linux.do and show only LinuxDo topics in the site search entry format. Enabling requires access to the chosen engine; search terms are sent to it.",
-    "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。": "Choose Bing or DuckDuckGo and allow access in the browser permission dialog. If access was revoked, request it again below.",
-    "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。": "In-page settings cannot show the browser permission dialog. Open the extension settings below, then choose Bing or DuckDuckGo and allow access.",
+    "各活动页可单独选择样式，消息样式适用于全部消息分类。": "Choose each activity page’s style; message style covers all message categories.",
+    "单独调整此页列表与二级导航；保留顶栏、壁纸和原站操作。": "Style this page’s list and secondary navigation; keep the header, wallpaper and native actions.",
+    "仅调整树状回复、楼主／本人筛选和阅读控制板的背景。0% 透明，100% 实色。": "Reply tree, author-filtered reply and reading control backgrounds only. 0% transparent, 100% solid.",
+    "原站「相关结果」关闭且站内无主题结果时，补充 LinuxDo 帖子。需授权引擎访问，搜索词会发送给所选引擎。": "Add LinuxDo topics when Related results is off and site search has no topic results. Requires engine access; queries are sent to that engine.",
+    "选择引擎后允许浏览器授权；权限失效时可重新申请。": "Choose an engine and allow access; request permission again if needed.",
+    "点击下方按钮打开扩展设置，再选择引擎并允许授权。": "Open extension settings below, choose an engine and allow access.",
     "重新申请访问权限": "Request access again",
     "打开扩展授权页": "Open extension permission settings",
-    "HTML 导出离线归档授权": "Offline HTML export permission",
-    "完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。": "A fully offline HTML export embeds post images, media, attachments, and author avatars, so it needs access to the domains hosting them. Only the exact domains listed below are requested; no all-sites permission is used.",
-    "暂无待授权域名；导出失败时缺失的域名会出现在这里。": "No domains are waiting for permission. Domains missing during an export appear here.",
+    "离线 HTML 导出授权": "Offline HTML export permission",
+    "离线导出需访问图片、媒体、附件与头像所在域名，将资源内嵌到 HTML。仅申请下列域名权限。": "Embed images, media, attachments and avatars into offline HTML. Requires access only to the domains listed below.",
+    "暂无待授权域名。导出时缺少权限的域名会列在这里。": "No domains are waiting for permission. Domains missing during an export appear here.",
     "授权所选域名": "Grant selected domains",
     "刷新域名列表": "Refresh domain list",
     "首页视觉设置": "Home visual settings",
-    "调整 LinuxDo 首页卡片、导航和页面外观。所有修改在点击“保存设置”后生效。": "Adjust LinuxDo cards, navigation, and page visuals. Changes apply after saving.",
+    "调整 LinuxDo 首页卡片、导航和页面外观，修改立即生效。": "Adjust LinuxDo cards, navigation and appearance. Changes apply immediately.",
     "搜索设置": "Search settings",
     "搜索外观、卡片、快捷键…": "Search appearance, cards, shortcuts…",
     "按名称或关键词筛选设置，不会改变当前输入。": "Filter settings by name or keyword without changing current input.",
@@ -926,9 +926,9 @@
     "下载并追加收藏": "Download and append favorites",
     "清空搜索历史": "Clear search history",
     "检查更新": "Check for updates",
-    "比对 GitHub Releases 的最新标签与本地版本号，只做提示，不自动更新；不点击不会发起任何请求。": "Compares the latest GitHub Releases tag with the local version. It only reports, never auto-updates, and sends no request unless you click.",
+    "点击后查询 GitHub 最新版本，仅提示，不自动更新。": "Click to check GitHub for a newer version. No automatic updates.",
     "立即同步": "Sync now",
-    "Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。": "Manifest V3 · Chrome / Firefox desktop · Processes only the topic and settings data required by betterLD.",
+    "支持 Chrome / Firefox 桌面端，仅处理功能所需的主题与设置数据。": "Chrome / Firefox desktop. Processes only data needed for its features.",
     "项目主页": "Project home",
     "问题反馈": "Report an issue",
     "设置": "Settings",
@@ -940,9 +940,9 @@
     "页面": "Pages",
     "组件": "Components",
     "主题导航": "Topic navigation",
-    "Header 与 Sidebar": "Header and Sidebar",
+    "顶栏与侧栏": "Header and Sidebar",
     "浮动操作": "Floating actions",
-    "打开方式与抽屉": "Open mode and drawer",
+    "打开方式与预览": "Open mode and preview",
     "壁纸": "Wallpaper",
     "页面效果": "Page effects",
     "自定义 CSS": "Custom CSS",
@@ -979,20 +979,20 @@
     "卡片操作菜单": "Card action menu",
     "导航项": "Navigation items",
     "操作栏项目": "Action rail items",
-    "图片会压缩后保存在扩展本地，不会上传到 LinuxDo。": "Images are compressed and stored locally in the extension; nothing is uploaded to LinuxDo.",
-    "导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。": "Exported JSON excludes wallpaper bodies, account information, and page content.",
-    "恢复默认会立即覆盖当前全部设置，包含壁纸来源与卡片布局。": "Restoring defaults immediately overwrites all current settings, including wallpaper source and card layout.",
+    "本地图片压缩后保存在本机，不上传到 LinuxDo。": "Local images are compressed and stored on this device, not uploaded to LinuxDo.",
+    "设置文件不含本地壁纸图片、WebDAV 密码或页面内容。": "Settings files exclude local wallpaper images, WebDAV passwords and page content.",
+    "将立即覆盖全部设置，包括壁纸与列表外观。": "Immediately overwrite all settings, including wallpaper and list appearance.",
     "本地壁纸和搜索历史不会同步。": "Local wallpapers and search history are never synced.",
-    "保存前会执行 CSSOM、选择器和属性白名单校验。": "CSSOM, selector, and property allowlist validation runs before saving.",
+    "仅支持允许的选择器与样式属性。": "Only supported selectors and style properties are allowed.",
     "只接受 HTTPS 图片地址。": "Only HTTPS image URLs are accepted.",
-    "按高度位置调整 betterLD 自有卡片阴影的透明度。": "Adjusts betterLD card shadow opacity by height position.",
-    "控制卡片菜单项的显隐与顺序。": "Controls visibility and order of card menu entries.",
-    "控制主题导航入口的显隐与顺序。": "Controls visibility and order of topic navigation entries.",
-    "控制浮动操作栏项目的显隐与顺序。": "Controls visibility and order of floating action rail entries.",
+    "调整阴影从近到远的透明度。": "Adjust shadow opacity from near to far.",
+    "选择菜单项并调整顺序。": "Choose menu items and reorder them.",
+    "选择导航项并调整顺序。": "Choose navigation items and reorder them.",
+    "选择操作项并调整顺序。": "Choose action items and reorder them.",
     "留空表示不绑定按键。": "Leave blank to bind no shortcut.",
     "标题、作者与分类规则统一使用上面的命中行为。": "Title, author, and category rules all use the match behavior above.",
-    "参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。": "Supports random, built-in, remote, and local images, following BewlyCat.",
-    "每天固定一张，进入下一天后自动更新。": "One fixed image per day; updates when the next day begins."
+    "选择每日随机、内置、远程或本地图片。": "Choose daily random, built-in, remote or local images.",
+    "每天自动更换一张。": "A new image each day."
   };
 
   function applyLanguage(language) {
@@ -1047,8 +1047,8 @@
     });
     if (aboutStorage) {
       aboutStorage.textContent = state.settings.syncEnabled
-        ? (english ? "Storage: local settings + browser sync projection." : "当前存储：本地设置 + 浏览器同步投影。")
-        : (english ? "Storage: browser local storage." : "当前存储：浏览器本地存储。");
+        ? (english ? "Storage: local and browser sync." : "存储：本地与浏览器同步。")
+        : (english ? "Storage: this device only." : "存储：仅本机。");
     }
   }
 
@@ -1060,126 +1060,126 @@
   }
 
   const fieldDefinitions = [
-    { key: "language", type: "select", label: "设置页语言", help: "只改变 betterLD 自有设置和状态文案。" },
-    { key: "themeMode", type: "select", label: "主题模式", help: "自动模式优先读取 LinuxDo 的主题状态。" },
-    { key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "按时间切换时使用。", dependsOn: ["themeMode", "scheduled"] },
-    { key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "支持跨午夜时间段。", dependsOn: ["themeMode", "scheduled"] },
-    { key: "themeColor", type: "color", label: "手动主题色", help: "关闭壁纸取色或图片不允许读取颜色时使用。" },
-    { key: "wallpaperThemeColor", type: "toggle", label: "从壁纸提取主题色", help: "随背景图片调整网站和 betterLD 的强调色，并适配明暗模式。" },
-    { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 深色背景，不降低正文对比度。" },
-    { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "只改变 betterLD 自有背景。" },
-    { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "设置分段控件液态指示器", help: "在设置页的分段控件上使用滑动液态指示器；关闭后为静态选中态，减少动效时同样使用静态。" },
-    { key: "frostedGlassEnabled", type: "toggle", label: "启用毛玻璃", help: "关闭后表面不再使用 backdrop-filter。" },
-    { key: "sidebarCoverBlurEnabled", type: "toggle", label: "启用侧栏遮罩模糊", help: "开启时侧栏容器用壁纸高斯模糊封面（半透明 + 背景模糊）；关闭后改用不透明表面。" },
-    { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "卡片、用户资料卡、菜单、导航和 Header 的独立模糊强度；需开启「启用毛玻璃」。" },
-    { key: "readingPanelBackgroundOpacity", type: "range", label: "阅读面板背景不透明度", unit: "%", help: "树状回复、楼主／本人筛选及独立阅读控制板的背景强度；0% 透明，100% 实色。仅改变背景，不影响普通原帖楼层、文字与按钮。" },
-    { key: "userCardCoverMaskEnabled", type: "toggle", label: "用户卡片封面遮罩", help: "仅作用于带背景图片的用户卡片，关闭后完整显示封面。" },
-    { key: "userCardCoverMaskOpacity", type: "range", label: "用户卡片封面遮罩强度", unit: "%", help: "0% 完全透明，100% 完全遮盖；降低后文字可能与封面混色。", dependsOn: ["userCardCoverMaskEnabled", true] },
-    { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影只作用于 betterLD 自有卡片。" },
-    { key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "控制卡片阴影的整体高度。" },
-    { key: "fontMode", type: "select", label: "字体偏好", help: "不加载远程字体。" },
-    { key: "fontScope", type: "select", label: "字体作用范围", help: "默认只覆盖 betterLD 自有内容。" },
-    { key: "fontFamily", type: "text", label: "自定义字体族", help: "只使用本机或系统已有字体。", wide: true, dependsOn: ["fontMode", "custom"] },
-    { key: "removeChinesePunctuationIndent", type: "toggle", label: "移除中文标点缩进", help: "只作用于 betterLD 自有文本。" },
-    { key: "customCssEnabled", type: "toggle", label: "启用自定义 CSS", help: "保存前会执行 CSSOM、选择器和属性白名单校验。" },
-    { key: "customCss", type: "textarea", label: "自定义 CSS", help: "每条规则必须命中 .betterld- 或 [data-betterld-] 命名空间。", wide: true, dependsOn: ["customCssEnabled", true] },
-    { key: "wallpaperUrl", type: "url", label: "图片 URL", help: "只接受 HTTPS 图片地址。", wide: true },
+    { key: "language", type: "select", label: "设置页语言", help: "仅影响 betterLD 的设置与提示。" },
+    { key: "themeMode", type: "select", label: "主题模式", help: "可跟随 LinuxDo、系统或指定时间切换。" },
+    { key: "themeScheduleStart", type: "time", label: "深色主题开始", help: "定时切换为深色主题。", dependsOn: ["themeMode", "scheduled"] },
+    { key: "themeScheduleEnd", type: "time", label: "深色主题结束", help: "定时退出深色主题，支持跨午夜。", dependsOn: ["themeMode", "scheduled"] },
+    { key: "themeColor", type: "color", label: "手动主题色", help: "关闭壁纸取色或无法取色时使用。" },
+    { key: "wallpaperThemeColor", type: "toggle", label: "从壁纸提取主题色", help: "根据壁纸调整网站与 betterLD 的主题色。" },
+    { key: "darkModeBaseColor", type: "color", label: "深色基色", help: "调整 betterLD 的深色背景颜色。" },
+    { key: "useGradientThemeColorBackground", type: "toggle", label: "使用主题色渐变背景", help: "仅影响 betterLD 背景。" },
+    { key: "liquidSegmentIndicatorEnabled", type: "toggle", label: "选项切换动效", help: "切换设置选项时显示滑动动效；跟随系统的减少动效偏好。" },
+    { key: "frostedGlassEnabled", type: "toggle", label: "毛玻璃效果", help: "为卡片、菜单和面板添加背景模糊。" },
+    { key: "sidebarCoverBlurEnabled", type: "toggle", label: "侧栏背景模糊", help: "开启为半透明模糊背景，关闭为实色背景。" },
+    { key: "surfaceBlurPx", type: "range", label: "表面模糊", unit: "px", help: "调整卡片、用户卡、菜单、导航和顶栏的模糊强度，需开启毛玻璃效果。" },
+    { key: "readingPanelBackgroundOpacity", type: "range", label: "阅读面板背景强度", unit: "%", help: "仅调整树状回复、楼主／本人筛选和阅读控制板的背景。0% 透明，100% 实色。" },
+    { key: "userCardCoverMaskEnabled", type: "toggle", label: "用户卡片封面遮罩", help: "遮暗用户卡片封面，让文字更清晰。" },
+    { key: "userCardCoverMaskOpacity", type: "range", label: "用户卡片封面遮罩强度", unit: "%", help: "0% 透明，100% 遮盖封面；过低可能影响文字辨识。", dependsOn: ["userCardCoverMaskEnabled", true] },
+    { key: "shadowMode", type: "select", label: "阴影模式", help: "自定义阴影仅影响 betterLD 卡片。" },
+    { key: "shadowHeight", type: "range", label: "阴影高度", unit: "", help: "调整阴影的整体高度。" },
+    { key: "fontMode", type: "select", label: "字体偏好", help: "使用本机字体。" },
+    { key: "fontScope", type: "select", label: "字体作用范围", help: "默认仅影响 betterLD 内容。" },
+    { key: "fontFamily", type: "text", label: "自定义字体", help: "填写本机已安装的字体名称。", wide: true, dependsOn: ["fontMode", "custom"] },
+    { key: "removeChinesePunctuationIndent", type: "toggle", label: "移除中文标点缩进", help: "仅影响 betterLD 文本。" },
+    { key: "customCssEnabled", type: "toggle", label: "启用自定义 CSS", help: "仅支持允许的选择器与样式属性。" },
+    { key: "customCss", type: "textarea", label: "自定义 CSS", help: "选择器须包含 .betterld- 类或 [data-betterld-] 属性。", wide: true, dependsOn: ["customCssEnabled", true] },
+    { key: "wallpaperUrl", type: "url", label: "图片地址", help: "只接受 HTTPS 图片地址。", wide: true },
     { key: "maskOpacity", type: "range", label: "页面遮罩", unit: "%", help: "范围 0–80%。" },
     { key: "blurPx", type: "range", label: "背景模糊", unit: "px", help: "范围 0–32px。" },
     { key: "cardOpacity", type: "range", label: "卡片透明度", unit: "%", help: "范围 55%–95%。" },
-    { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "只缓存 URL、探测时间和成功状态，不保存图片正文。" },
+    { key: "wallpaperRemoteCacheDays", type: "select", label: "远程壁纸缓存时长", options: [{ value: "0", label: "仅使用浏览器缓存" }, { value: "1", label: "1 天" }, { value: "7", label: "7 天" }, { value: "30", label: "30 天" }], help: "仅缓存图片地址与可用状态，不保存图片文件。" },
 
-    ...config.userPageAppearances.map(({ key, label }) => ({ key, type: "select", label: `${label}外观`, help: "独立切换此页列表与二级导航的样式；保留顶栏、壁纸、居中布局和原站操作。" })),
-    { key: "topicListAppearance", type: "select", label: "列表样式", help: "首页、搜索结果与帖子底部推荐统一选择美化后或原站样式；保留顶栏与壁纸设置。" },
-    { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "关闭后保留身份栏的可读宽度。" },
+    ...config.userPageAppearances.map(({ key, label }) => ({ key, type: "select", label: `${label}外观`, help: "单独调整此页列表与二级导航；保留顶栏、壁纸和原站操作。" })),
+    { key: "topicListAppearance", type: "select", label: "列表样式", help: "统一调整首页、搜索和帖底推荐，保留顶栏与壁纸。" },
+    { key: "showTopicAvatar", type: "toggle", label: "显示作者头像", help: "在主题列表中显示作者头像。" },
     { key: "showTopicAuthor", type: "toggle", label: "显示作者", help: "显示主题发帖人。" },
-    { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "保留主题链接和分类数据。" },
+    { key: "showTopicCategory", type: "toggle", label: "显示分类", help: "在主题列表中显示所属分类。" },
     { key: "showTopicExcerpt", type: "toggle", label: "显示搜索摘要", help: "显示搜索结果中的内容摘要。" },
-    { key: "showTopicTags", type: "toggle", label: "显示主题标签", help: "控制原生主题行与搜索结果上的标签。" },
-    { key: "showTopicMeta", type: "toggle", label: "显示主题元信息", help: "显示回复数、点赞数、浏览数与活动时间。" },
-    { key: "showTopicActivityTime", type: "toggle", label: "显示活跃与发布时间", help: "在原时间位置上下显示主题最近活跃和发布时间。", dependsOn: ["showTopicMeta", true] },
-    { key: "topicTimeZone", type: "dropdown", label: "列表时间时区", help: "默认中国时间；按所选 IANA 时区转换日期与时间，自动遵循当地夏令时。" },
-    { key: "topicTimeHourCycle", type: "select", label: "时间制式", help: "24 小时制或带上午／下午的 12 小时制。" },
-    { key: "showTopicReplies", type: "toggle", label: "显示回复数", help: "控制列表与搜索卡中的回复数。", dependsOn: ["showTopicMeta", true] },
-    { key: "showTopicLikes", type: "toggle", label: "显示点赞数", help: "控制原生主题列表的对应统计。", dependsOn: ["showTopicMeta", true] },
-    { key: "showTopicViews", type: "toggle", label: "显示浏览数", help: "控制原生主题列表的对应统计。", dependsOn: ["showTopicMeta", true] },
-    { key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "不改变原站未读语义。" },
-    { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "不改变原站置顶排序。" },
-    { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "已看状态读取原站已有主题模型的访问或阅读位置，不单独记录浏览历史。" },
-    { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "只影响主题页树状回复；默认与原站一样同时显示昵称和用户名。" },
-    { key: "userMarksEnabled", type: "toggle", label: "启用用户标记", help: "在作者名旁显示本机私人短标签，并在原站用户卡片里提供标签与备注编辑。" },
-    { key: "mediaBlockAutoplay", type: "toggle", label: "阻止视频自动播放", help: "阻止正文与回复中的视频自动播放，仍可手动播放；部分外部播放器不支持。" },
-    { key: "staticAvatarsEnabled", type: "toggle", label: "头像动图静态化", help: "把动态头像换成静态头像；没有静态版本时保留原图。" },
-    { key: "topicSortMode", type: "select", label: "话题排序方式", help: "按最近活动或发布时间排序；切换后重新加载列表。" },
-    { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "调整原生主题列表与搜索卡的标题字号。" },
-    { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "调整原生主题列表与搜索卡的作者字号。" },
-    { key: "topicMetaFontSize", type: "select", label: "元信息字号", help: "调整原生主题列表与搜索卡的元信息字号。" },
+    { key: "showTopicTags", type: "toggle", label: "显示主题标签", help: "在主题列表和搜索结果中显示标签。" },
+    { key: "showTopicMeta", type: "toggle", label: "显示主题统计", help: "显示回复数、点赞数、浏览数与活动时间。" },
+    { key: "showTopicActivityTime", type: "toggle", label: "显示活跃与发布时间", help: "分两行显示最近活跃时间与发布时间。", dependsOn: ["showTopicMeta", true] },
+    { key: "topicTimeZone", type: "dropdown", label: "列表时区", help: "默认中国时间，自动适配所选时区的夏令时。" },
+    { key: "topicTimeHourCycle", type: "select", label: "时间制式", help: "12 小时制会显示上午／下午。" },
+    { key: "showTopicReplies", type: "toggle", label: "显示回复数", help: "在列表和搜索结果中显示回复数。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicLikes", type: "toggle", label: "显示点赞数", help: "在主题列表中显示点赞数。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicViews", type: "toggle", label: "显示浏览数", help: "在主题列表中显示浏览数。", dependsOn: ["showTopicMeta", true] },
+    { key: "showTopicUnreadState", type: "toggle", label: "显示未读状态", help: "显示原站的未读提示。" },
+    { key: "showTopicPinnedState", type: "toggle", label: "显示置顶状态", help: "显示置顶提示，排序保持原样。" },
+    { key: "showTopicWatchedState", type: "toggle", label: "显示已看标记", help: "依据原站阅读记录标记已看主题。" },
+    { key: "replyTreeNameMode", type: "select", label: "回复作者名称", help: "仅影响树状回复，默认同时显示昵称和用户名。" },
+    { key: "userMarksEnabled", type: "toggle", label: "启用用户标记", help: "在作者名旁显示私人标签，可在用户卡片中编辑标签与备注。" },
+    { key: "mediaBlockAutoplay", type: "toggle", label: "阻止视频自动播放", help: "视频改为手动播放；部分外部播放器不支持。" },
+    { key: "staticAvatarsEnabled", type: "toggle", label: "使用静态头像", help: "动态头像改为静态图，无静态图时保留原图。" },
+    { key: "topicSortMode", type: "select", label: "主题排序", help: "切换后重新加载主题列表。" },
+    { key: "topicTitleFontSize", type: "select", label: "标题字号", help: "调整主题列表与搜索结果的标题大小。" },
+    { key: "topicAuthorFontSize", type: "select", label: "作者字号", help: "调整主题列表与搜索结果的作者名称大小。" },
+    { key: "topicMetaFontSize", type: "select", label: "统计字号", help: "调整主题列表与搜索结果的统计文字大小。" },
 
-    { key: "topicNavigationAlignment", type: "select", label: "主题导航对齐", help: "保留原始链接和 active 语义。" },
-    { key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "与列表控制栏滚动收起协调。" },
-    { key: "showTopicNavigationCounts", type: "toggle", label: "显示导航数量", help: "隐藏视觉数量但保留可访问语义。" },
-    { key: "headerVisible", type: "toggle", label: "显示 Header", help: "不重建原站 Logo、搜索、通知或用户菜单。" },
-    { key: "headerVisualMode", type: "select", label: "Header 视觉", help: "默认与毛玻璃在所有页面使用渐变模糊；透明与不透明按所选模式显示。" },
-    { key: "autoHideHeader", type: "toggle", label: "自动隐藏 Header", help: "移动端默认不隐藏，焦点进入 Header 时恢复。" },
-    { key: "sidebarPosition", type: "select", label: "Sidebar 位置", help: "窄屏会保留原站移动抽屉。" },
-    { key: "autoHideSidebar", type: "toggle", label: "自动隐藏 Sidebar", help: "仅宽屏启用，并保留悬停和键盘热区。" },
-    { key: "showSettingsTrigger", type: "toggle", label: "显示设置入口", help: "在当前页面打开设置窗口，缺少资源 API 时回退扩展设置页。" },
-    { key: "showThemeToggle", type: "toggle", label: "显示主题切换入口", help: "保留原站主题切换语义。" },
-    { key: "siteLogoVisible", type: "toggle", label: "显示站点 Logo", help: "只隐藏原站 Header 里的 Logo，不动其余 Header 内容。" },
-    { key: "siteLogoOutline", type: "toggle", label: "Logo 描边", help: "按 betterLD 主题色给 Logo 加一圈 1px 描边。" },
-    { key: "siteLogoGlow", type: "toggle", label: "Logo 发光", help: "按 betterLD 主题色加发光，可与描边同时开启。" },
-    { key: "actionRailEnabled", type: "toggle", label: "启用浮动操作栏", help: "只创建一个 betterLD 操作组。" },
-    { key: "actionRailPosition", type: "select", label: "操作栏位置", help: "仅启用操作栏时生效。", dependsOn: ["actionRailEnabled", true] },
-    { key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "自动模式会随滚动半隐藏。", dependsOn: ["actionRailEnabled", true] },
-    { key: "actionRailGlow", type: "toggle", label: "操作栏发光", help: "仅作用于 betterLD 操作栏。", dependsOn: ["actionRailEnabled", true] },
-    { key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "使用 window.scrollTo，不改变路由。" },
-    { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "合并站点「查看 N 个新的或更新的话题」，不重载页面。" },
-    { key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "避免与原站按钮重复。" },
+    { key: "topicNavigationAlignment", type: "select", label: "主题导航对齐", help: "调整导航项的对齐方式。" },
+    { key: "topicNavigationSticky", type: "toggle", label: "固定主题导航", help: "滚动时将主题导航固定在顶部。" },
+    { key: "showTopicNavigationCounts", type: "toggle", label: "显示导航数量", help: "显示新主题、未读等入口的数量。" },
+    { key: "headerVisible", type: "toggle", label: "显示顶栏", help: "控制页面顶部导航栏的显示。" },
+    { key: "headerVisualMode", type: "select", label: "顶栏样式", help: "默认与毛玻璃使用渐变模糊，也可选择透明或实色。" },
+    { key: "autoHideHeader", type: "toggle", label: "自动隐藏顶栏", help: "键盘焦点进入顶栏时显示；移动端默认保留顶栏。" },
+    { key: "sidebarPosition", type: "select", label: "侧栏位置", help: "窄屏保留原站抽屉式侧栏。" },
+    { key: "autoHideSidebar", type: "toggle", label: "自动隐藏侧栏", help: "仅宽屏生效，可通过悬停或键盘唤出。" },
+    { key: "showSettingsTrigger", type: "toggle", label: "显示设置入口", help: "在页面上显示 betterLD 设置入口。" },
+    { key: "showThemeToggle", type: "toggle", label: "显示主题切换入口", help: "显示明暗主题切换按钮。" },
+    { key: "siteLogoVisible", type: "toggle", label: "显示站点 Logo", help: "控制顶栏中的站点标志。" },
+    { key: "siteLogoOutline", type: "toggle", label: "Logo 描边", help: "使用主题色添加 1px 描边。" },
+    { key: "siteLogoGlow", type: "toggle", label: "Logo 发光", help: "使用主题色发光，可与描边同时开启。" },
+    { key: "actionRailEnabled", type: "toggle", label: "启用浮动操作栏", help: "集中显示常用操作。" },
+    { key: "actionRailPosition", type: "select", label: "操作栏位置", help: "选择操作栏在页面中的位置。", dependsOn: ["actionRailEnabled", true] },
+    { key: "actionRailVisibility", type: "select", label: "操作栏显隐", help: "可始终显示、滚动时半隐藏或默认隐藏。", dependsOn: ["actionRailEnabled", true] },
+    { key: "actionRailGlow", type: "toggle", label: "操作栏发光", help: "为浮动操作栏添加发光效果。", dependsOn: ["actionRailEnabled", true] },
+    { key: "showBackToTopButton", type: "toggle", label: "显示返回顶部", help: "显示一键回到页顶的按钮。" },
+    { key: "showRefreshButton", type: "toggle", label: "显示刷新按钮", help: "载入新主题与新回复，不刷新整个页面。" },
+    { key: "separateNavigationActions", type: "toggle", label: "分离导航操作", help: "将返回顶部与刷新拆为两个按钮。" },
 
-    { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "作用于原生主题行与搜索结果。" },
-    { key: "topicFilterMode", type: "select", label: "过滤命中行为", help: "隐藏、淡化或只显示命中项；白名单命中项永不受影响。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterMatchMode", type: "select", label: "关键词匹配方式", help: "整词匹配避免 AI、Go 这类短词误伤；正则模式下非法表达式会在保存时被拒绝。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterMaxAgeDays", type: "range", label: "隐藏旧主题（天）", unit: " 天", help: "隐藏超过该天数没有新回复的主题；0 表示不按时间过滤。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterHideLv1", type: "toggle", label: "隐藏 Lv1 主题", help: "等级取自分类 slug，无等级分类不受影响。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterHideLv2", type: "toggle", label: "隐藏 Lv2 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "等级取自分类 slug。", dependsOn: ["topicFilterEnabled", true] },
-    { key: "topicFilterBinEnabled", type: "toggle", label: "保留过滤垃圾桶", help: "在右下角列出本页被过滤的主题，可单条或全部还原；关闭后只隐藏命中项。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterEnabled", type: "toggle", label: "启用主题过滤", help: "筛选主题列表与搜索结果。" },
+    { key: "topicFilterMode", type: "select", label: "匹配后的操作", help: "选择匹配规则后的显示方式；白名单始终保留。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterMatchMode", type: "select", label: "关键词匹配方式", help: "整词匹配可减少短词误匹配；正则表达式须有效。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterMaxAgeDays", type: "range", label: "隐藏旧主题", unit: " 天", help: "隐藏超过指定天数没有新回复的主题，0 表示关闭。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv1", type: "toggle", label: "隐藏 Lv1 主题", help: "按分类等级筛选，无等级分类保留。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv2", type: "toggle", label: "隐藏 Lv2 主题", help: "按主题所属分类的等级筛选。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterHideLv3", type: "toggle", label: "隐藏 Lv3 主题", help: "按主题所属分类的等级筛选。", dependsOn: ["topicFilterEnabled", true] },
+    { key: "topicFilterBinEnabled", type: "toggle", label: "显示已过滤主题", help: "在右下角查看并还原本页已过滤主题；关闭后仅隐藏。", dependsOn: ["topicFilterEnabled", true] },
 
-    { key: "externalSearchEngine", type: "select", label: "外部搜索（站内无结果时）", help: "关闭 / Bing / DuckDuckGo。原站「相关结果」关闭且站内明确无结果时追加 site:linux.do，仅保留 LinuxDo 帖子并按站内搜索条目格式展示。启用需要所选引擎的访问权限，搜索词会发送给该引擎。" },
-    { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "只保存用户实际提交的搜索词。" },
-    { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "在站内搜索框聚焦时列出本机搜索历史，点条目回填搜索框（搜索表单在页面上时直接提交），可单条删除或清空；需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
-    { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "在站内搜索框用最近一次搜索词作为占位提示，输入为空时直接回车会搜索该词；推荐词来自本机搜索历史，需先开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
-    { key: "searchFocusDimming", type: "toggle", label: "搜索聚焦遮罩", help: "只遮罩 betterLD 自有背景。" },
-    { key: "searchFocusBlur", type: "toggle", label: "搜索聚焦模糊", help: "独立于全局壁纸模糊，可能影响性能。" },
-    { key: "searchResultsPaginationMode", type: "select", label: "搜索结果分页", help: "滚动加载沿用站点自动加载更多；翻页模式禁用站点自动加载，改用「加载更多结果」按钮。" },
+    { key: "externalSearchEngine", type: "select", label: "外部搜索补充", help: "原站「相关结果」关闭且站内无主题结果时，补充 LinuxDo 帖子。需授权引擎访问，搜索词会发送给所选引擎。" },
+    { key: "searchHistoryEnabled", type: "toggle", label: "保存搜索历史", help: "仅在本机保存已提交的搜索词。" },
+    { key: "searchHistoryPanelEnabled", type: "toggle", label: "搜索历史面板", help: "点击搜索框时显示历史，点选回填，页面有搜索表单时直接搜索。可删除或清空，需开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
+    { key: "searchRecommendationEnabled", type: "toggle", label: "启用搜索推荐", help: "提示最近一次搜索词，空输入时按回车可再次搜索。需开启「保存搜索历史」。", dependsOn: ["searchHistoryEnabled", true] },
+    { key: "searchFocusDimming", type: "toggle", label: "搜索时显示遮罩", help: "搜索框聚焦时遮暗 betterLD 背景。" },
+    { key: "searchFocusBlur", type: "toggle", label: "搜索时模糊背景", help: "独立调整搜索背景模糊，可能影响性能。" },
+    { key: "searchResultsPaginationMode", type: "select", label: "搜索结果加载方式", help: "选择滚动自动加载，或点击「加载更多结果」。" },
     { key: "searchPageWallpaperMode", type: "select", label: "搜索页壁纸", help: "默认继承全局壁纸。" },
     { key: "searchPageWallpaperId", type: "text", label: "搜索页内置壁纸 ID", help: "仅在搜索页壁纸选择内置图片时生效。", dependsOn: ["searchPageWallpaperMode", "builtin"] },
-    { key: "searchPageWallpaperUrl", type: "url", label: "搜索页远程壁纸 URL", help: "只接受 HTTPS 地址。", wide: true, dependsOn: ["searchPageWallpaperMode", "url"] },
+    { key: "searchPageWallpaperUrl", type: "url", label: "搜索页图片地址", help: "只接受 HTTPS 地址。", wide: true, dependsOn: ["searchPageWallpaperMode", "url"] },
 
-    { key: "topicCardOpenMode", type: "select", label: "主题打开方式", help: "默认保持当前标签页行为。" },
-    { key: "navigationOpenMode", type: "select", label: "导航链接打开方式", help: "保留 modifier-click 和键盘行为。" },
-    { key: "searchOpenMode", type: "select", label: "搜索链接打开方式", help: "只作用于 betterLD 接管的搜索链接。" },
-    { key: "notificationOpenMode", type: "select", label: "通知链接打开方式", help: "不修改原站通知内容。" },
-    { key: "drawerCloseOnOverlay", type: "toggle", label: "点击遮罩关闭抽屉", help: "抽屉关闭后焦点回到触发卡片。" },
-    { key: "drawerCloseOnEscape", type: "toggle", label: "按 Escape 关闭抽屉", help: "保留原生键盘关闭路径。" },
-    { key: "touchOptimization", type: "select", label: "触屏优化", help: "开启时操作目标至少 44 × 44px。" },
+    { key: "topicCardOpenMode", type: "select", label: "主题打开方式", help: "选择点击主题后的打开方式。" },
+    { key: "navigationOpenMode", type: "select", label: "导航链接打开方式", help: "仍可用 Ctrl、Cmd、Shift 等修饰键打开链接。" },
+    { key: "searchOpenMode", type: "select", label: "搜索链接打开方式", help: "仅影响 betterLD 管理的搜索链接。" },
+    { key: "notificationOpenMode", type: "select", label: "通知链接打开方式", help: "选择点击通知后的打开方式。" },
+    { key: "drawerCloseOnOverlay", type: "toggle", label: "点击遮罩关闭预览", help: "关闭后焦点回到打开预览的位置。" },
+    { key: "drawerCloseOnEscape", type: "toggle", label: "按 Esc 关闭预览", help: "使用 Esc 键关闭原帖预览。" },
+    { key: "touchOptimization", type: "select", label: "触屏优化", help: "将触控区域扩大至至少 44 × 44px。" },
     { key: "enableHorizontalNavigationScroll", type: "toggle", label: "允许导航横向滚动", help: "只作用于主题导航。" },
-    { key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "提供可发现的返回首页路径。" },
-    { key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入框、编辑器和可编辑元素聚焦时不触发。" },
+    { key: "showHomeButtonInTouchMode", type: "toggle", label: "触屏显示首页按钮", help: "触屏模式下显示返回首页入口。" },
+    { key: "shortcutsEnabled", type: "toggle", label: "启用快捷键", help: "输入文字时停用快捷键。" },
     { key: "syncEnabled", type: "toggle", label: "启用浏览器同步", help: "本地壁纸和搜索历史不会同步。" },
-    { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "指向规则备份文件的完整地址；只接受 https://，本机地址可用 http://。", wide: true },
-    { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "留空则不发送认证头。" },
-    { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "只保存在本地存储，不进入同步投影与导出文件。" },
-    { key: "libraryWebdavUrl", type: "url", label: "收藏备份 WebDAV 地址", help: "收藏库备份文件的完整地址，复用上面的账号与密码；必须与规则备份地址不同，否则上传会覆盖规则备份。只接受 https://，本机地址可用 http://。", wide: true },
-    { key: "stickerMaxItemMiB", type: "range", label: "单张表情上限", unit: " MiB", help: "按图片本体大小计量；超过上限的图片不会保存，调低不会删除已有表情。" },
-    { key: "stickerMaxTotalMiB", type: "range", label: "整库容量上限", unit: " MiB", help: "按所有表情图片本体大小合计；调低不清理已有图片，新的保存会因容量不足失败。" }
+    { key: "webdavUrl", type: "url", label: "WebDAV 地址", help: "填写规则备份文件的完整 HTTPS 地址；本机可用 HTTP。", wide: true },
+    { key: "webdavUsername", type: "text", label: "WebDAV 用户名", help: "无需认证时可留空。" },
+    { key: "webdavPassword", type: "password", label: "WebDAV 密码", help: "仅保存在本机，不同步、不导出。" },
+    { key: "libraryWebdavUrl", type: "url", label: "收藏备份 WebDAV 地址", help: "填写收藏备份文件的完整 HTTPS 地址，本机可用 HTTP。与规则备份共用账号，地址须不同，避免覆盖。", wide: true },
+    { key: "stickerMaxItemMiB", type: "range", label: "单张表情上限", unit: " MiB", help: "限制单张图片大小，超限无法保存；调低保留已有表情。" },
+    { key: "stickerMaxTotalMiB", type: "range", label: "整库容量上限", unit: " MiB", help: "限制全部图片的总大小；调低保留已有表情，空间不足时无法新增。" }
   ];
 
   const labelMap = {
     latest: "最新", new: "新主题", unread: "未读", hot: "热门", top: "热门排行", posted: "我发布的", read: "已读", bookmarks: "书签", categories: "分类",
     settings: "设置", theme: "主题", refresh: "刷新",
     openCurrentTab: "当前标签页打开", openNewTab: "新标签页打开", openBackground: "后台标签页打开", openDrawer: "打开原帖预览",
-    copyTopicUrl: "复制主题 URL", copyCleanUrl: "复制干净 URL", copyTopicId: "复制主题 ID", openCategory: "打开分类", openAuthor: "打开作者主页"
+    copyTopicUrl: "复制主题链接", copyCleanUrl: "复制纯净链接", copyTopicId: "复制主题 ID", openCategory: "打开分类", openAuthor: "打开作者主页"
   };
 
   const controlMap = new Map();
@@ -1380,8 +1380,8 @@
       const note = document.createElement("p");
       note.className = "settings-inline-note";
       note.textContent = canRequestExternalSearchPermission
-        ? "选择 Bing 或 DuckDuckGo，在浏览器弹出的权限窗口中点击允许即可启用；权限被撤销时，可在下方重新申请。"
-        : "网页内设置无法弹出浏览器授权窗口。点击下方按钮，进入扩展设置页的同一项，再选择 Bing 或 DuckDuckGo 并允许访问。";
+        ? "选择引擎后允许浏览器授权；权限失效时可重新申请。"
+        : "点击下方按钮打开扩展设置，再选择引擎并允许授权。";
       const actions = document.createElement("div");
       actions.className = "settings-actions";
       externalSearchPermissionButton = document.createElement("button");
@@ -2122,7 +2122,7 @@
       }
       await storageSet({ [config.topicExport.offlinePermissionStorageKey]: remaining });
       topicExportOrigins = remaining;
-      setStatusMessage(topicExportOriginStatus, "已授权所选域名，可以回到主题页重新导出。", "success");
+      setStatusMessage(topicExportOriginStatus, "授权成功，请返回主题页重新导出。", "success");
     } catch (error) {
       setStatusMessage(topicExportOriginStatus, `授权失败：${error.message}`, "error");
       console.error("[betterLD] topic export permission request failed", error);
@@ -2139,7 +2139,7 @@
     try {
       const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "externalSearchEngine" });
       if (!response?.ok) throw new Error(response?.error || "扩展授权页未能打开");
-      setStatusMessage(externalSearchPermissionStatus, "已打开扩展授权页：页面 → 搜索 → 外部搜索。请选择引擎并允许访问，然后返回这里。", "success");
+      setStatusMessage(externalSearchPermissionStatus, "已打开「页面 → 搜索 → 外部搜索补充」，请选择引擎并允许授权。", "success");
     } catch (error) {
       setStatusMessage(externalSearchPermissionStatus, `打开授权页失败：${error.message}。可点击浏览器工具栏的 betterLD 图标，进入「页面 → 搜索」。`, "error");
     } finally {
@@ -2161,7 +2161,7 @@
       if (!granted) throw new Error("所选搜索引擎的访问权限未获授权");
       syncExternalSearchControl(engine);
       await save(readForm());
-      setStatusMessage(externalSearchPermissionStatus, `已启用 ${entry.label} 外部搜索，访问权限已授予。`, "success");
+      setStatusMessage(externalSearchPermissionStatus, `已授权并启用 ${entry.label} 搜索。`, "success");
     } catch (error) {
       setStatusMessage(externalSearchPermissionStatus, `外部搜索未启用：${error.message}`, "error");
       console.error("[betterLD] external search permission failed", error);
@@ -2216,7 +2216,7 @@
   }
 
   async function webdavDownload() {
-    if (!globalThis.confirm("下载的规则会追加到现有各组规则之后并自动去重，是否继续？")) {
+    if (!globalThis.confirm("下载并追加规则，自动跳过重复项。继续？")) {
       return;
     }
     try {
@@ -2276,7 +2276,7 @@
       throw new Error(preview?.error || "收藏库导入校验失败");
     }
     const previewText = librarySummaryText(preview.summary);
-    if (!globalThis.confirm(`校验通过：${previewText}。\n\n确认把这些内容追加到当前收藏库？`)) {
+    if (!globalThis.confirm(`${previewText}。\n\n追加到当前收藏库？`)) {
       setStatusMessage(maintenanceStatus, `已取消导入。预览：${previewText}。`, "error");
       return;
     }
@@ -2343,7 +2343,7 @@
     try {
       const parsed = stickerStore.readBackup(JSON.parse(await file.text()));
       const preview = `待导入 ${parsed.stickers.length} 张，备份分组 ${parsed.folders.length} 个${parsed.failed.length ? `，备份中 ${parsed.failed.length} 条记录无法识别` : ""}`;
-      if (!globalThis.confirm(`${preview}。\n\n导入按内容追加，内容相同的图片跳过并保留已有名称与分组，是否继续？`)) {
+      if (!globalThis.confirm(`${preview}。\n\n追加导入，跳过重复图片并保留已有名称与分组。继续？`)) {
         setStatusMessage(stickerLibraryStatus, `已取消导入。${preview}。`, "error");
         return;
       }
@@ -2396,7 +2396,7 @@
     }
   }
 
-  // 逐项失败原因完整列出并保持可展开：不截断，用户能看到每一条为什么没导入。
+  // 失败详情完整列出并保持可展开：不截断，用户能看到每一条为什么没导入。
   function renderStickerFailures(failed) {
     if (!failed.length) {
       stickerLibraryDetails.hidden = true;
@@ -2439,7 +2439,7 @@
     renderStickerOrigins();
     if (canRequestStickerPermission) {
       setStatusMessage(stickerOriginStatus, missing.length
-        ? "请点击「授权所选域名」，在浏览器提示中允许访问后，即可保存对应域名的图片。"
+        ? "点击「授权所选域名」并允许访问，即可保存图片。"
         : "所需图片域名均已授权。", missing.length ? "" : "success");
     }
   }
@@ -2496,7 +2496,7 @@
       }
       await storageSet({ [config.stickerLibrary.pendingOriginsStorageKey]: remaining });
       stickerOrigins = remaining;
-      setStatusMessage(stickerOriginStatus, "已授权所选域名，可以回到帖子页重新右键保存。", "success");
+      setStatusMessage(stickerOriginStatus, "授权成功，请返回帖子页重新右键保存。", "success");
     } catch (error) {
       setStatusMessage(stickerOriginStatus, `授权失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
     } finally {
@@ -2510,7 +2510,7 @@
     try {
       const response = await sendRuntimeMessage({ type: "open-settings-at", hash: "libraryWebdavUrl" });
       if (!response?.ok) throw new Error(response?.error || "扩展设置页未能打开");
-      setStatusMessage(maintenanceStatus, `已打开扩展设置页的「收藏备份 WebDAV 地址」。请在扩展页面完成${action}，访问权限会在那里的点击中申请。`, "success");
+      setStatusMessage(maintenanceStatus, `已打开「高级 → 同步与缓存 → 收藏备份 WebDAV 地址」。请在该页${action}并允许授权。`, "success");
     } catch (error) {
       setStatusMessage(maintenanceStatus, `打开扩展设置页失败：${error instanceof Error ? error.message : "未知错误"}。可点击浏览器工具栏的 betterLD 图标，进入「高级 → 同步与缓存」。`, "error");
     }
@@ -2548,7 +2548,7 @@
       setStatusMessage(maintenanceStatus, `收藏库上传失败：${error.message}`, "error");
       return;
     }
-    if (!globalThis.confirm("上传会用本地收藏库覆盖远端收藏备份文件，是否继续？")) {
+    if (!globalThis.confirm("上传将覆盖远端收藏备份。继续？")) {
       return;
     }
     try {
@@ -2660,7 +2660,7 @@
       try {
         const response = await sendRuntimeMessage({ type: "open-dns-settings" });
         if (!response?.ok) throw new Error(response?.error || "浏览器设置未能打开");
-        setStatusMessage(dnsStatus, `已打开 ${guide.label} 设置，请找到“使用安全 DNS”。`, "success");
+        setStatusMessage(dnsStatus, `已打开 ${guide.label} 设置，请找到「使用安全 DNS」。`, "success");
       } catch (error) {
         setStatusMessage(dnsStatus, `打开失败：${error.message}。可复制设置地址到浏览器地址栏。`, "error");
       } finally {
@@ -2670,7 +2670,7 @@
     document.querySelector("#copy-dns-settings").addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(guide.url);
-        setStatusMessage(dnsStatus, "地址已复制，请粘贴到浏览器地址栏后按回车。", "success");
+        setStatusMessage(dnsStatus, "地址已复制，粘贴到浏览器地址栏后按回车。", "success");
       } catch (error) {
         address.focus();
         address.select();
@@ -3026,7 +3026,7 @@
     if (!file) {
       return;
     }
-    if (!globalThis.confirm("导入会用文件内容覆盖当前全部设置，是否继续？")) {
+    if (!globalThis.confirm("导入将覆盖全部设置。继续？")) {
       return;
     }
     try {
@@ -3046,7 +3046,7 @@
     if (!file) {
       return;
     }
-    if (!globalThis.confirm("导入会把文件里的规则追加到现有各组规则之后并自动去重，是否继续？")) {
+    if (!globalThis.confirm("导入并追加规则，自动跳过重复项。继续？")) {
       return;
     }
     try {
@@ -3112,7 +3112,7 @@
   });
 
   clearSearchHistory.addEventListener("click", async () => {
-    if (!globalThis.confirm("清空搜索历史会删除全部已保存的搜索词，是否继续？")) {
+    if (!globalThis.confirm("删除全部搜索历史？")) {
       return;
     }
     try {
@@ -3141,7 +3141,7 @@
   });
 
   reset.addEventListener("click", async () => {
-    if (!globalThis.confirm("恢复默认会立即覆盖当前全部设置，是否继续？")) {
+    if (!globalThis.confirm("恢复默认将覆盖全部设置。继续？")) {
       return;
     }
     state.removeLocalWallpaper = false;
@@ -3206,7 +3206,7 @@
     .catch((error) => {
       state.localWallpaper = null;
       populate(config.settingsDefaults);
-      setStatusMessage(status, "设置读取失败，已使用安全默认值。", "error");
+      setStatusMessage(status, "设置读取失败，已使用默认值。", "error");
       console.error("[betterLD] settings load failed", error);
     });
 })();

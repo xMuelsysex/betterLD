@@ -52,7 +52,7 @@
                     </div>
                     <div class="settings-group-card" data-editor="shadowCurve">
                       <p class="settings-group-card__title">阴影曲线</p>
-                      <p class="settings-group-card__desc">按高度位置调整 betterLD 自有卡片阴影的透明度。</p>
+                      <p class="settings-group-card__desc">调整阴影从近到远的透明度。</p>
                       <div class="settings-group-card__surface" data-shadow-curve-editor></div>
                     </div>
                   </section>
@@ -75,7 +75,7 @@
                     </div>
                     <div class="settings-group-card" data-editor="topicCardContextMenu">
                       <p class="settings-group-card__title">卡片操作菜单</p>
-                      <p class="settings-group-card__desc">控制卡片菜单项的显隐与顺序。</p>
+                      <p class="settings-group-card__desc">选择菜单项并调整顺序。</p>
                       <div class="settings-group-card__surface" data-card-menu-editor></div>
                     </div>
                   </section>
@@ -98,7 +98,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">已保存的用户标记</p>
-                      <p class="settings-group-card__desc">标签与备注只保存在本机扩展存储；标签显示在作者名旁，备注只在用户卡片与这里可见。</p>
+                      <p class="settings-group-card__desc">仅保存在本机。标签显示在作者名旁，备注仅在用户卡片与此处可见。</p>
                       <div class="settings-group-card__surface" data-user-marks-manager></div>
                     </div>
                   </section>
@@ -109,7 +109,7 @@
                     </div>
                     <div class="settings-group-card" data-editor="rules">
                       <p class="settings-group-card__title">筛选规则</p>
-                      <p class="settings-group-card__desc">五组规则共用上面的命中行为与匹配方式；白名单命中项永不被过滤。</p>
+                      <p class="settings-group-card__desc">各组共用匹配方式与处理操作，白名单始终保留。</p>
                       <div class="settings-group-card__surface" data-rule-editors></div>
                     </div>
                   </section>
@@ -126,7 +126,7 @@
                     </div>
                     <div class="settings-group-card" data-editor="topicNavigation">
                       <p class="settings-group-card__title">导航项</p>
-                      <p class="settings-group-card__desc">控制主题导航入口的显隐与顺序。</p>
+                      <p class="settings-group-card__desc">选择导航项并调整顺序。</p>
                       <div class="settings-group-card__surface" data-topic-navigation-editor></div>
                     </div>
                   </section>
@@ -143,7 +143,7 @@
                     </div>
                     <div class="settings-group-card" data-editor="actionRailItems">
                       <p class="settings-group-card__title">操作栏项目</p>
-                      <p class="settings-group-card__desc">控制浮动操作栏项目的显隐与顺序。</p>
+                      <p class="settings-group-card__desc">选择操作项并调整顺序。</p>
                       <div class="settings-group-card__surface" data-action-rail-editor></div>
                     </div>
                   </section>
@@ -157,16 +157,16 @@
                   <section class="settings-panel" data-panel="appearance" data-subpanel="wallpaper" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">背景来源</p>
-                      <p class="settings-group-card__desc">参考 BewlyCat，支持网站随机图片、内置图片、远程图片和本地图片。</p>
+                      <p class="settings-group-card__desc">选择每日随机、内置、远程或本地图片。</p>
                       <div class="settings-group-card__surface">
                         <div id="wallpaper-sources" class="wallpaper-sources" role="radiogroup" aria-label="背景图片来源" aria-describedby="wallpaper-description"></div>
-                        <p id="wallpaper-description" class="settings-inline-note">图片会压缩后保存在扩展本地，不会上传到 LinuxDo。</p>
+                        <p id="wallpaper-description" class="settings-inline-note">本地图片压缩后保存在本机，不上传到 LinuxDo。</p>
                       </div>
                     </div>
 
                     <div class="settings-group-card" id="wallpaper-random-panel" hidden>
                       <p class="settings-group-card__title">网站随机图片</p>
-                      <p class="settings-group-card__desc">每天固定一张，进入下一天后自动更新。</p>
+                      <p class="settings-group-card__desc">每天自动更换一张。</p>
                       <div class="settings-group-card__surface">
                         <div id="wallpaper-random-preview" class="wallpaper-random-preview"></div>
                       </div>
@@ -213,7 +213,7 @@
                   <section class="settings-panel" data-panel="appearance" data-subpanel="customCss" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">自定义 CSS</p>
-                      <p class="settings-group-card__desc">保存前会执行 CSSOM、选择器和属性白名单校验。</p>
+                      <p class="settings-group-card__desc">仅支持允许的选择器与样式属性。</p>
                       <div class="settings-group-card__surface" data-fields="customCss"></div>
                     </div>
                   </section>
@@ -232,8 +232,8 @@
                   <section class="settings-panel" data-panel="advanced" data-subpanel="network" hidden>
                     <div class="settings-group-card__surface">
                       <section class="settings-field" data-settings-guide="dns">
-                        <div class="settings-field__title">安全 DNS / DNS over HTTPS（DoH）</div>
-                        <p class="settings-field__desc">使用浏览器现有的加密域名解析。betterLD 提供设置定位，不接管网页 DNS，也无法读取当前启用状态。DNS 隐私保护并不保证提高加载速度，服务提供商与保护级别由你决定。</p>
+                        <div class="settings-field__title">安全 DNS（DoH）</div>
+                        <p class="settings-field__desc">加密域名解析以保护隐私，不保证提速。betterLD 仅提供设置入口，无法读取启用状态。</p>
                         <div class="settings-network-guide">
                           <p id="dns-settings-path"></p>
                           <p id="dns-settings-hint" class="settings-inline-note"></p>
@@ -245,7 +245,7 @@
                             <button id="open-dns-settings" class="settings-button settings-button--tonal" type="button" hidden>打开浏览器 DNS 设置</button>
                             <button id="copy-dns-settings" class="settings-button settings-button--tonal" type="button">复制设置地址</button>
                           </div>
-                          <p class="settings-inline-note">修改影响整个浏览器；受组织策略管理时，选项可能锁定。使用代理或 VPN 时，实际解析方式还取决于其配置。betterLD 保持现有网络设置。</p>
+                          <p class="settings-inline-note">修改影响整个浏览器，选项可能受组织策略限制；使用代理或 VPN 时，解析方式取决于其配置。</p>
                           <p id="dns-settings-status" class="settings-inline-status" role="status" aria-live="polite"></p>
                         </div>
                       </section>
@@ -267,7 +267,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">WebDAV 规则备份</p>
-                      <p class="settings-group-card__desc">上传与下载五组筛选规则；密码只保存在本地，不进入同步投影。</p>
+                      <p class="settings-group-card__desc">备份各组筛选规则，密码仅保存在本机。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="webdav-upload" class="settings-button settings-button--tonal" type="button">上传规则</button>
@@ -277,8 +277,8 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">WebDAV 收藏备份</p>
-                      <p class="settings-group-card__desc">使用上面的账号与密码。收藏与规则备份须使用不同地址，避免互相覆盖。</p>
-                      <p class="settings-inline-note">WebDAV 单次上传上限：<span id="library-webdav-limit"></span>。超出时上传会失败并保留远端文件。</p>
+                      <p class="settings-group-card__desc">共用 WebDAV 账号，备份地址须与规则备份不同，避免覆盖。</p>
+                      <p class="settings-inline-note">单次上传上限：<span id="library-webdav-limit"></span>。超限上传失败，保留远端文件。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="library-webdav-upload" class="settings-button settings-button--tonal" type="button">上传收藏库</button>
@@ -291,7 +291,7 @@
                   <section class="settings-panel" data-panel="advanced" data-subpanel="data" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">设置文件</p>
-                      <p class="settings-group-card__desc">导出的 JSON 不包含本地壁纸正文、账号信息或页面内容。</p>
+                      <p class="settings-group-card__desc">设置文件不含本地壁纸图片、WebDAV 密码或页面内容。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="export-settings" class="settings-button settings-button--tonal" type="button">导出设置</button>
@@ -301,11 +301,11 @@
                       </div>
                     </div>
                     <div class="settings-group-card">
-                      <p class="settings-group-card__title">HTML 导出离线归档授权</p>
-                      <p class="settings-group-card__desc">完全离线的 HTML 导出会把正文图片、媒体、附件与作者头像内嵌到单文件里，因此需要这些资源所在域名的访问权限。只申请下列精确域名，不会申请全部网站权限。</p>
+                      <p class="settings-group-card__title">离线 HTML 导出授权</p>
+                      <p class="settings-group-card__desc">离线导出需访问图片、媒体、附件与头像所在域名，将资源内嵌到 HTML。仅申请下列域名权限。</p>
                       <div class="settings-group-card__surface">
                         <ul id="topic-export-origin-list" class="settings-origin-list"></ul>
-                        <p id="topic-export-origin-empty" class="settings-inline-note">暂无待授权域名；导出失败时缺失的域名会出现在这里。</p>
+                        <p id="topic-export-origin-empty" class="settings-inline-note">暂无待授权域名。导出时缺少权限的域名会列在这里。</p>
                         <div class="settings-actions">
                           <button id="topic-export-grant" class="settings-button settings-button--tonal" type="button">授权所选域名</button>
                           <button id="topic-export-refresh" class="settings-button settings-button--tonal" type="button">刷新域名列表</button>
@@ -325,7 +325,7 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">收藏库文件</p>
-                      <p class="settings-group-card__desc">备份稍后再看、收藏与分组，不含账号密码或设置。导入会追加新条目，保留已有分组。</p>
+                      <p class="settings-group-card__desc">备份稍后再看、收藏与分组，不含账号密码或设置。导入追加条目，保留已有分组。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="export-library" class="settings-button settings-button--tonal" type="button">导出收藏库</button>
@@ -349,10 +349,10 @@
                     <div data-fields="sticker"></div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">表情库文件</p>
-                      <p class="settings-group-card__desc">备份图片、名称与分组；导入时跳过重复图片，保留已有表情。</p>
+                      <p class="settings-group-card__desc">备份图片、名称与分组。导入跳过重复图片，保留已有表情。</p>
                       <p class="settings-inline-note" id="sticker-library-summary"></p>
                       <details id="sticker-library-details" hidden>
-                        <summary class="settings-inline-note">逐项失败原因</summary>
+                        <summary class="settings-inline-note">失败详情</summary>
                         <ul id="sticker-library-failures" class="settings-origin-list"></ul>
                       </details>
                       <div class="settings-group-card__surface">
@@ -366,10 +366,10 @@
                     </div>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">图片域名授权</p>
-                      <p class="settings-group-card__desc">右键点击「保存到表情包面板」时，会直接向浏览器申请 cdn.ldstatic.com、cdn3.ldstatic.com 与本次图片域名的访问权限，允许后继续保存。这里也可手动授权预置域名及保存时发现的其他域名。只申请精确域名，下载到电脑不使用这里的权限。</p>
+                      <p class="settings-group-card__desc">右键「保存到表情包面板」时会申请图片域名及 cdn.ldstatic.com、cdn3.ldstatic.com 的权限，授权后继续保存。也可在此手动授权；下载到电脑无需此权限。</p>
                       <div class="settings-group-card__surface">
                         <ul id="sticker-origin-list" class="settings-origin-list"></ul>
-                        <p id="sticker-origin-empty" class="settings-inline-note">当前没有待授权域名；右键保存时发现的其他未授权域名会出现在这里。</p>
+                        <p id="sticker-origin-empty" class="settings-inline-note">暂无待授权域名。右键保存时发现的未授权域名会列在这里。</p>
                         <div class="settings-actions">
                           <button id="sticker-origin-grant" class="settings-button settings-button--tonal" type="button">授权所选域名</button>
                           <button id="sticker-origin-refresh" class="settings-button settings-button--tonal" type="button">刷新域名列表</button>
@@ -382,7 +382,7 @@
                   <section class="settings-panel" data-panel="advanced" data-subpanel="reset" hidden>
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">恢复默认</p>
-                      <p class="settings-group-card__desc">恢复默认会立即覆盖当前全部设置，包含壁纸来源与卡片布局。</p>
+                      <p class="settings-group-card__desc">将立即覆盖全部设置，包括壁纸与列表外观。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="reset" class="settings-button settings-button--tonal" type="button">恢复默认设置</button>
@@ -397,7 +397,7 @@
                         <div class="settings-about">
                           <p id="about-version"></p>
                           <p id="about-storage"></p>
-                          <p>Manifest V3 · Chrome / Firefox 桌面端 · 仅处理 betterLD 所需的主题与设置数据。</p>
+                          <p>支持 Chrome / Firefox 桌面端，仅处理功能所需的主题与设置数据。</p>
                           <p>
                             <a href="https://github.com/xMuelsysex/betterLD" target="_blank" rel="noreferrer">项目主页</a>
                             ·
@@ -409,7 +409,7 @@
 
                     <div class="settings-group-card">
                       <p class="settings-group-card__title">检查更新</p>
-                      <p class="settings-group-card__desc">比对 GitHub Releases 的最新标签与本地版本号，只做提示，不自动更新；不点击不会发起任何请求。</p>
+                      <p class="settings-group-card__desc">点击后查询 GitHub 最新版本，仅提示，不自动更新。</p>
                       <div class="settings-group-card__surface">
                         <div class="settings-actions">
                           <button id="check-update" class="settings-button settings-button--tonal" type="button">检查更新</button>

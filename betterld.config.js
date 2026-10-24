@@ -65,14 +65,14 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       label: "Chrome",
       url: "chrome://settings/security",
       path: "设置 → 隐私和安全 → 安全 → 使用安全 DNS",
-      hint: "可在 Chrome 设置中搜索“安全 DNS”，按需要启用并选择服务提供商或自定义地址。",
+      hint: "也可在 Chrome 设置中搜索「安全 DNS」，选择服务商或自定义地址。",
       canOpen: true
     }),
     firefox: Object.freeze({
       label: "Firefox",
       url: "about:preferences#privacy",
       path: "设置 → 隐私与安全 → 基于 HTTPS 的 DNS",
-      hint: "在隐私与安全页面下方找到“基于 HTTPS 的 DNS”，选择保护级别与服务提供商。Firefox 限制扩展打开此内部页面，请复制地址到地址栏后按回车。",
+      hint: "复制下方地址到浏览器地址栏，找到「基于 HTTPS 的 DNS」，选择保护级别与服务商。",
       canOpen: false
     })
   }),
@@ -432,10 +432,10 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   discourseIgnoreExpiringAt: "3026-08-01 08:00+08:00",
   topicRuleGroups: Object.freeze([
     { key: "topicTitleRules", title: "标题规则", empty: "暂无标题规则", help: "匹配主题标题。" },
-    { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配主题所属分类名称。" },
-    { key: "topicTagRules", title: "标签规则", empty: "暂无标签规则", help: "匹配主题标签；分类页面行内可能不渲染标签。" },
-    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "主题列表匹配创建者；搜索结果匹配搜索命中帖的作者，直接使用搜索结果，不额外请求。" },
-    { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "命中白名单的主题永远不参与过滤。" }
+    { key: "topicCategoryRules", title: "分类规则", empty: "暂无分类规则", help: "匹配分类名称。" },
+    { key: "topicTagRules", title: "标签规则", empty: "暂无标签规则", help: "匹配主题标签，部分分类列表不显示标签。" },
+    { key: "topicAuthorRules", title: "作者规则", empty: "暂无作者规则", help: "列表匹配主题作者，搜索匹配命中帖的作者。" },
+    { key: "topicWhitelistRules", title: "白名单规则", empty: "暂无白名单规则", help: "匹配的主题始终保留。" }
   ]),
   // 媒体降噪只处理已取证的平台与节点：未知播放器不猜参数，跨域播放器内部状态无法控制。
   media: Object.freeze({
@@ -463,7 +463,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "theme",
           title: "主题",
-          description: "跟随 LinuxDo 或系统偏好的明暗模式，以及 betterLD 自有主题色。",
+          description: "设置明暗模式、主题色与切换动效。",
           keys: [
             "language",
             "themeMode",
@@ -479,19 +479,19 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "surface",
           title: "表面与毛玻璃",
-          description: "betterLD 自有卡片、菜单和面板的表面效果。",
+          description: "调整卡片、菜单与面板的模糊、背景和阴影。",
           keys: ["frostedGlassEnabled", "surfaceBlurPx", "readingPanelBackgroundOpacity", "sidebarCoverBlurEnabled", "userCardCoverMaskEnabled", "userCardCoverMaskOpacity", "shadowMode", "shadowHeight"]
         },
         {
           id: "font",
           title: "字体与文本",
-          description: "字体来源与中文排版。",
+          description: "设置字体、作用范围与中文排版。",
           keys: ["fontMode", "fontScope", "fontFamily", "removeChinesePunctuationIndent"]
         },
         {
           id: "behavior",
           title: "页面行为",
-          description: "触屏目标与横向滚动的范围。",
+          description: "调整触屏操作与导航滚动。",
           keys: ["touchOptimization", "enableHorizontalNavigationScroll", "showHomeButtonInTouchMode"]
         }
       ]
@@ -504,7 +504,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "card",
           title: "主题列表",
-          description: "首页、搜索与帖底推荐共用样式切换、信息显隐与字号。",
+          description: "调整首页、搜索与帖底推荐的样式、信息和字号。",
           keys: [
             "topicListAppearance",
             "topicSortMode",
@@ -530,37 +530,37 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "userPages",
           title: "活动与消息",
-          description: "各活动子页独立选择原版或 Material 3；消息样式覆盖全部消息分类。",
+          description: "各活动页可单独选择样式，消息样式适用于全部消息分类。",
           keys: userPageAppearances.map(({ key }) => key)
         },
         {
           id: "replyTree",
           title: "树状回复",
-          description: "主题回复树中作者昵称与用户名的显示方式。",
+          description: "选择回复作者的名称显示方式。",
           keys: ["replyTreeNameMode"]
         },
         {
           id: "userMarks",
           title: "用户标记",
-          description: "给用户加本机私人标签与备注；标签显示在作者名旁，备注只在用户卡片与这里可见。",
+          description: "管理本机私人标签与备注。",
           keys: ["userMarksEnabled"]
         },
         {
           id: "filter",
           title: "筛选",
-          description: "筛选原生主题行与搜索结果，不改变 LinuxDo 原始查询与分页。",
+          description: "按规则筛选主题列表与搜索结果。",
           keys: ["topicFilterEnabled", "topicFilterMode", "topicFilterMatchMode", "topicFilterMaxAgeDays", "topicFilterHideLv1", "topicFilterHideLv2", "topicFilterHideLv3", "topicFilterBinEnabled"]
         },
         {
           id: "media",
           title: "阅读与媒体",
-          description: "阻止原帖、树状回复、Boost 与插件预览里的视频自动播放，并把原站头像动图换成同尺寸静态头像。",
+          description: "关闭视频自动播放，改用静态头像。",
           keys: ["mediaBlockAutoplay", "staticAvatarsEnabled"]
         },
         {
           id: "search",
           title: "搜索",
-          description: "Material 3 原生搜索结果；保留命中摘要，站内无结果时可选外部引擎补充 LinuxDo 主题。",
+          description: "设置搜索历史、结果加载、壁纸与外部搜索。",
           keys: [
             "externalSearchEngine",
             "showTopicExcerpt",
@@ -585,13 +585,13 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "navigation",
           title: "主题导航",
-          description: "保留原站链接与 active 语义，只改变排列与可见性。",
+          description: "调整导航排列、固定方式与数量显示。",
           keys: ["topicNavigationAlignment", "topicNavigationSticky", "showTopicNavigationCounts"]
         },
         {
           id: "shell",
-          title: "Header 与 Sidebar",
-          description: "覆盖已确认的原生壳层 surface，不重建原站导航内容。",
+          title: "顶栏与侧栏",
+          description: "调整顶栏、侧栏与站点标志。",
           keys: [
             "headerVisible",
             "headerVisualMode",
@@ -608,7 +608,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "actionRail",
           title: "浮动操作",
-          description: "betterLD 自有的浮动操作栏、返回顶部与刷新入口。",
+          description: "设置操作栏、返回顶部与刷新入口。",
           keys: [
             "actionRailEnabled",
             "actionRailPosition",
@@ -621,8 +621,8 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         },
         {
           id: "interaction",
-          title: "打开方式与抽屉",
-          description: "保留浏览器原生的修饰键点击与键盘行为。",
+          title: "打开方式与预览",
+          description: "设置链接打开方式与预览关闭方式。",
           keys: [
             "topicCardOpenMode",
             "navigationOpenMode",
@@ -642,19 +642,19 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "wallpaper",
           title: "壁纸",
-          description: "网站随机图片、内置图片与自定义图片三类来源。",
+          description: "选择背景图片来源。",
           keys: ["wallpaperMode", "wallpaper", "wallpaperId", "wallpaperUrl", "wallpaperLocalId"]
         },
         {
           id: "effect",
           title: "页面效果",
-          description: "壁纸之上的遮罩、模糊与卡片透明度。",
+          description: "调整遮罩、背景模糊与卡片透明度。",
           keys: ["maskOpacity", "blurPx", "cardOpacity"]
         },
         {
           id: "customCss",
           title: "自定义 CSS",
-          description: "只允许命中 betterLD 自有命名空间的规则。",
+          description: "为 betterLD 内容添加自定义样式。",
           keys: ["customCssEnabled", "customCss"]
         }
       ]
@@ -667,7 +667,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "shortcuts",
           title: "按键",
-          description: "输入框、编辑器和可编辑元素聚焦时不触发。",
+          description: "设置常用操作的按键，输入文字时停用。",
           keys: ["shortcutsEnabled"]
         }
       ]
@@ -680,31 +680,31 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
         {
           id: "network",
           title: "浏览器网络",
-          description: "定位浏览器自有的安全 DNS（DoH）设置，由用户选择保护级别与服务提供商。",
+          description: "查找浏览器的加密 DNS 设置。",
           keys: []
         },
         {
           id: "maintenance",
           title: "同步与缓存",
-          description: "浏览器同步只投影设置，不包含本地壁纸正文、搜索历史与 WebDAV 凭据。",
+          description: "同步设置、管理壁纸缓存与 WebDAV 备份。",
           keys: ["syncEnabled", "wallpaperRemoteCacheDays", "webdavUrl", "webdavUsername", "webdavPassword", "libraryWebdavUrl"]
         },
         {
           id: "sticker",
           title: "表情包",
-          description: "个人表情库的容量上限、整库备份与图片域名授权；图片内容只保存在本机扩展存储。",
+          description: "管理本机表情库的容量、备份与图片授权。",
           keys: ["stickerMaxItemMiB", "stickerMaxTotalMiB"]
         },
         {
           id: "data",
           title: "导入与导出",
-          description: "导出内容不包含本地壁纸正文、账号信息或页面内容。",
+          description: "备份与导入设置、规则和收藏，管理离线导出授权。",
           keys: []
         },
         {
           id: "reset",
           title: "恢复默认",
-          description: "恢复默认会立即覆盖当前全部设置。",
+          description: "将全部设置恢复为默认值。",
           keys: []
         }
       ]
