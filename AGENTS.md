@@ -42,13 +42,13 @@ betterLD 首版采用可直接加载的无依赖 Manifest V3 扩展，覆盖 Chr
 
 ### 版本更新流程
 
-- 完整版本更新流程包括：同步版本 → 更新 README／CHANGELOG → 检查与打包 → 提交 → 推送分支与 tag → 发布 GitHub Release → 核对最新 Release。主人明确要求执行完整更新／发布流程并给出目标版本时，按此顺序完成；仅要求修改流程文档时只改文档，明确限定仅提交或仅推送／打 tag 时遵从该范围。版本号继续由主人决定；流程记录不授权自行发起后续发布，上传额外附件仍需当次授权。
+- 完整版本更新流程包括：同步版本 → 更新 README／CHANGELOG → 检查与打包 → 提交 → 推送分支与 tag → 发布 GitHub Release → 核对最新 Release。主人明确要求执行完整更新／发布流程并给出目标版本时，按此顺序完成；仅要求修改流程文档时只改文档，明确限定仅提交或仅推送／打 tag 时遵从该范围。版本号继续由主人决定；流程记录不授权自行发起后续发布。主人授权发布 Release 时，默认同时上传本次打包的 `dist/betterLD-chrome.zip` 与 `dist/betterLD-firefox.zip`，无需另外询问；其他额外附件仍需当次授权。
 - 开始前核对工作区、分支、远端 main 与目标 tag；以最近已发布 tag 到当前交付提交的实际差异整理范围，保留无关改动。远端已存在目标 tag 或分支分叉时先报告，不能覆盖标签、强推或自动改写历史。
 - 同步 `package.json` 与根 `manifest.json` 到指定版本；更新 README 的当前版本、版本链接及受本轮改动影响的功能和用法，并在 `CHANGELOG.md` 顶部追加该版本的日期、功能／调整、修复及比较链接。README 按下节「公开文档定位」维护；偶发且未定位的问题不写成已修复。只打 tag 时 README 链接使用该 tag 的源码页，获授权创建 Release 后可使用对应 Release 链接。
 - 执行既有 `npm run check`、`git diff --check` 和 `npm run package`，确认包内版本与 `package.json` 一致，直接比较本次涉及的打包文件。不新增测试或守门脚本，不进行哈希校验；版本／文档更新可沿用相同源码的有效浏览器证据，明确用户当前会话重载状态。
 - 仅暂存本次相关文件，按项目提交风格完成本地版本提交；获得推送与标签授权时，在该提交创建唯一的 `v<version>` tag，推送目标分支及该 tag（优先原子推送），随后核对远端分支和 tag 指向同一交付提交。不使用 `--tags` 顺带推送其他标签，也不以 tag 推送代替 GitHub Release 发布。
-- 分支与 tag 推送完成后，发布对应的 GitHub Release：复用已存在的 `v<version>` tag，不创建第二个版本或移动标签；标题使用 `v<version>`，正文取 `CHANGELOG.md` 对应版本的功能／调整与修复章节，不包含开发未验项或升级步骤；内容归属遵循下节「公开文档定位」。正式版本发布为非草稿、非预发布并设为 Latest；目标 Release 已存在时先核对状态与内容，需覆盖或修改时确认当次授权范围。
-- 发布后核对 Release 页面及 `https://api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 `tag_name` 为本次 `v<version>`，并确认 `draft=false`、`prerelease=false`；扩展内「检查更新」依赖此接口，仅推送 tag 不算完成完整更新流程。失败时保留已完成的提交和标签，明确报告失败步骤，不重复选版本或强行重打标签。交付报告版本、提交、远端分支／tag、Release 链接、固定包路径，以及浏览器重载的实际状态。
+- 分支与 tag 推送完成后，发布对应的 GitHub Release：复用已存在的 `v<version>` tag，不创建第二个版本或移动标签；标题使用 `v<version>`，正文取 `CHANGELOG.md` 对应版本的功能／调整与修复章节，不包含开发未验项或升级步骤；内容归属遵循下节「公开文档定位」。正式版本发布为非草稿、非预发布并设为 Latest，并附上 `betterLD-chrome.zip`、`betterLD-firefox.zip` 两份浏览器包，不能只留下 GitHub 自动生成的源码归档；目标 Release 已存在时先核对状态、正文及附件，需覆盖或修改时确认当次授权范围。
+- 发布后核对 Release 页面及 `https://api.github.com/repos/xMuelsysex/betterLD/releases/latest` 的 `tag_name` 为本次 `v<version>`，并确认 `draft=false`、`prerelease=false`；核对两份浏览器附件均已上传，从实际附件下载内容与本地 ZIP 直接字节比较、读取包内版本，并在交付时提供两个下载链接，不做哈希校验。扩展内「检查更新」依赖此接口，仅推送 tag 不算完成完整更新流程。失败时保留已完成的提交和标签，明确报告失败步骤，不重复选版本或强行重打标签。交付报告版本、提交、远端分支／tag、Release 链接、固定包路径，以及浏览器重载的实际状态。
 
 ### 公开文档定位
 
