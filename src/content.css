@@ -4333,6 +4333,13 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   object-fit: contain;
 }
 
+/* 楼层授勋保留原生图标与链接，作者栏只显示图标，不带徽章底框。 */
+.betterld-reply-tree__author .user-badge-buttons .user-badge {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 /* 姓名旁整组徽章沿用原站色彩 Token；不与头像右下角的 flair 合并。 */
 .betterld-reply-tree__poster-badges {
   display: inline-flex;
