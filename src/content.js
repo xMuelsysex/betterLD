@@ -7460,8 +7460,6 @@
     const mark = createElement("span", "betterld-reply-tree__author-mark betterld-youth-user", config.youthUser.label);
     mark.dataset.userId = String(target.id);
     mark.dataset.betterldOwned = "true";
-    mark.title = `注册日期晚于 ${config.youthUser.registrationAfter}，非 ${config.youthUser.excludedInviter} 邀请且不属于 ${config.youthUser.excludedGroup} 分组`;
-    mark.setAttribute("aria-label", `${config.youthUser.label}：${mark.title}`);
     target.host.append(mark);
     if (anchor) restoreReplyTreeAnchor(tree, anchor);
   }
@@ -7482,7 +7480,7 @@
     youthUsers.set(target.id, entry);
     const needed = () => pageActive() && youthTargetVisible(target)
       && (target.kind !== "tree" || state.replyTree?.posts.get(Number(target.host.closest(".betterld-reply-tree__card").dataset.postId))?.user_id === target.id)
-      && (target.kind !== "card" || document.querySelector("#user-card.show .names") === target.host)
+      && (target.kind !== "card" || document.querySelector("#user-card.show .names__primary") === target.host)
       && (target.kind !== "profile" || document.querySelector(".user-main .user-profile-names__primary") === target.host);
     scheduleMetadataRequest(async () => {
       const data = await fetchTopicJson(`/u/${encodeURIComponent(target.username)}.json`, "用户资料");
@@ -7516,7 +7514,7 @@
       if (!post || !Number.isInteger(post.user_id) || !post.username) return [];
       return [{ host, kind: "tree", id: post.user_id, username: post.username, registrationDate: post.user_cakedate }];
     }) : [];
-    const card = document.querySelector("#user-card.show .names");
+    const card = document.querySelector("#user-card.show .names__primary");
     const profile = document.querySelector(".user-main .user-profile-names__primary");
     if (!youthTargets.length && !card && !profile) return;
     youthBridgeSyncing = true;
@@ -7536,7 +7534,7 @@
       if (!entry.pending && now - entry.at >= config.youthUser.cacheMs && !youthTargets.some((target) => target.id === id)) youthUsers.delete(id);
     }
     for (const user of result.users) youthUsers.set(user.id, { user, at: now });
-    for (const [key, selector] of [["card", "#user-card.show .names"], ["profile", ".user-main .user-profile-names__primary"]]) {
+    for (const [key, selector] of [["card", "#user-card.show .names__primary"], ["profile", ".user-main .user-profile-names__primary"]]) {
       const host = document.querySelector(selector);
       const identity = result[key];
       if (host && identity) youthTargets.push({ host, kind: key, ...identity });

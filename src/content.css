@@ -1700,6 +1700,11 @@ body.betterld-shell .user-card .names {
   overflow-wrap: anywhere;
 }
 
+body.betterld-shell .user-card .names__primary > .betterld-youth-user {
+  margin-inline-start: 0.5em;
+  vertical-align: middle;
+}
+
 body.betterld-shell .user-card .names__secondary {
   color: var(--betterld-on-surface-variant);
 }
