@@ -5650,6 +5650,11 @@ body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-prev
 body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) pre {
   border: 1px solid rgb(var(--betterld-outline-rgb) / .3);
 }
+/* 补齐原生 details 仅对 .topic-body .cooked 生效的间距，嵌套时逐层自然缩进。 */
+.betterld-reply-tree :is(.betterld-reply-tree__cooked, .discourse-boosts__cooked) details:not(.elided) {
+  padding: 0.25rem 0.75rem;
+  margin-block-end: 0.5rem;
+}
 body.betterld-shell :where(.cooked, .betterld-reply-tree__cooked, .d-editor-preview, .discourse-boosts__cooked) details > summary {
   border-radius: var(--betterld-radius-sm);
   color: var(--betterld-primary);
