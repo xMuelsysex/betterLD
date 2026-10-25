@@ -1707,6 +1707,7 @@ body.betterld-shell #user-card .name-username-wrapper:has(> .betterld-youth-user
 
 body.betterld-shell #user-card .name-username-wrapper > .betterld-youth-user {
   margin-inline-start: 0.5em;
+  font-size: inherit;
 }
 
 body.betterld-shell .user-card .names__secondary {
