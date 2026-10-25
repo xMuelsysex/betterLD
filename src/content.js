@@ -2320,10 +2320,10 @@
     return error;
   }
 
-  // 主题 JSON 的唯一出网实现：超时、冷却与错误分类都在这里，冷却错误带明确截止时间。
-  async function fetchTopicJson(url) {
+  // 站点 JSON 共用出网实现：主题及候选作者资料沿同一超时、冷却与错误分类。
+  async function fetchTopicJson(url, label = "主题") {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(new DOMException("主题请求超时，请重试", "TimeoutError")), config.topicRequestTimeoutMs);
+    const timer = window.setTimeout(() => controller.abort(new DOMException(`${label}请求超时，请重试`, "TimeoutError")), config.topicRequestTimeoutMs);
     try {
       const response = await fetch(url, {
         credentials: "same-origin",
@@ -2333,14 +2333,14 @@
       });
       if (response.headers.get("cf-mitigated") === "challenge") {
         applyRateLimit(response.headers.get("Retry-After"));
-        throw topicRequestError("主题请求被站点质询拦截，已进入冷却", { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
+        throw topicRequestError(`${label}请求被站点质询拦截，已进入冷却`, { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
       }
       if (response.status === 429) {
         applyRateLimit(response.headers.get("Retry-After"));
-        throw topicRequestError("主题请求被站点限流，已进入冷却", { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
+        throw topicRequestError(`${label}请求被站点限流，已进入冷却`, { rateLimited: true, cooldownUntil: state.metadataCooldownUntil });
       }
       if (!response.ok) {
-        throw new Error(`topic request failed with ${response.status}`);
+        throw new Error(`${label}请求失败（${response.status}）`);
       }
       const data = await response.json();
       resetMetadataRateLimit();
@@ -3419,6 +3419,8 @@
     if (!pageActive() || !state.settingsResolved) return;
     syncTopicPreviewHeader();
     syncTopicExport();
+    observeUserCard();
+    syncUserIdentities();
     syncExternalSearch();
     if (lists) {
       if (!topicListEnhancementEnabled()) restoreOriginalTopicLists();
@@ -5319,6 +5321,7 @@
       }));
       document.dispatchEvent(new CustomEvent("betterld:reply-author-details", { detail: JSON.stringify({ topicId: tree.topicId }) }));
     }
+    syncUserIdentities();
     // 窗口前面还有未加载楼层时提供真实入口，而不是从流首缺口补到目标。
     const reading = replyTreeWindow(tree);
     tree.previous.hidden = !reading || reading.empty || reading.lo === 0;
@@ -7113,6 +7116,7 @@
     state.positionTimer = window.setTimeout(() => {
       state.positionTimer = 0;
       syncReplyTreePosition();
+      syncUserIdentities();
       if (state.replyTree) {
         updateReplyTreeMore(state.replyTree);
         maybeLoadMoreReplyTree(state.replyTree);
@@ -7309,10 +7313,14 @@
       if (!card.classList.contains("show")) return;
       const ownOnly = records.every((record) => {
         const target = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
-        return target?.closest("[data-betterld-owned]");
+        if (target?.closest("[data-betterld-owned]")) return true;
+        const changed = [...record.addedNodes, ...record.removedNodes];
+        return record.type === "childList" && changed.length && changed.every((node) =>
+          node.nodeType === Node.ELEMENT_NODE && node.matches(".betterld-youth-user"));
       });
       if (ownOnly) return;
       mountUserCardMarks();
+      syncUserIdentities();
     });
     state.userCardObserver.observe(card, { attributes: true, attributeFilter: ["class"], childList: true, subtree: true });
   }
@@ -7420,6 +7428,130 @@
     row.append(toggle, panel);
   }
 
+  const youthUsers = new Map();
+  let youthTargets = [];
+  let youthBridgeSyncing = false;
+  const youthDateFormat = new Intl.DateTimeFormat("en-CA", {
+    timeZone: config.youthUser.timeZone, year: "numeric", month: "2-digit", day: "2-digit"
+  });
+
+  function youthRegistrationDate(value) {
+    const parts = youthDateFormat.formatToParts(new Date(value));
+    return ["year", "month", "day"].map((type) => parts.find((part) => part.type === type).value).join("-");
+  }
+
+  function isYouthUser(user) {
+    return Boolean(user?.created_at && user.invited_by !== undefined && Array.isArray(user.groups)
+      && youthRegistrationDate(user.created_at) > config.youthUser.registrationAfter
+      && user.invited_by?.username?.toLowerCase() !== config.youthUser.excludedInviter
+      && !user.groups.some((group) => group.name.toLowerCase() === config.youthUser.excludedGroup));
+  }
+
+  function renderYouthMark(target, entry) {
+    const old = target.host.querySelector(":scope > .betterld-youth-user");
+    const show = isYouthUser(entry?.user);
+    if (!show && !old || show && old?.dataset.userId === String(target.id)) return;
+    const tree = state.replyTree;
+    const anchor = tree?.content.contains(target.host) ? captureReplyTreeAnchor(tree) : null;
+    old?.remove();
+    if (!show) {
+      if (anchor) restoreReplyTreeAnchor(tree, anchor);
+      return;
+    }
+    const mark = createElement("span", "betterld-reply-tree__author-mark betterld-youth-user", config.youthUser.label);
+    mark.dataset.userId = String(target.id);
+    mark.dataset.betterldOwned = "true";
+    mark.title = `注册日期晚于 ${config.youthUser.registrationAfter}，非 ${config.youthUser.excludedInviter} 邀请且不属于 ${config.youthUser.excludedGroup} 分组`;
+    mark.setAttribute("aria-label", `${config.youthUser.label}：${mark.title}`);
+    target.host.append(mark);
+    if (anchor) restoreReplyTreeAnchor(tree, anchor);
+  }
+
+  function youthTargetVisible(target) {
+    if (!target.host.isConnected || !target.host.getClientRects().length) return false;
+    const bounds = target.host.getBoundingClientRect();
+    return bounds.bottom > 0 && bounds.top < innerHeight;
+  }
+
+  function loadYouthUser(target) {
+    const current = youthUsers.get(target.id);
+    if (current && (current.pending || Date.now() - current.at < config.youthUser.cacheMs)) {
+      renderYouthMark(target, current);
+      return;
+    }
+    const entry = { user: current?.user, at: Date.now(), pending: true };
+    youthUsers.set(target.id, entry);
+    const needed = () => pageActive() && youthTargetVisible(target)
+      && (target.kind !== "tree" || state.replyTree?.posts.get(Number(target.host.closest(".betterld-reply-tree__card").dataset.postId))?.user_id === target.id)
+      && (target.kind !== "card" || document.querySelector("#user-card.show .names") === target.host)
+      && (target.kind !== "profile" || document.querySelector(".user-main .user-profile-names__primary") === target.host);
+    scheduleMetadataRequest(async () => {
+      const data = await fetchTopicJson(`/u/${encodeURIComponent(target.username)}.json`, "用户资料");
+      if (data.user?.id !== target.id) throw new Error("用户资料身份不匹配");
+      if (!data.user.created_at || data.user.invited_by === undefined || !Array.isArray(data.user.groups)) {
+        throw new Error("用户资料未提供注册时间、邀请人或用户组，无法判定青春版身份");
+      }
+      // 原站完整资料的groups是公开组列表；premium按实际组名判断，不按主组或flair推断。
+      const { id, username, created_at, invited_by, groups } = data.user;
+      entry.user = { id, username, created_at, invited_by, groups };
+      entry.at = Date.now();
+      entry.pending = false;
+      if (youthUsers.get(target.id) !== entry) return;
+      youthTargets.filter((value) => value.id === target.id).forEach((value) => renderYouthMark(value, entry));
+    }, needed, () => config.topicRequestPriority.user).catch((error) => {
+      if (error.name === "AbortError") {
+        if (youthUsers.get(target.id) === entry) youthUsers.delete(target.id);
+        return;
+      }
+      entry.pending = false;
+      entry.at = Date.now();
+      console.error(`[betterLD] ${target.username} 青春版身份读取失败`, error);
+    });
+  }
+
+  function syncUserIdentities() {
+    if (!pageActive() || !state.settingsResolved || youthBridgeSyncing) return;
+    const tree = state.replyTree;
+    youthTargets = tree && !tree.contentContainer.hidden ? [...tree.content.querySelectorAll(".betterld-reply-tree__author")].flatMap((host) => {
+      const post = tree.posts.get(Number(host.closest(".betterld-reply-tree__card").dataset.postId));
+      if (!post || !Number.isInteger(post.user_id) || !post.username) return [];
+      return [{ host, kind: "tree", id: post.user_id, username: post.username, registrationDate: post.user_cakedate }];
+    }) : [];
+    const card = document.querySelector("#user-card.show .names");
+    const profile = document.querySelector(".user-main .user-profile-names__primary");
+    if (!youthTargets.length && !card && !profile) return;
+    youthBridgeSyncing = true;
+    loadPageRefreshBridge().then(() => {
+      document.dispatchEvent(new CustomEvent("betterld:user-identities-request", {
+        detail: JSON.stringify({ users: [...new Set(youthTargets.map((target) => target.id))] })
+      }));
+    }).catch((error) => console.error("[betterLD] 青春版身份桥接失败", error))
+      .finally(() => { youthBridgeSyncing = false; });
+  }
+
+  document.addEventListener("betterld:user-identities", (event) => {
+    const result = JSON.parse(event.detail);
+    if (!pageActive()) return;
+    const now = Date.now();
+    for (const [id, entry] of youthUsers) {
+      if (!entry.pending && now - entry.at >= config.youthUser.cacheMs && !youthTargets.some((target) => target.id === id)) youthUsers.delete(id);
+    }
+    for (const user of result.users) youthUsers.set(user.id, { user, at: now });
+    for (const [key, selector] of [["card", "#user-card.show .names"], ["profile", ".user-main .user-profile-names__primary"]]) {
+      const host = document.querySelector(selector);
+      const identity = result[key];
+      if (host && identity) youthTargets.push({ host, kind: key, ...identity });
+      else host?.querySelector(":scope > .betterld-youth-user")?.remove();
+    }
+    youthTargets.forEach((target) => {
+      const entry = youthUsers.get(target.id);
+      renderYouthMark(target, entry);
+      const date = entry?.user?.created_at ? youthRegistrationDate(entry.user.created_at) : target.registrationDate;
+      // 老用户与屏幕外作者不补读；未知日期的用户卡/资料页从完整资料取判定依据。
+      if ((!date || date > config.youthUser.registrationAfter) && youthTargetVisible(target)) loadYouthUser(target);
+    });
+  });
+
   function syncPageData() {
     if (!pageActive() || !state.settingsResolved) return;
     checkRoute();
@@ -7430,6 +7562,7 @@
     // 分页、搜索与帖底推荐的新行也在这里补标签，不只在标记变化时同步。
     syncUserMarkChips();
     observeUserCard();
+    syncUserIdentities();
     syncExternalSearch();
     syncSearchLoadMore(state.currentSettings, isSearchPage());
     if (state.pageRefreshBridge) document.dispatchEvent(new CustomEvent("betterld:host-cleanup"));
@@ -7579,7 +7712,7 @@
     }
   });
 
-  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, .topic-status-info, .topic-timer-info, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded";
+  const sourceSelector = ".topic-list, .latest-topic-list, .fps-result-entries, .search-container, .container.posts .post-stream, .topic-map.--bottom, .topic-status-info, .topic-timer-info, #topic-title, #topic-footer-buttons, .topic-timeline, .load-more-sentinel, .list-controls, #data-preloaded, .user-main .user-profile-names";
   function ownedNode(node) {
     const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     return Boolean(element?.closest("[data-betterld-owned], .betterld-topic-row__info, .betterld-topic-empty"));

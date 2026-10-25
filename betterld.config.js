@@ -120,6 +120,14 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
       muted: "#625b71"
     })
   }),
+  youthUser: Object.freeze({
+    label: "青春版",
+    registrationAfter: "2026-08-19",
+    timeZone: "Asia/Shanghai",
+    excludedInviter: "system",
+    excludedGroup: "premium",
+    cacheMs: 5 * 60 * 1000
+  }),
   replyTreePageSize: 20,
   replyTreeAuthorNameMaxWidthEm: 12,
   // 可见回复缺父楼时定点补一页，额外请求沿用主题队列并单独降低频率。
@@ -139,7 +147,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   // 树内等待状态的可见刷新间隔：只读本地队列与冷却，不产生任何请求。
   replyTreeStatusTickMs: 1000,
   // 主题请求队列优先级：数字越小越先出队；刷新沿用原有最高优先，跳楼 > 正文 > 父楼。
-  topicRequestPriority: Object.freeze({ refresh: -1, jump: 0, body: 1, parent: 2 }),
+  topicRequestPriority: Object.freeze({ refresh: -1, jump: 0, body: 1, parent: 2, user: 3 }),
   replyTreeTimeRefreshMs: 60000,
   replyTreeActionTimeoutMs: 8000,
   replyTreeReactionHoldMs: 500,

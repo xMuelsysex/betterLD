@@ -10,7 +10,7 @@
   const replyPostSnapshots = new Map();
   let floorTimeline = null;
   const replyAuthors = new Map();
-  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "user_signature", "badges_granted", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
+  const postFields = ["id", "post_number", "reply_to_post_number", "user_id", "username", "name", "avatar_template", "user_title", "user_signature", "badges_granted", "title_is_group", "primary_group_name", "flair_name", "flair_url", "flair_bg_color", "flair_color", "flair_group_id", "admin", "moderator", "trust_level", "user_cakedate", "created_at", "updated_at", "cooked", "post_url", "can_boost", "can_accept_answer", "accepted_answer", "topic_accepted_answer", "reactions", "reaction_users_count", "current_user_reaction", "actions_summary", "polls", "polls_votes", "link_counts", "post_type", "action_code", "action_code_who", "action_code_path", "reply_count", "hidden", "cooked_hidden", "can_see_hidden_post", "deleted_post_placeholder", "deleted_by", "read", "deleted_at", "user_deleted", "can_edit", "can_delete", "can_recover", "can_permanently_delete", "can_wiki", "wiki", "locked", "bookmarked", "bookmark_id", "bookmark_name", "bookmark_reminder_at", "bookmark_auto_delete_preference", "reviewable_id", "reviewable_score_count", "reviewable_score_pending_count", "can_localize_post", "can_localize_topic", "can_localize_content", "post_localizations_count", "language", "locale", "is_localized", "can_assign", "assigned_to_user", "assigned_to_group", "assignment_status", "assignment_note"];
   const boostFields = ["id", "cooked", "can_delete", "can_flag", "available_flags", "user_flag_status"];
   const boostUserFields = ["id", "username", "name", "avatar_template"];
 
@@ -1098,6 +1098,37 @@
           detail: JSON.stringify({ topicId, error: `解决方案加载失败：${error.message}` })
         }));
       }
+    }
+  });
+
+  // 只投影原站已加载的用户资料；补读由内容脚本共用的串行队列负责。
+  function userIdentityDetails(user) {
+    if (!user?.created_at || user.invited_by === undefined || !Array.isArray(user.visibleGroups)) return null;
+    return {
+      id: user.id, username: user.username, created_at: user.created_at,
+      invited_by: user.invited_by ? { id: user.invited_by.id, username: user.invited_by.username } : null,
+      groups: user.visibleGroups.map((group) => ({ name: group.name }))
+    };
+  }
+
+  document.addEventListener("betterld:user-identities-request", (event) => {
+    const { users } = JSON.parse(event.detail);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const cardElement = document.querySelector("#user-card.show");
+      const cardUser = cardElement && owner.lookup("-view-registry:main")[cardElement.id]?.user;
+      const profileUser = document.querySelector(".user-main .user-profile-names") && owner.lookup("controller:user")?.model;
+      const loaded = [cardUser, profileUser, owner.lookup("service:current-user"), ...replyAuthors.values()].map((value) => value?.user || value);
+      document.dispatchEvent(new CustomEvent("betterld:user-identities", {
+        detail: JSON.stringify({
+          card: cardUser ? { id: cardUser.id, username: cardUser.username } : null,
+          profile: profileUser ? { id: profileUser.id, username: profileUser.username } : null,
+          users: loaded.filter((user) => user && (user === cardUser || user === profileUser || users.includes(user.id)))
+            .map(userIdentityDetails).filter(Boolean)
+        })
+      }));
+    } catch (error) {
+      console.error("[betterLD] user identity unavailable", error);
     }
   });
 
