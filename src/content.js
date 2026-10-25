@@ -4967,8 +4967,8 @@
       let cooked = previousBody?.querySelector(":scope > .betterld-reply-tree__cooked");
       if (!cooked || previous.cooked !== post.cooked || previous.bodyState !== bodyState || previous.ignoredAuthor !== ignoredAuthor) {
         cooked = createElement("div", "betterld-reply-tree__cooked");
-        // 被忽略的作者不解析原站正文，避免旧缓存正文泄露；隐藏/删除楼显示的是服务端自己的占位正文。
-        if (!ignoredAuthor && !post.cooked_hidden && (typeof post.cooked === 'string' || bodyState === 'action')) {
+        // 被忽略的作者不解析正文；隐藏/删除楼也由原生组件呈现服务端占位，不改写隐藏原因。
+        if (!ignoredAuthor && (typeof post.cooked === 'string' || bodyState === 'action')) {
           cooked.dataset.betterldCookedId = crypto.randomUUID();
           // 直接交给原生正文组件；不先展示随后会被清空的临时HTML。
         }
@@ -4994,9 +4994,7 @@
       // 隐藏、删除与忽略都是原站给出的合法状态：正文位显示状态与可恢复入口，不留旧缓存正文。
       const stateNotice = ignoredAuthor
         ? createElement("p", "betterld-reply-tree__state-notice", `已忽略 ${nickname || username}：按你的站点设置隐藏正文。`)
-        : bodyState === "hidden"
-          ? createElement("p", "betterld-reply-tree__state-notice", "此楼已被站点隐藏，正文需要站点权限才能读取。")
-          : null;
+        : null;
       const stateAction = ignoredAuthor
         ? replyTreeActionButton('显示此条忽略回复', 'eye', () => revealReplyTreeIgnoredPost(tree, post, stateAction), 'betterld-reply-tree__state-action')
         : bodyState === "hidden" && post.can_see_hidden_post === true
