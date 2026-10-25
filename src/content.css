@@ -1700,12 +1700,12 @@ body.betterld-shell .user-card .names {
   overflow-wrap: anywhere;
 }
 
-body.betterld-shell #user-card .name-username-wrapper:has(> .betterld-youth-user) {
+body.betterld-shell :is(#user-card .name-username-wrapper, .user-main .user-profile-names__primary):has(> .betterld-youth-user) {
   display: inline-flex;
   align-items: center;
 }
 
-body.betterld-shell #user-card .name-username-wrapper > .betterld-youth-user {
+body.betterld-shell :is(#user-card .name-username-wrapper, .user-main .user-profile-names__primary) > .betterld-youth-user {
   margin-inline-start: 0.5em;
   font-size: 24px;
 }
