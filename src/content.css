@@ -4398,6 +4398,11 @@ body.betterld-shell .betterld-reply-tree__footer > .topic-map.--bottom .topic-ma
   line-height: 1.6;
 }
 
+/* 原帖 .post-hidden .cooked 的状态表现；只淡化隐藏正文，不改变字体或外围控件。 */
+.betterld-reply-tree__cooked--hidden {
+  opacity: 0.5;
+}
+
 .betterld-reply-tree__cooked :is(img, video, audio, table, pre, iframe, .onebox, .lazy-video-container) {
   max-width: 100%;
 }

@@ -4973,6 +4973,7 @@
           // 直接交给原生正文组件；不先展示随后会被清空的临时HTML。
         }
       }
+      cooked.classList.toggle("betterld-reply-tree__cooked--hidden", bodyState === "hidden");
       body.append(head);
       syncReplyReadIndicator(body, post.read);
       let contextToggle = null;
