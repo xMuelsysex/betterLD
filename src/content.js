@@ -6551,6 +6551,10 @@
       tree.status.textContent = `回复实时同步失败：${data.error}`;
       return;
     }
+    // 主题统计独立于正文任务，不因浏览量变化重绘楼层或重测分支。
+    tree.views.hidden = !Number.isFinite(data.views);
+    const viewsLabel = Number.isFinite(data.views) ? `${data.views.toLocaleString()} 浏览` : "";
+    if (tree.viewsCount.textContent !== viewsLabel) tree.viewsCount.textContent = viewsLabel;
     // 已读元状态不依赖正文任务或树的可见性，避免增量被隐藏视图提前消费。
     syncReplyReadStates(tree, data.posts);
     // 忙碌/隐藏期间多个增量批次合并，后到的批次只覆盖同一楼，不能丢掉之前的其他楼。
@@ -6645,6 +6649,13 @@
     // 原站筛选会拆掉旧流；保留旧底板引用供重建清理，不把它改写成 null。
     if (!tree.streamElement.isConnected) return;
     syncReplyTreeFooter(tree);
+    tree.topicTools.hidden = tree.contentContainer.hidden;
+    if (!tree.topicTools.hidden && tree.bridgeReady && !tree.summary.dataset.betterldMenuMounted) {
+      tree.summary.dataset.betterldMenuMounted = "pending";
+      document.dispatchEvent(new CustomEvent("betterld:reply-summary-mount", {
+        detail: JSON.stringify({ topicId: tree.topicId, id: tree.summary.dataset.betterldMenuId })
+      }));
+    }
     // 底板只包住回复区，原站时间轴和普通原帖容器不参与阅读材质。
     const container = tree.streamElement.parentElement;
     if (container !== tree.readingPanelContainer) {
@@ -6968,12 +6979,23 @@
     moreButton.hidden = !previous?.autoLoadPaused;
     content.append(replies, status, sentinel, moreButton);
     const toolbar = createElement("div", "betterld-topic-reading__toolbar");
-    toolbar.append(filters, toggle, returnAll);
+    const topicTools = createElement("div", "betterld-reply-tree__topic-tools");
+    topicTools.hidden = content.hidden;
+    const views = createElement("span", "betterld-reply-tree__views");
+    views.hidden = true;
+    const viewsCount = createElement("span");
+    views.append(replyTreeIcon("eye"), viewsCount);
+    const summary = createElement("div", "betterld-reply-tree__summary");
+    summary.dataset.betterldMenuId = crypto.randomUUID();
+    summary.setAttribute("aria-label", "AI 总结");
+    topicTools.append(views, summary);
+    toolbar.append(filters, toggle, returnAll, topicTools);
     const footer = createElement("div", "betterld-reply-tree__footer");
     panel.append(toolbar, range, filterStatus, notice, mine, content, footer);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
     const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    Object.assign(tree, { topicTools, views, viewsCount, summary });
     tree.streamReady = previous ? previous.streamReady : false;
     tree.footerSources = new Map();
     tree.boostExpanded = new Set();

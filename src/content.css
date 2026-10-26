@@ -5510,6 +5510,12 @@ body.betterld-shell .container.posts[data-betterld-reading-active="true"] .post_
 .betterld-topic-reading__toolbar .betterld-reply-tree__filters { margin-inline-start: 0; }
 .betterld-topic-reading__toolbar .betterld-reply-tree__toggle { margin: 0; min-height: 40px; }
 .betterld-topic-reading__toolbar .betterld-reply-tree__return-all { position: static; box-shadow: none; }
+.betterld-reply-tree__topic-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-inline-start: auto; font-size: 14px; }
+.betterld-reply-tree__topic-tools[hidden], .betterld-reply-tree__views[hidden] { display: none; }
+.betterld-reply-tree__views { display: inline-flex; align-items: center; gap: 6px; color: var(--betterld-on-surface-variant); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.betterld-reply-tree__views svg, .betterld-reply-tree__summary .ai-summarization-button svg { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; }
+.betterld-reply-tree__summary:empty { display: none; }
+.betterld-topic-reading__toolbar .betterld-reply-tree__summary .ai-summarization-button { min-height: 40px; padding: 8px 14px; font-weight: 600; }
 .betterld-topic-reading__toolbar button:disabled { cursor: wait; opacity: .6; }
 .betterld-reply-tree__filter { min-height: 40px; font: inherit; font-size: 14px; color: var(--betterld-on-surface-variant); cursor: pointer; }
 .betterld-reply-tree__filter:hover { background: color-mix(in srgb, var(--betterld-primary) 8%, transparent) !important; }
@@ -5742,7 +5748,7 @@ body.betterld-shell :is(.pswp__top-bar, .pswp__caption) { background: rgb(var(--
 body.betterld-shell .pswp__caption__center { color: var(--betterld-on-surface-variant); }
 body.betterld-shell .pswp__button:is(:hover, :focus-visible) { background-color: color-mix(in srgb, var(--betterld-primary) 12%, transparent); border-radius: 999px; }
 /* 控制栏位于树外，显式复用树按钮基础材质。 */
-.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all) {
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all, :where(.betterld-reply-tree__summary) .ai-summarization-button) {
   border: 1px solid rgb(var(--betterld-outline-rgb) / .4);
   border-radius: 999px;
   background: rgb(var(--betterld-surface-container-rgb) / .8);
@@ -5751,11 +5757,11 @@ body.betterld-shell .pswp__button:is(:hover, :focus-visible) { background-color:
   font-size: 14px;
   cursor: pointer;
 }
-.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all):is(:hover, :focus-visible):not(:disabled) {
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all, :where(.betterld-reply-tree__summary) .ai-summarization-button):is(:hover, :focus-visible):not(:disabled) {
   background: color-mix(in srgb, var(--betterld-primary) 8%, rgb(var(--betterld-surface-container-rgb)));
   color: var(--betterld-primary);
 }
-.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all):active:not(:disabled) {
+.betterld-topic-reading__toolbar :is(.betterld-reply-tree__toggle, .betterld-reply-tree__return-all, :where(.betterld-reply-tree__summary) .ai-summarization-button):active:not(:disabled) {
   background: color-mix(in srgb, var(--betterld-primary) 12%, rgb(var(--betterld-surface-container-rgb)));
 }
 .betterld-topic-reading__toolbar button:focus-visible { outline: var(--betterld-focus-width) solid var(--betterld-primary); outline-offset: 2px; }

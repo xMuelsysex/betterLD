@@ -1035,6 +1035,45 @@
     }
   });
 
+  // 复用原站总结触发器：显示条件、额度提示、禁用和弹窗均由原组件负责。
+  // 宿主与树内菜单共用移除清理，不克隆隐藏的首楼 DOM 或另发总结请求。
+  document.addEventListener("betterld:reply-summary-mount", (event) => {
+    const { id, topicId } = JSON.parse(event.detail);
+    let host;
+    const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(id)}"]`);
+    try {
+      const owner = window.require("discourse/lib/get-owner").getOwnerWithFallback();
+      const topic = owner.lookup("controller:topic").model;
+      if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
+      if (!element || postMenuHosts.has(id)) return;
+      const Native = window.require("discourse/plugins/discourse-ai/discourse/connectors/topic-map-expanded-after/ai-summary-trigger").default;
+      const Component = window.require("@ember/component");
+      const Container = window.require("discourse/components/render-glimmer-container").default;
+      const curry = window.require("ember-curry-component").default;
+      const Host = Component.default.extend({
+        layout: Component.getComponentTemplate(Container),
+        renderGlimmer: { _registrations: [{ element, component: curry(Native, { outletArgs: { topic, postStream: topic.postStream } }, owner), data: {} }] }
+      });
+      window.require("@ember/runloop").join(() => {
+        host = Host.create(owner.ownerInjection());
+        host.appendTo(document.body);
+      });
+      postMenuHosts.set(id, { element, host, ownsPost: false });
+      element.dataset.betterldMenuMounted = "true";
+    } catch (error) {
+      if (element) element.dataset.betterldMenuMounted = "error";
+      try {
+        releaseHostResources({ host }, false);
+      } catch (cleanupError) {
+        console.error("[betterLD] failed summary mount cleanup", cleanupError);
+      }
+      console.error("[betterLD] native summary mount failed", error);
+      document.dispatchEvent(new CustomEvent("betterld:reply-data", {
+        detail: JSON.stringify({ topicId, error: `AI 总结入口加载失败：${error.message}` })
+      }));
+    }
+  });
+
   // 解决方案沿用原站菜单注册和摘要组件；同一 identityMap 同时覆盖树补载楼层与实时采纳更新。
   document.addEventListener("betterld:reply-solved-mount", (event) => {
     const { topicId, slots } = JSON.parse(event.detail);
@@ -1359,7 +1398,7 @@
         const previous = replyPostSnapshots.get(id);
         if (!previous || snapshot.some((value, index) => value !== previous[index])) changedPosts.push(postSyncValues(post));
       }
-      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges, context: replyTreeContext(owner, topic) };
+      const data = { topicId, views: topic.views, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges, context: replyTreeContext(owner, topic) };
       const signature = JSON.stringify(data);
       if (signature !== replySignature || changedPosts.length) {
         document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ ...data, posts: changedPosts }) }));
