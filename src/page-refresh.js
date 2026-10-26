@@ -1035,9 +1035,9 @@
     }
   });
 
-  // 复用原站总结触发器：显示条件、额度提示、禁用和弹窗均由原组件负责。
-  // 宿主与树内菜单共用移除清理，不克隆隐藏的首楼 DOM 或另发总结请求。
-  document.addEventListener("betterld:reply-summary-mount", (event) => {
+  // 完整 TopicMap 统一提供统计、链接、用户和 AI 总结出口，沿原站布局与实时模型。
+  // 不移动原生 Glimmer 节点；树宿主沿菜单共用的生命周期清理。
+  document.addEventListener("betterld:reply-topic-map-mount", (event) => {
     const { id, topicId } = JSON.parse(event.detail);
     let host;
     const element = document.querySelector(`[data-betterld-menu-id="${CSS.escape(id)}"]`);
@@ -1046,13 +1046,13 @@
       const topic = owner.lookup("controller:topic").model;
       if (String(topic?.id) !== topicId) throw new Error("当前主题已切换");
       if (!element || postMenuHosts.has(id)) return;
-      const Native = window.require("discourse/plugins/discourse-ai/discourse/connectors/topic-map-expanded-after/ai-summary-trigger").default;
+      const Native = window.require("discourse/components/topic-map/index").default;
       const Component = window.require("@ember/component");
       const Container = window.require("discourse/components/render-glimmer-container").default;
       const curry = window.require("ember-curry-component").default;
       const Host = Component.default.extend({
         layout: Component.getComponentTemplate(Container),
-        renderGlimmer: { _registrations: [{ element, component: curry(Native, { outletArgs: { topic, postStream: topic.postStream } }, owner), data: {} }] }
+        renderGlimmer: { _registrations: [{ element, component: curry(Native, { model: topic, topicDetails: topic.details, postStream: topic.postStream }, owner), data: {} }] }
       });
       window.require("@ember/runloop").join(() => {
         host = Host.create(owner.ownerInjection());
@@ -1065,11 +1065,11 @@
       try {
         releaseHostResources({ host }, false);
       } catch (cleanupError) {
-        console.error("[betterLD] failed summary mount cleanup", cleanupError);
+        console.error("[betterLD] failed topic map mount cleanup", cleanupError);
       }
-      console.error("[betterLD] native summary mount failed", error);
+      console.error("[betterLD] native topic map mount failed", error);
       document.dispatchEvent(new CustomEvent("betterld:reply-data", {
-        detail: JSON.stringify({ topicId, error: `AI 总结入口加载失败：${error.message}` })
+        detail: JSON.stringify({ topicId, error: `主题统计加载失败：${error.message}` })
       }));
     }
   });
@@ -1398,7 +1398,7 @@
         const previous = replyPostSnapshots.get(id);
         if (!previous || snapshot.some((value, index) => value !== previous[index])) changedPosts.push(postSyncValues(post));
       }
-      const data = { topicId, views: topic.views, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges, context: replyTreeContext(owner, topic) };
+      const data = { topicId, stream: [...stream.stream], topReplies: stream.filter === "summary", userFilters: [...stream.userFilters], ownerUsername: topic.details.created_by?.username || "", user_badges: topic.user_badges, context: replyTreeContext(owner, topic) };
       const signature = JSON.stringify(data);
       if (signature !== replySignature || changedPosts.length) {
         document.dispatchEvent(new CustomEvent("betterld:reply-data", { detail: JSON.stringify({ ...data, posts: changedPosts }) }));

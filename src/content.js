@@ -6537,10 +6537,6 @@
       tree.status.textContent = `回复实时同步失败：${data.error}`;
       return;
     }
-    // 主题统计独立于正文任务，不因浏览量变化重绘楼层或重测分支。
-    tree.views.hidden = !Number.isFinite(data.views);
-    const viewsLabel = Number.isFinite(data.views) ? `${data.views.toLocaleString()} 浏览` : "";
-    if (tree.viewsCount.textContent !== viewsLabel) tree.viewsCount.textContent = viewsLabel;
     // 已读元状态不依赖正文任务或树的可见性，避免增量被隐藏视图提前消费。
     syncReplyReadStates(tree, data.posts);
     // 忙碌/隐藏期间多个增量批次合并，后到的批次只覆盖同一楼，不能丢掉之前的其他楼。
@@ -6582,7 +6578,7 @@
     return `${filters.userFilters.join(",")}|${filters.topReplies}`;
   }
 
-  const replyTreeFooterSelectors = [".topic-timer-info", ".topic-status-info", ".topic-map.--bottom"];
+  const replyTreeFooterSelectors = [".topic-timer-info", ".topic-status-info"];
 
   function restoreReplyTreeFooter(tree) {
     // 原生节点由原站维护；还原后再释放树底板，不克隆控件或丢失事件。
@@ -6632,10 +6628,10 @@
     if (!tree.streamElement.isConnected) return;
     syncReplyTreeFooter(tree);
     tree.topicTools.hidden = tree.contentContainer.hidden;
-    if (!tree.topicTools.hidden && tree.bridgeReady && !tree.summary.dataset.betterldMenuMounted) {
-      tree.summary.dataset.betterldMenuMounted = "pending";
-      document.dispatchEvent(new CustomEvent("betterld:reply-summary-mount", {
-        detail: JSON.stringify({ topicId: tree.topicId, id: tree.summary.dataset.betterldMenuId })
+    if (!tree.topicTools.hidden && tree.bridgeReady && !tree.topicTools.dataset.betterldMenuMounted) {
+      tree.topicTools.dataset.betterldMenuMounted = "pending";
+      document.dispatchEvent(new CustomEvent("betterld:reply-topic-map-mount", {
+        detail: JSON.stringify({ topicId: tree.topicId, id: tree.topicTools.dataset.betterldMenuId })
       }));
     }
     // 底板只包住回复区，原站时间轴和普通原帖容器不参与阅读材质。
@@ -6893,22 +6889,16 @@
     moreButton.type = "button";
     moreButton.hidden = !previous?.autoLoadPaused;
     content.append(replies, status, sentinel, moreButton);
-    const topicTools = createElement("div", "betterld-reply-tree__topic-tools");
+    const topicTools = createElement("div", "betterld-reply-tree__topic-tools topic-map --bottom");
     topicTools.hidden = content.hidden;
-    const views = createElement("span", "betterld-reply-tree__views");
-    views.hidden = true;
-    const viewsCount = createElement("span");
-    views.append(replyTreeIcon("eye"), viewsCount);
-    const summary = createElement("div", "betterld-reply-tree__summary");
-    summary.dataset.betterldMenuId = crypto.randomUUID();
-    summary.setAttribute("aria-label", "AI 总结");
-    topicTools.append(views, summary);
+    topicTools.dataset.betterldMenuId = crypto.randomUUID();
+    topicTools.setAttribute("aria-label", "主题统计与 AI 总结");
     const footer = createElement("div", "betterld-reply-tree__footer");
     panel.append(range, filterStatus, notice, content, footer, topicTools);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
     const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
-    Object.assign(tree, { topicTools, views, viewsCount, summary });
+    tree.topicTools = topicTools;
     tree.streamReady = previous ? previous.streamReady : false;
     tree.footerSources = new Map();
     tree.boostExpanded = new Set();
