@@ -47,6 +47,8 @@
     navigationAnimation: null,
     navigationMotionKey: navigationMotionKey(),
     navigationMotionPending: false,
+    navigationMotionFrame: 0,
+    navigationMotionPage: topicIdFromPath() ? "topic" : isTopicListPage() ? "list" : "other",
     pageSuspended: false,
     metadataRoute: `${location.pathname}${location.search}`,
     metadataGeneration: 0,
@@ -3509,23 +3511,44 @@
   }
 
   function cancelNavigationMotion() {
+    cancelAnimationFrame(state.navigationMotionFrame);
+    state.navigationMotionFrame = 0;
+    state.navigationMotionPending = false;
     state.navigationAnimation?.cancel();
     state.navigationAnimation = null;
   }
 
-  function animateNavigationContent(element) {
+  function animateNavigationContent(element, motion = config.navigationMotion) {
     cancelNavigationMotion();
     if (!element || !pageActive() || reducedMotion.matches) return;
-    const motion = config.navigationMotion;
     // 只淡入现有内容，不改变几何或为整页毛玻璃创建 transform 包含块。
     const animation = element.animate([
       { opacity: motion.fromOpacity },
       { opacity: 1 }
     ], { duration: motion.durationMs, easing: motion.easing });
     state.navigationAnimation = animation;
-    animation.onfinish = () => {
+    const release = () => {
+      animation.onfinish = null;
+      animation.oncancel = null;
+      animation.cancel();
       if (state.navigationAnimation === animation) state.navigationAnimation = null;
     };
+    animation.onfinish = release;
+    animation.oncancel = release;
+  }
+
+  function playPendingNavigationMotion() {
+    if (!state.navigationMotionPending) return;
+    // 主动跳楼优先，不叠加父子透明度；空加载区留给既有增强批次再尝试。
+    if (state.navigationAnimation) {
+      state.navigationMotionPending = false;
+      return;
+    }
+    const selector = state.navigationMotionPending !== config.navigationPageMotion ? "#main-outlet"
+      : state.navigationMotionPage === "topic" ? "#main-outlet .container.posts" : "#main-outlet #list-area";
+    const element = document.querySelector(selector);
+    if (!element?.childElementCount || !element.getClientRects().length) return;
+    animateNavigationContent(element, state.navigationMotionPending);
   }
 
   reducedMotion.addEventListener("change", () => {
@@ -3535,9 +3558,22 @@
   document.addEventListener("betterld:page-changed", () => {
     const key = navigationMotionKey();
     if (key === state.navigationMotionKey) return;
-    state.navigationMotionKey = key;
-    state.navigationMotionPending = pageActive();
+    const page = topicIdFromPath() ? "topic" : isTopicListPage() ? "list" : "other";
+    const listTopic = (state.navigationMotionPage === "list" && page === "topic")
+      || (state.navigationMotionPage === "topic" && page === "list");
     checkRoute();
+    cancelNavigationMotion();
+    state.navigationMotionKey = key;
+    state.navigationMotionPage = page;
+    state.navigationMotionPending = pageActive() && !reducedMotion.matches
+      ? (listTopic ? config.navigationPageMotion : config.navigationMotion) : false;
+    if (state.navigationMotionPending && listTopic) {
+      // 原站已完成换页：下一绘制帧直接衔接，不再额外等待增强防抖。
+      state.navigationMotionFrame = requestAnimationFrame(() => {
+        state.navigationMotionFrame = 0;
+        playPendingNavigationMotion();
+      });
+    }
     scheduleSync();
   });
 
@@ -3554,11 +3590,7 @@
       syncHomepage({ lists });
       syncSearchLoadMore(state.currentSettings, isSearchPage());
       syncReplyTree();
-      if (state.navigationMotionPending) {
-        state.navigationMotionPending = false;
-        // 跳楼已经淡入目标时，保留更精确的目标动画。
-        if (!state.navigationAnimation) animateNavigationContent(document.querySelector("#main-outlet"));
-      }
+      playPendingNavigationMotion();
     }, config.syncDebounceMs);
   }
 

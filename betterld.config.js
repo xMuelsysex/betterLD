@@ -57,6 +57,7 @@ globalThis.BETTERLD_CONFIG = Object.freeze({
   pageDataSyncMs: 5000,
   syncDebounceMs: 160,
   navigationMotion: Object.freeze({ durationMs: 160, fromOpacity: 0.82, easing: "cubic-bezier(0.2, 0, 0, 1)" }),
+  navigationPageMotion: Object.freeze({ durationMs: 240, fromOpacity: 0.68, easing: "cubic-bezier(0.2, 0, 0, 1)" }),
   syncQuotaBytes: 102400,
   settingsCommitDelayMs: 220,
   settingsSearchResultLimit: 12,
