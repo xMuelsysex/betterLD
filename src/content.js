@@ -3618,8 +3618,6 @@
     tree.streamElement.removeAttribute("data-betterld-reply-source");
     tree.topicContainer.removeAttribute("data-betterld-reply-tree-active");
     tree.contentContainer.hidden = true;
-    tree.toggle.hidden = false;
-    tree.toggle.textContent = "树状回复";
     syncReplyTreeFilterBar(tree);
     syncReplyTreePosition();
   }
@@ -5284,17 +5282,6 @@
     tree.branchLayoutTargets = layoutTargets;
     syncReplyReactionPopover(tree);
     if (focusedReactionTrigger && tree.reactionTrigger) tree.reactionTrigger.focus({ preventScroll: true });
-    // 本人楼层索引只列已加载且已渲染的命中楼层，不预读全帖，也不把上下文楼算成本人楼层。
-    const myPosts = currentUserId ? posts.filter((post) => !contextNumbers.has(post.post_number) && post.user_id === currentUserId) : [];
-    tree.mine.replaceChildren(...myPosts.map((post) => {
-      const item = createElement("button", "betterld-reply-tree__mine-item", `#${post.post_number}`);
-      item.type = "button";
-      item.title = `定位到 #${post.post_number}`;
-      item.addEventListener("click", () => requestReplyTreeJump(tree, post.post_number, post.id, ""));
-      return item;
-    }));
-    tree.mine.hidden = myPosts.length === 0;
-    if (myPosts.length) tree.mine.prepend(createElement("span", "betterld-reply-tree__mine-label", `我的楼层（已加载 ${myPosts.length}）`));
     tree.renderedPosts = renderedPosts;
     if (tree.bridgeReady) {
       const unregistered = [...byNumber.values()].filter((post) => !tree.registeredPostIds.has(post.id));
@@ -6261,7 +6248,6 @@
     }
     if (typeof data.topReplies === "boolean") {
       tree.topReplies = data.topReplies;
-      tree.returnAll.hidden = !tree.topReplies;
     }
     if (Array.isArray(data.userFilters)) {
       tree.userFilters = data.userFilters;
@@ -6596,10 +6582,6 @@
     return `${filters.userFilters.join(",")}|${filters.topReplies}`;
   }
 
-  function topicOwnerUsername(tree) {
-    return tree.ownerUsername || preloadedReplyTopic(tree.topicId)?.details?.created_by?.username || "";
-  }
-
   const replyTreeFooterSelectors = [".topic-timer-info", ".topic-status-info", ".topic-map.--bottom"];
 
   function restoreReplyTreeFooter(tree) {
@@ -6666,27 +6648,6 @@
     tree.readingPanelContainer.classList.toggle("betterld-reading-panel", readingActive);
     if (readingActive) tree.topicContainer.setAttribute("data-betterld-reading-active", "true");
     else tree.topicContainer.removeAttribute("data-betterld-reading-active");
-    tree.toggle.disabled = Boolean(tree.filterBusy || tree.userFilters.length);
-    tree.returnAll.disabled = Boolean(tree.filterBusy);
-    tree.toggle.textContent = tree.contentContainer.hidden ? "树状回复" : "原帖回复";
-    const currentUsername = preloadedCurrentUser()?.username;
-    const ownerUsername = topicOwnerUsername(tree);
-    // 摘要筛选不是作者筛选，此时三个选项都不选中；同一用户名既是楼主又是本人时两个入口同时成立。
-    const selected = new Set();
-    if (!tree.topReplies) {
-      if (tree.userFilters.length === 0) {
-        selected.add("all");
-      } else {
-        if (ownerUsername && tree.userFilters.includes(ownerUsername)) selected.add("owner");
-        if (currentUsername && tree.userFilters.includes(currentUsername)) selected.add("me");
-      }
-    }
-    for (const [key, button] of tree.filters) {
-      button.disabled = Boolean(tree.filterBusy);
-      const active = selected.has(key);
-      button.classList.toggle("betterld-reply-tree__filter--active", active);
-      button.setAttribute("aria-pressed", String(active));
-    }
     const scope = tree.topReplies
       ? "摘要筛选"
       : tree.userFilters.length ? `只看 ${tree.userFilters.join("、")}` : "";
@@ -6722,8 +6683,6 @@
   function showReplyTree(tree) {
     sessionStorage.removeItem(config.topicReadingViewStorageKey);
     state.replyTreeNativeTopicId = "";
-    tree.toggle.hidden = false;
-    tree.toggle.textContent = "原帖回复";
     tree.contentContainer.hidden = false;
     syncReplyTreeFilterBar(tree);
     if (tree.bridgeReady) document.dispatchEvent(new CustomEvent('betterld:reply-read-state-request', {
@@ -6841,29 +6800,6 @@
     }
   }
 
-  function applyReplyTreeReadingFilter(tree, key) {
-    clearReplyTreeFilterError(tree);
-    if (key === "all") {
-      returnAllReplyTreePosts(tree);
-      return;
-    }
-    if (key === "owner") {
-      const username = topicOwnerUsername(tree);
-      if (!username) {
-        showReplyTreeFilterError(tree, "无法读取楼主用户名，暂时无法只看楼主。");
-        return;
-      }
-      changeTopicAuthorFilter(tree, username);
-      return;
-    }
-    const currentUsername = preloadedCurrentUser()?.username;
-    if (!currentUsername) {
-      promptReplyTreeLogin(tree, "请登录后再使用「我的回复」筛选。", tree.filterStatus);
-      return;
-    }
-    changeTopicAuthorFilter(tree, currentUsername);
-  }
-
   function syncReplyTree() {
     if (!pageActive()) return;
     const topicId = topicIdFromPath();
@@ -6932,33 +6868,12 @@
     const previous = state.replyTreeSnapshot?.topicId === topicId && topicFilterStateKey(state.replyTreeSnapshot) === topicFilterStateKey(urlFilters) ? state.replyTreeSnapshot : null;
     state.replyTreeSnapshot = null;
     const panel = createElement("section", "betterld-reply-tree betterld-topic-reading");
-    panel.setAttribute("aria-label", "主题阅读与筛选");
-    const toggle = createElement("button", "betterld-reply-tree__toggle", "返回树状回复");
-    toggle.type = "button";
-    toggle.hidden = false;
-    toggle.textContent = state.replyTreeNativeTopicId === topicId ? "树状回复" : "原帖回复";
-    const returnAll = createElement("button", "betterld-reply-tree__toggle betterld-reply-tree__return-all", "返回全部回复");
-    returnAll.type = "button";
-    returnAll.hidden = !urlFilters.topReplies;
-    const filters = createElement("div", "betterld-reply-tree__filters");
-    filters.setAttribute("role", "group");
-    filters.setAttribute("aria-label", "阅读筛选");
-    const filterButtons = new Map();
-    for (const [key, label] of [["all", "全部"], ["owner", "只看楼主"], ["me", "我的回复"]]) {
-      const button = createElement("button", "betterld-reply-tree__filter", label);
-      button.type = "button";
-      button.dataset.betterldFilter = key;
-      button.addEventListener("click", () => applyReplyTreeReadingFilter(tree, key));
-      filterButtons.set(key, button);
-      filters.append(button);
-    }
+    panel.setAttribute("aria-label", "主题阅读");
     const range = createElement("p", "betterld-reply-tree__range");
     range.hidden = true;
     const filterStatus = createElement("p", "betterld-reply-tree__filter-status");
     filterStatus.hidden = true;
     filterStatus.setAttribute("role", "status");
-    const mine = createElement("div", "betterld-reply-tree__mine");
-    mine.hidden = true;
     const notice = createElement("p", "betterld-reply-tree__notice");
     notice.hidden = true;
     notice.setAttribute("role", "status");
@@ -6978,7 +6893,6 @@
     moreButton.type = "button";
     moreButton.hidden = !previous?.autoLoadPaused;
     content.append(replies, status, sentinel, moreButton);
-    const toolbar = createElement("div", "betterld-topic-reading__toolbar");
     const topicTools = createElement("div", "betterld-reply-tree__topic-tools");
     topicTools.hidden = content.hidden;
     const views = createElement("span", "betterld-reply-tree__views");
@@ -6989,12 +6903,11 @@
     summary.dataset.betterldMenuId = crypto.randomUUID();
     summary.setAttribute("aria-label", "AI 总结");
     topicTools.append(views, summary);
-    toolbar.append(filters, toggle, returnAll, topicTools);
     const footer = createElement("div", "betterld-reply-tree__footer");
-    panel.append(toolbar, range, filterStatus, notice, mine, content, footer);
+    panel.append(range, filterStatus, notice, content, footer, topicTools);
     stream.before(panel);
     const targetPostNumber = Number(location.pathname.match(/^\/t\/(?:\d+|[^/]+\/\d+)\/(\d+)\/?$/)?.[1]) || 0;
-    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, toggle, returnAll, filters: filterButtons, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, mine, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
+    const tree = { title: previous?.title, bookmarkStates: previous?.bookmarkStates || new Map(), topicId, panel, footer, range, filterStatus, filterViewKey: null, filterGeneration: 0, notice, contextExpanded: previous?.contextExpanded || new Set(), userFilters: urlFilters.userFilters, topReplies: urlFilters.topReplies, ownerUsername: previous?.ownerUsername || "", contentContainer: content, streamElement: stream, readingPanelContainer: stream.parentElement, topicContainer: stream.closest(".container.posts"), content: replies, listElement, previous: previousButton, status, sentinel, more: moreButton, posts: previous?.posts || new Map(), loaded: previous?.loaded || new Set(), stream: previous?.stream || [], branchStates: previousBranches || new Map(), tailStates: previousTails || new Map(), autoLoadPaused: previous?.autoLoadPaused || false, targetPostNumber, targetLocated: false, busy: false, boostEditor: null };
     Object.assign(tree, { topicTools, views, viewsCount, summary });
     tree.streamReady = previous ? previous.streamReady : false;
     tree.footerSources = new Map();
@@ -7066,9 +6979,7 @@
       if (state.replyTree === tree) tree.status.textContent = `树状回复正文组件加载失败：${error.message}。请通过“原帖回复”查看内容。`;
     });
     tree.relativeTimeTimer = setInterval(() => refreshReplyTreeTimes(tree), config.replyTreeTimeRefreshMs);
-    returnAll.addEventListener("click", () => returnAllReplyTreePosts(tree));
     applyTopicReadingFilterView(tree);
-    toggle.addEventListener("click", () => tree.contentContainer.hidden ? showReplyTree(tree) : showNativeReply(tree));
     const loadBody = (requestedDirection) => {
       const direction = tree.retryBatch?.direction || requestedDirection;
       tree.autoLoadPaused = false;
