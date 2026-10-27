@@ -4,7 +4,7 @@
 
 支持 **Chrome / Firefox 桌面端**，采用零运行时依赖的 Manifest V3，使用原生 JavaScript / CSS / HTML。
 
-当前版本：**[v1.0.3](https://github.com/xMuelsysex/betterLD/releases/tag/v1.0.3)** · [更新日志](CHANGELOG.md)
+当前版本：**[v1.0.4](https://github.com/xMuelsysex/betterLD/releases/tag/v1.0.4)** · [更新日志](CHANGELOG.md)
 
 ## 效果预览
 
@@ -31,7 +31,7 @@
 
 ### 加载扩展
 
-1. 下载 [当前版本源码](https://github.com/xMuelsysex/betterLD/archive/refs/tags/v1.0.3.zip)并解压，或克隆此仓库。
+1. 下载 [当前版本源码](https://github.com/xMuelsysex/betterLD/archive/refs/tags/v1.0.4.zip)并解压，或克隆此仓库。
 2. 在浏览器中加载包含 `manifest.json` 的目录：
    - **Chrome**：打开 `chrome://extensions` → 启用「开发者模式」→「加载已解压的扩展程序」→ 选择解压后的项目根目录。
    - **Firefox**：打开 `about:debugging#/runtime/this-firefox` →「临时载入附加组件」→ 选择项目根目录中的 `manifest.json`。临时附加组件在浏览器重启后需重新加载。
